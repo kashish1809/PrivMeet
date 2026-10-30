@@ -8,23 +8,32 @@
 
 Day 0 (done, on `main`): Django project, models, hardware tiers (`meetings/hw.py`), pipeline modules, Celery tasks, API views. See `docs/PLAN.md` for the design.
 
+**Everyone has two tasks per day:** a main task from this sheet, and a second task from `docs/UI_TASKS.md`.
+- Vinayak: heavy UI (`U1.x`).
+- Kashish: desktop app + launcher (`A2.x`).
+- Karthik: workflows + packaging (`W3.x`).
+
+The UI must match `docs/ui/mockup.webp`.
+
 ## Rules for every task
 - Start a task only when its owner says "start T<id>". AGENTS.md has the full protocol.
 - One task = one new branch, named exactly as below. Commit only: no push, no PR, no co-author or AI trailers.
 - Before starting, check that every "Needs" task is merged into `main`. If one is not, stop and tell the person.
 - Only touch the files listed under "Files". Ask the person before editing anything else.
-- **Day 6 is testing only.** It starts after all Day 1–5 tasks of all three people are merged into `main`.
+- **Day 6 is testing only.** It starts after all Day 1–5 tasks (main and second) of all three people are merged into `main`.
 
 ## Contracts (so parallel work fits together)
 - **`frontend/src/api.js`** (T2.1):
   - `api(path, {method, body})` sends a JSON request with the `X-CSRFToken` header, read from the `csrftoken` cookie. It returns the parsed JSON, or throws `Error(data.error)`.
   - `upload(path, formData, onProgress)` uses XHR, reports `onProgress(0..1)`, and resolves to JSON.
-- **`frontend/src/components/SummaryPanel.jsx`** (T3.4): `export default function SummaryPanel({ meeting, onSave })`.
+- **`frontend/src/components/SummaryPanel.jsx`** (T3.4): `export default function SummaryPanel({ meeting, onSave })`. It covers the "AI Summary" and "Key Points" (decisions) parts of the Summary tab.
   - `meeting` is the full JSON from `GET /api/meetings/<id>/`.
   - `onSave(patch)` sends a PATCH and resolves to the updated meeting.
+- **`frontend/src/components/ActionItemsPanel.jsx`** (T3.4): `export default function ActionItemsPanel({ meeting, onSave })`. It is the Action Items tab: a table with checkbox, task, owner and due, plus "Add Action Item".
 - **`frontend/src/components/QABox.jsx`** (T3.4): `export default function QABox({ meetingId, onSeek })`.
   - `onSeek(seconds)` is called when the user clicks a `[mm:ss]` citation.
-- T2.1 creates both components as stubs that `return null`. Kashish's detail page renders them, and Karthik replaces the stubs.
+- T2.1 creates these three components and `MeetingInfo.jsx` (owned by U1.4) as stubs that `return null`. Kashish's detail page renders them, and the owners replace the stubs.
+- **Shared UI** (U1.1): every page uses the components in `frontend/src/ui/` and `lucide-react` icons. Until U1.1 is merged, use plain Tailwind and swap to `src/ui` in your next task.
 - **API** (already built, `backend/meetings/urls.py`):
   - `GET|POST /api/meetings/`, `?q=` searches.
   - `GET|PATCH|DELETE /api/meetings/<id>/`.
@@ -56,9 +65,9 @@ Day 0 (done, on `main`): Django project, models, hardware tiers (`meetings/hw.py
   - Vite + React (plain JSX, no TypeScript) + Tailwind v4 via `@tailwindcss/vite`.
   - In `vite.config.js`, set `base: "/static/"`, `build.outDir: "dist"`, and a dev proxy from `/api` to `http://localhost:8000`.
   - Write `src/api.js` per the contracts above.
-  - Write `src/App.jsx` with a tiny hash router: `#/` list, `#/new` new meeting, `#/m/<id>` detail. No router library.
-  - Add a layout with a header and a footer that shows tier/models from `GET /api/system/`. That call also sets the CSRF cookie.
-  - Create stub pages `src/pages/{MeetingList,NewMeeting,MeetingDetail}.jsx` and stub components `src/components/{SummaryPanel,QABox}.jsx`.
+  - Write `src/App.jsx` with a tiny hash router: `#/meetings` list (and `#/` until U1.2 adds Home), `#/new` new meeting, `#/m/<id>` detail. No router library. U1.2 adds the other routes and the sidebar shell.
+  - Call `GET /api/system/` once on load; it sets the CSRF cookie. Show tier/models in a simple temporary header, which U1.2 replaces with the sidebar.
+  - Create stub pages `src/pages/{MeetingList,NewMeeting,MeetingDetail}.jsx` and stub components `src/components/{SummaryPanel,ActionItemsPanel,QABox,MeetingInfo}.jsx`.
 - **Done when:** `npm run dev` shows the layout and footer against the running backend, and `npm run build` succeeds.
 
 ### T3.1 · Karthik · Dockerfile
@@ -89,8 +98,10 @@ Day 0 (done, on `main`): Django project, models, hardware tiers (`meetings/hw.py
 - **Branch:** `d2/kashish/T2.2-meeting-list`
 - **Needs:** T2.1
 - **Files:** `frontend/src/pages/MeetingList.jsx`, new files in `frontend/src/components/` (not SummaryPanel/QABox)
-- **Do:**
-  - Meeting cards: title, date, duration, and a status badge with progress %.
+- **Do:** build the "Meetings" screen from the mockup.
+  - A "New Meeting" button.
+  - Rows grouped Today / Yesterday / Last week / Older, each with title, duration, participant count and time.
+  - A status badge with progress %, and a kebab menu (Open, Export, Delete).
   - Poll every 2 s only while some meeting is not `done`/`failed`.
   - A search box (debounced 300 ms) calls `?q=`. Show hit snippets; clicking one opens `#/m/<id>?t=<start>`.
   - Empty state with a link to `#/new`.
@@ -123,7 +134,7 @@ Day 0 (done, on `main`): Django project, models, hardware tiers (`meetings/hw.py
   - Test Q&A citations `[mm:ss]` on short (full transcript) and long (retrieval) meetings.
 - **Done when:** 3 test recordings give useful notes, and Q&A answers with timestamps.
 
-### T2.3 · Kashish · New meeting: upload + recorder
+### T2.3 · Kashish · New meeting: upload
 - **Branch:** `d3/kashish/T2.3-new-meeting`
 - **Needs:** T2.1
 - **Files:** `frontend/src/pages/NewMeeting.jsx`, new files in `frontend/src/components/`
@@ -131,10 +142,10 @@ Day 0 (done, on `main`): Django project, models, hardware tiers (`meetings/hw.py
   - A title field and a drag-drop/file picker for `.mp3 .wav .mp4 .m4a .webm .ogg .opus .flac .mkv .mov`.
   - An upload progress bar using `upload()` from `api.js`.
   - Show server errors (e.g. "No audio stream found").
-  - A Record tab: `MediaRecorder` (audio/webm;codecs=opus) with start/pause/stop, a timer and a preview player. It uploads as `recording-<date>.webm`.
-  - Handle a denied mic permission.
+  - Add a "Record instead" button that links to `#/record`. Recording is Vinayak's U1.3.
   - After upload, go to `#/m/<id>`.
-- **Done when:** both the file and recording paths create a meeting that gets processed.
+  - Keep this page light; the desktop app (A2.x) is the bigger part of your day.
+- **Done when:** an uploaded file creates a meeting that gets processed.
 
 ### T3.3 · Karthik · Postgres search + security pass
 - **Branch:** `d3/karthik/T3.3-postgres-security`
@@ -166,20 +177,28 @@ Day 0 (done, on `main`): Django project, models, hardware tiers (`meetings/hw.py
 - **Files:** `frontend/src/pages/MeetingDetail.jsx`, new files in `frontend/src/components/` (not SummaryPanel/QABox)
 - **Do:**
   - Poll `GET /api/meetings/<id>/` every 2 s while processing. Show stage + progress bar, the error and a Retry button when `failed`.
+  - **Layout** per the mockup:
+    - Header: "Back to Meetings", title, date · duration · participants, and Edit/Share/kebab buttons.
+    - Tabs: Transcript | Summary | Action Items | Ask.
+    - A right column with `<MeetingInfo meeting onSave>`.
   - An `<audio>` player from `/api/meetings/<id>/audio`. The transcript list highlights the current segment, clicking a segment seeks, and the list auto-scrolls (pausable). `?t=` in the hash seeks on load.
-  - Speaker chips with stable colors.
-  - Render `<SummaryPanel meeting onSave>` and `<QABox meetingId onSeek>` per the contracts.
+  - A "Search transcript…" box that filters and highlights matches client-side.
+  - Speaker avatars with stable colors, from `src/ui` Avatar.
+  - The Summary tab renders `<SummaryPanel>`, the Action Items tab `<ActionItemsPanel>`, and the Ask tab `<QABox meetingId onSeek>`, per the contracts.
 - **Done when:** the transcript and audio stay in sync on a 10-min meeting.
 
-### T3.4 · Karthik · Summary panel + Q&A box
+### T3.4 · Karthik · Summary, Action Items + Q&A panels
 - **Branch:** `d4/karthik/T3.4-notes-ui`
-- **Needs:** T2.1
-- **Files:** `frontend/src/components/SummaryPanel.jsx`, `frontend/src/components/QABox.jsx`
-- **Do:**
-  - **SummaryPanel:** summary, decisions, and an action-item checklist that saves `done` via `onSave({action_items})`. Inline edit of a task's text/owner/due. An Export button links to `/api/meetings/<id>/export.md`.
+- **Needs:** T2.1, U1.1
+- **Files:** `frontend/src/components/SummaryPanel.jsx`, `frontend/src/components/ActionItemsPanel.jsx`, `frontend/src/components/QABox.jsx`
+- **Do:** match the mockup's Summary and Action Items tabs, using `src/ui` components.
+  - **SummaryPanel:** an "AI Summary" card plus "Key Points" (decisions), and an Export button linking to `/api/meetings/<id>/export.md`.
+  - **ActionItemsPanel:** a table with checkbox, task, owner and due.
+    - Toggling `done` saves via `onSave({action_items})`.
+    - Inline edit of task/owner/due, plus "Add Action Item" and delete.
   - **QABox:** a question input that calls `POST /ask` and polls `/api/questions/<id>/` until it is not `pending`. Show the history for the session. `[mm:ss]` in answers becomes buttons that call `onSeek`.
   - Disable the box unless the meeting is `done`.
-- **Done when:** both components work inside T2.4's page, or in a temporary test page that you do not commit.
+- **Done when:** all three components work inside T2.4's page, or in a temporary test page that you do not commit.
 
 ## Day 5
 
@@ -198,10 +217,11 @@ Day 0 (done, on `main`): Django project, models, hardware tiers (`meetings/hw.py
 - **Needs:** T2.4
 - **Files:** `frontend/src/pages/*`, `frontend/src/components/*` (not SummaryPanel/QABox), `frontend/src/index.css`
 - **Do:**
-  - Rename speakers by clicking a chip; this calls `PATCH speaker_names`.
-  - Edit the title inline, and add Delete meeting with a confirm.
-  - Make the layout responsive for mobile widths, and add dark mode via `prefers-color-scheme`.
-  - Accessibility: labels, focus rings, keyboard play/pause (space) outside inputs.
+  - Rename speakers by clicking an avatar; this calls `PATCH speaker_names`.
+  - Delete meeting with a `src/ui` ConfirmDialog.
+  - Meetings list filters from the mockup: All/status, Date range and Tags. The Tags filter uses `?tag=` from U1.4.
+  - Make your pages responsive for mobile widths. Dark mode comes from U1.1; check that your pages look right in it.
+  - Accessibility: labels, and keyboard play/pause (space) outside inputs.
 - **Done when:** everything works on a phone-sized viewport and keyboard-only use.
 
 ### T3.5 · Karthik · README + architecture docs
