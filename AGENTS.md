@@ -4,23 +4,22 @@ These rules apply to every AI coding agent working in this repo (OpenCode, Claud
 
 PrivMeet is a self-hosted meeting notes app. You upload or record audio and get back a transcript, speaker labels, a summary, decisions, action items, search and Q&A. Everything runs locally.
 - Design: `docs/PLAN.md`
-- Main tasks: `docs/TASKS.md`
-- Second tasks (UI, desktop app, workflows): `docs/UI_TASKS.md`
+- Tasks (two per person per day): `docs/TASKS.md`
 - UI mockup: `docs/ui/mockup.webp`
 
 ## Team
-| Person | Name | Main tasks | Second tasks |
+| Person | Name | Task A (main) | Task B (second) |
 |---|---|---|---|
 | Person 1 | Vinayak | Backend pipeline + AI (`T1.x`) | Heavy UI per mockup (`U1.x`) |
 | Person 2 | Kashish | React frontend pages (`T2.x`) | Tauri desktop app + launcher (`A2.x`) |
 | Person 3 | Karthik | Docker, Postgres, security, notes UI, docs (`T3.x`) | GitHub workflows, packaging, CLI launchers (`W3.x`) |
 
-Each day every person has one main task and one second task. They are separate branches and separate commits.
+Each day every person has task A and task B. They are separate branches and separate commits.
 
 ## Task protocol (follow exactly)
 1. **Wait for "start".** Never start, continue or pick a task on your own. Begin only when the person says something like "start T2.3" or "I'm Kashish, start my day 3 task".
 2. **Know who is speaking.** If the person has not said their name, ask: "Are you Vinayak, Kashish or Karthik?" If the task belongs to someone else, say whose it is and ask for confirmation before going on.
-3. **Read the task** in `docs/TASKS.md` (`T*`) or `docs/UI_TASKS.md` (`U*`, `A*`, `W*`, `S*`). Check that every task under "Needs" is merged into `main`: its files exist on `main`, or `git log main` shows it. If one is missing, stop and tell the person which one. Day 6 tasks need **all** Day 1–5 tasks (main and second) merged.
+3. **Read the task** in `docs/TASKS.md`. Check that every task under "Needs" is merged into `main`: its files exist on `main`, or `git log main` shows it. If one is missing, stop and tell the person which one. Day 6 tasks need **all** Day 1–5 tasks (A and B) merged.
 4. **Branch from fresh main:**
    ```
    git checkout main
