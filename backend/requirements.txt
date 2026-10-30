@@ -1,0 +1,10 @@
+django>=5.2,<6
+celery[redis]>=5.4
+psycopg[binary]>=3.2
+faster-whisper>=1.1
+sherpa-onnx>=1.12
+soundfile>=0.12
+langchain-ollama>=0.3
+langchain-text-splitters>=0.3
+whitenoise>=6.8
+gunicorn>=23
