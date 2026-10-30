@@ -7,5 +7,6 @@ Stack: Django + Celery, React + Tailwind, PostgreSQL, Docker, OpenAI Whisper (fa
 - Design: [docs/PLAN.md](docs/PLAN.md)
 - Team task split (6 days): [docs/TASKS.md](docs/TASKS.md)
 - Rules for AI agents and contributors: [AGENTS.md](AGENTS.md)
+- How to contribute: [CONTRIBUTING.md](CONTRIBUTING.md) · Security: [SECURITY.md](SECURITY.md) · Authors: [AUTHORS.md](AUTHORS.md) · [CHANGELOG.md](CHANGELOG.md) · License: [MIT](LICENSE)
 
 Full setup instructions arrive with task T3.5.

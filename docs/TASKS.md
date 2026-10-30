@@ -27,6 +27,7 @@ Every person has **two tasks per day**:
 - Start a task only when its owner says "start <id>". AGENTS.md has the full protocol.
 - Task A and task B of the same day are **separate branches and separate commits**.
 - One task = one new branch, named exactly as below. Commit only: no push, no PR, no co-author or AI trailers.
+- **At least 4 commits per task**, one per logical step. Each message has a subject plus a body saying what changed, why and how it was checked (format in AGENTS.md step 7).
 - Before starting, check that every "Needs" task is merged into `main`. If one is not, stop and tell the person.
 - Only touch the files listed under "Files". Ask the person before editing anything else.
 - **Day 6 is testing only.** It starts after all Day 1–5 tasks (A and B) of all three people are merged into `main`.
