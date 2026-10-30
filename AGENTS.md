@@ -4,19 +4,23 @@ These rules apply to every AI coding agent working in this repo (OpenCode, Claud
 
 PrivMeet is a self-hosted meeting notes app. You upload or record audio and get back a transcript, speaker labels, a summary, decisions, action items, search and Q&A. Everything runs locally.
 - Design: `docs/PLAN.md`
-- Task split: `docs/TASKS.md`
+- Main tasks: `docs/TASKS.md`
+- Second tasks (UI, desktop app, workflows): `docs/UI_TASKS.md`
+- UI mockup: `docs/ui/mockup.webp`
 
 ## Team
-| Person | Name | Owns |
-|---|---|---|
-| Person 1 | Vinayak | Backend pipeline + AI (`T1.x`) |
-| Person 2 | Kashish | React frontend (`T2.x`) |
-| Person 3 | Karthik | Docker, Postgres, security, notes/Q&A UI, docs (`T3.x`) |
+| Person | Name | Main tasks | Second tasks |
+|---|---|---|---|
+| Person 1 | Vinayak | Backend pipeline + AI (`T1.x`) | Heavy UI per mockup (`U1.x`) |
+| Person 2 | Kashish | React frontend pages (`T2.x`) | Tauri desktop app + launcher (`A2.x`) |
+| Person 3 | Karthik | Docker, Postgres, security, notes UI, docs (`T3.x`) | GitHub workflows, packaging, CLI launchers (`W3.x`) |
+
+Each day every person has one main task and one second task. They are separate branches and separate commits.
 
 ## Task protocol (follow exactly)
 1. **Wait for "start".** Never start, continue or pick a task on your own. Begin only when the person says something like "start T2.3" or "I'm Kashish, start my day 3 task".
 2. **Know who is speaking.** If the person has not said their name, ask: "Are you Vinayak, Kashish or Karthik?" If the task belongs to someone else, say whose it is and ask for confirmation before going on.
-3. **Read the task** in `docs/TASKS.md`. Check that every task under "Needs" is merged into `main`: its files exist on `main`, or `git log main` shows it. If one is missing, stop and tell the person which one. Day 6 tasks need **all** Day 1–5 tasks merged.
+3. **Read the task** in `docs/TASKS.md` (`T*`) or `docs/UI_TASKS.md` (`U*`, `A*`, `W*`, `S*`). Check that every task under "Needs" is merged into `main`: its files exist on `main`, or `git log main` shows it. If one is missing, stop and tell the person which one. Day 6 tasks need **all** Day 1–5 tasks (main and second) merged.
 4. **Branch from fresh main:**
    ```
    git checkout main
@@ -37,7 +41,10 @@ PrivMeet is a self-hosted meeting notes app. You upload or record audio and get 
 ## Project rules
 - **Low-end first.** The app must run on about 6 GB of RAM with no GPU, and use an NVIDIA GPU when one exists.
   - Do not add PyTorch, transformers, websockets/Channels, DRF, a router library, TypeScript or any UI kit.
+  - The only allowed UI dependency is `lucide-react` for icons. Shared components live in `frontend/src/ui/`.
+  - The desktop app is Tauri 2 in `desktop/`, never Electron. Its launcher page is plain HTML/JS.
   - Ask before adding any dependency.
+- **UI** must match `docs/ui/mockup.webp` in light and dark themes, using `frontend/src/ui/` components.
 - **One heavy model in RAM at a time.** The Celery worker uses concurrency 1 and one task per child. Keep stages sequential: ffmpeg, Whisper, diarization, then the LLM.
 - Model sizes come from `backend/meetings/hw.py` tiers. Never hard-code a model name elsewhere.
 - **Backend:** plain Django views returning `JsonResponse`, with config from env vars in `settings.py`. Run subprocesses with list args, never `shell=True`.
