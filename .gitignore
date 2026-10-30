@@ -8,3 +8,4 @@ backend/frontend_dist/
 frontend/node_modules/
 frontend/dist/
 .DS_Store
+/session.txt
