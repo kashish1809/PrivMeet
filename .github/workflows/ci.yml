@@ -37,3 +37,23 @@ jobs:
       - run: python manage.py check
       # T1.1 is merged, so a model change without its migration now fails CI.
       - run: python manage.py makemigrations --check --dry-run
+
+  frontend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # T2.1 is merged; the guard keeps the job green if frontend/ ever moves.
+      - id: present
+        run: echo "ok=$([ -d frontend ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.present.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - if: steps.present.outputs.ok == 'true'
+        working-directory: frontend
+        run: npm ci
+      - if: steps.present.outputs.ok == 'true'
+        working-directory: frontend
+        run: npm run build
