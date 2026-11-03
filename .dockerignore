@@ -1,0 +1,28 @@
+# Keep the build context small: the frontend node_modules alone is ~200 MB.
+.git
+.gitignore
+.github
+.claude
+.opencode
+.vscode
+
+**/__pycache__
+**/*.pyc
+backend/.venv
+backend/data
+backend/staticfiles
+backend/frontend_dist
+
+# The image builds its own dist from source; a stale local build would mask that.
+frontend/node_modules
+frontend/dist
+
+# Not needed inside the image.
+desktop
+docs
+scripts
+*.md
+.env
+.env.*
+session.txt
+data
