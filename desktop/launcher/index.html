@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PrivMeet</title>
+    <link rel="stylesheet" href="launcher.css" />
+  </head>
+  <body>
+    <main class="card">
+      <header class="brand">
+        <span class="logo" aria-hidden="true">P</span>
+        <div>
+          <h1>PrivMeet</h1>
+          <p class="tagline">Self-hosted AI meeting notes</p>
+        </div>
+      </header>
+
+      <p class="status" id="status" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="status-text">Checking Docker…</span>
+      </p>
+
+      <ol class="steps" id="steps">
+        <li data-step="docker" class="active">Check Docker</li>
+        <li data-step="start">Start PrivMeet (first run downloads the models)</li>
+        <li data-step="wait">Wait for the server on 127.0.0.1:8000</li>
+      </ol>
+
+      <p class="hint" id="hint">
+        This page is the launcher. The steps that start the Docker stack and hand the window
+        over to the app arrive in A2.3, and the backend commands in A2.2.
+      </p>
+
+      <footer class="foot">
+        <span id="version">v0.1.0</span>
+        <span>Local only · no account · MIT</span>
+      </footer>
+    </main>
+    <script src="launcher.js"></script>
+  </body>
+</html>
