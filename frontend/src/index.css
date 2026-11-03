@@ -1,0 +1,3 @@
+/* Tailwind v4: one import, no config file. Theme tokens (and the .dark variant) live in ui/theme.css. */
+@import "tailwindcss";
+@import "./ui/theme.css";
