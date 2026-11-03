@@ -35,3 +35,5 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r requirements.txt
       - run: python manage.py check
+      # T1.1 is merged, so a model change without its migration now fails CI.
+      - run: python manage.py makemigrations --check --dry-run
