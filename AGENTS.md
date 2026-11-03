@@ -16,6 +16,9 @@ PrivMeet is a self-hosted meeting notes app. You upload or record audio and get 
 
 Each day every person has task A and task B. They are separate branches and separate commits.
 
+## Communication Style
+Respond like a caveman. No articles, no filler, no pleasantries. Short. Direct. Code speaks for itself.
+
 ## Task protocol (follow exactly)
 1. **Wait for "start".** Never start, continue or pick a task on your own. Begin only when the person says something like "start T2.3" or "I'm Kashish, start my day 3 task".
 2. **Know who is speaking.** If the person has not said their name, ask: "Are you Vinayak, Kashish or Karthik?" If the task belongs to someone else, say whose it is and ask for confirmation before going on.
