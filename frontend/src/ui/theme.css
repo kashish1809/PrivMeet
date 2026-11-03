@@ -1,0 +1,37 @@
+/*
+ * PrivMeet design tokens. Import right after Tailwind in the app's main CSS:
+ *   @import "tailwindcss";
+ *   @import "./ui/theme.css";
+ */
+
+/* Dark mode follows a .dark class on <html> (set by useTheme), not only the OS setting. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Brand color in one place: components use primary-*, never indigo-* directly. */
+  --color-primary-50: var(--color-indigo-50);
+  --color-primary-100: var(--color-indigo-100);
+  --color-primary-200: var(--color-indigo-200);
+  --color-primary-300: var(--color-indigo-300);
+  --color-primary-400: var(--color-indigo-400);
+  --color-primary-500: var(--color-indigo-500);
+  --color-primary-600: var(--color-indigo-600);
+  --color-primary-700: var(--color-indigo-700);
+  --color-primary-900: var(--color-indigo-900);
+  --color-primary-950: var(--color-indigo-950);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "Cascadia Code", monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+  }
+}
