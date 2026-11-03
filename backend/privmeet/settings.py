@@ -49,6 +49,7 @@ if env("POSTGRES_HOST"):
     }
 else:
     # shortcut: SQLite for local dev/tests without Docker; search falls back to LIKE.
+    DATA_DIR.mkdir(parents=True, exist_ok=True)  # SQLite cannot create its parent dir
     DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": DATA_DIR / "db.sqlite3"}}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
