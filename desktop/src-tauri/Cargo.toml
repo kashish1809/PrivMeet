@@ -1,0 +1,29 @@
+[package]
+name = "privmeet"
+version = "0.1.0"
+description = "PrivMeet desktop shell"
+authors = ["Kashish R Shetty", "K Vinayak Kamath", "HM Karthik"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77"
+
+# Exposed as a library so the desktop binary stays a three-line wrapper; A2.2
+# adds the backend-manager commands there.
+[lib]
+name = "privmeet_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# The system webview only (WebView2 / WebKitGTK): no bundled Chromium, no Electron.
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
