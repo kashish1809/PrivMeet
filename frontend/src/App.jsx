@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 
 import { getSystem } from "./api";
+import MeetingDetail from "./pages/MeetingDetail";
+import MeetingList from "./pages/MeetingList";
+import NewMeeting from "./pages/NewMeeting";
 import { StatusDot } from "./ui";
 
 /** Go to a route. Hash routing only, so there is no server rewrite to worry about. */
@@ -73,6 +76,23 @@ function Footer({ system, error }) {
   );
 }
 
+/** Route table. U1.2 adds Home, Record / Live, History, Settings and the Tools pages. */
+function Page({ path }) {
+  const rest = path.replace(/^\/+|\/+$/g, "");
+  if (rest === "" || rest === "meetings") return <MeetingList />;
+  if (rest === "new") return <NewMeeting />;
+  if (rest.startsWith("m/")) return <MeetingDetail id={rest.slice(2)} />;
+  return (
+    <section className="mx-auto max-w-xl">
+      <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Not built yet</h1>
+      <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+        <code className="font-mono">#{path}</code> arrives with the app shell (U1.2).{" "}
+        <a href="#/meetings" className="text-primary-600 hover:underline dark:text-primary-400">Back to meetings</a>
+      </p>
+    </section>
+  );
+}
+
 export default function App() {
   const { path } = useRoute();
   const [system, setSystem] = useState(null);
@@ -87,9 +107,7 @@ export default function App() {
     <div className="flex min-h-dvh flex-col">
       <SystemBar system={system} error={error} />
       <main className="flex-1 px-6 py-6">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Route <code className="font-mono">{path}</code> — pages arrive in the next commit.
-        </p>
+        <Page path={path} />
       </main>
       <Footer system={system} error={error} />
     </div>
