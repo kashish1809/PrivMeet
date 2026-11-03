@@ -25,6 +25,16 @@ RUN apt-get update \
 COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
+# GPU=1 adds the CUDA runtime libraries CTranslate2 needs on an NVIDIA host.
+# The driver itself comes from the host via the compose device reservation.
+ARG GPU=0
+RUN if [ "$GPU" = "1" ]; then \
+        pip install --no-cache-dir nvidia-cublas-cu12 'nvidia-cudnn-cu12==9.*'; \
+        echo "/usr/local/lib/python3.12/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/site-packages/nvidia/cudnn/lib" \
+            > /etc/ld.so.conf.d/nvidia.conf; \
+        ldconfig; \
+    fi
+
 # Same sources as scripts/download_models.sh; "recongition" is the upstream tag's spelling.
 RUN set -eux; \
     mkdir -p "$DIARIZE_MODELS_DIR"; \
