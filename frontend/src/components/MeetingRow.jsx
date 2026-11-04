@@ -1,13 +1,26 @@
-import { Badge, Card, ProgressBar } from "../ui";
+import { Download, ExternalLink, Trash2 } from "lucide-react";
+
+import { meetingExportUrl } from "../api";
+import { Badge, Card, Menu, ProgressBar } from "../ui";
 import { duration, isProcessing } from "../format";
 import { dayAndTime, timeOfDay } from "./meetingGroups";
 
+/** The export endpoint sends Content-Disposition, so a plain anchor download works. */
+function exportMeeting(meeting) {
+  const a = document.createElement("a");
+  a.href = meetingExportUrl(meeting.id);
+  a.download = `${meeting.title}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 /**
  * One meeting row: title, duration/participants/time, status badge with the progress
- * percentage, and (from the next commit) the kebab menu. The title is the link, so the
- * row never nests the menu button inside an anchor.
+ * percentage, and a kebab menu. The title is the link, so the menu button is never
+ * nested inside an anchor.
  */
-export default function MeetingRow({ meeting, group }) {
+export default function MeetingRow({ meeting, group, onDelete }) {
   // shortcut: the list endpoint returns no speaker count, so participants only shows once
   // names were saved; upgrade when the API returns a per-meeting speaker count (U1.4).
   const participants = Object.keys(meeting.speaker_names || {}).length;
@@ -38,6 +51,20 @@ export default function MeetingRow({ meeting, group }) {
             </span>
           )}
           <Badge status={meeting.status} />
+          <Menu
+            label={`Actions for ${meeting.title}`}
+            items={[
+              {
+                label: "Open",
+                icon: ExternalLink,
+                onSelect: () => {
+                  window.location.hash = `/m/${meeting.id}`;
+                },
+              },
+              { label: "Export", icon: Download, onSelect: () => exportMeeting(meeting) },
+              { label: "Delete", icon: Trash2, danger: true, onSelect: () => onDelete(meeting) },
+            ]}
+          />
         </div>
       </div>
 

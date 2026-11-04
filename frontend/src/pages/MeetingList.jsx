@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Mic, Plus } from "lucide-react";
 
-import { listMeetings } from "../api";
+import { deleteMeeting, listMeetings } from "../api";
 import MeetingRow from "../components/MeetingRow";
 import { groupByDay } from "../components/meetingGroups";
-import { Button, Card, EmptyState } from "../ui";
+import { Button, Card, ConfirmDialog, EmptyState } from "../ui";
 
 /**
  * "Meetings" screen: rows grouped by day with a status badge, a New Meeting button and
@@ -13,6 +13,7 @@ import { Button, Card, EmptyState } from "../ui";
 export default function MeetingList() {
   const [meetings, setMeetings] = useState(null);
   const [error, setError] = useState("");
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const load = useCallback(
     () =>
@@ -26,6 +27,19 @@ export default function MeetingList() {
   );
 
   useEffect(load, [load]);
+
+  // DELETE also removes the audio file on disk, so ask first.
+  const confirmDelete = async () => {
+    const target = pendingDelete;
+    setPendingDelete(null);
+    if (!target) return;
+    try {
+      await deleteMeeting(target.id);
+      setMeetings((list) => (list || []).filter((m) => m.id !== target.id));
+    } catch (e) {
+      setError(e.message);
+    }
+  };
 
   return (
     <section className="mx-auto flex max-w-4xl flex-col gap-4">
@@ -62,10 +76,20 @@ export default function MeetingList() {
             {label}
           </h2>
           {items.map((m) => (
-            <MeetingRow key={m.id} meeting={m} group={label} />
+            <MeetingRow key={m.id} meeting={m} group={label} onDelete={setPendingDelete} />
           ))}
         </div>
       ))}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Delete meeting?"
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      >
+        “{pendingDelete?.title}” and its audio file will be removed. This cannot be undone.
+      </ConfirmDialog>
     </section>
   );
 }
