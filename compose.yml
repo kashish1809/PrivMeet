@@ -33,5 +33,17 @@ services:
     mem_limit: ${REDIS_MEM:-64m}
     restart: unless-stopped
 
+  # No published port: only the worker talks to it.
+  ollama:
+    image: ollama/ollama
+    environment:
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_NUM_PARALLEL: "1"
+    volumes:
+      - ollama:/root/.ollama
+    mem_limit: ${OLLAMA_MEM:-4g}
+    restart: unless-stopped
+
 volumes:
   db:
+  ollama:
