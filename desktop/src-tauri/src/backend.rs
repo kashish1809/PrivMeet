@@ -136,7 +136,7 @@ fn bundled_compose(app: &AppHandle, name: &str) -> Option<PathBuf> {
         }
     }
     let dev = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(name);
-    dev.is_file().then(|| dev)
+    dev.is_file().then_some(dev)
 }
 
 /// compose.yml requires SECRET_KEY via `${SECRET_KEY:?…}`, so write one on first start.
