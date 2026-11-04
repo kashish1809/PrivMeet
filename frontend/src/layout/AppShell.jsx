@@ -18,7 +18,8 @@ export default function AppShell({ page, system, error, children }) {
   useEffect(close, [page]);
 
   return (
-    <div className="flex min-h-dvh bg-zinc-50 dark:bg-zinc-950">
+    // color-scheme follows the app theme, not the OS, so native scrollbars match in a forced dark/light theme.
+    <div className="flex min-h-dvh bg-zinc-50 scheme-light dark:bg-zinc-950 dark:scheme-dark">
       <aside className={`sticky top-0 hidden h-dvh w-17 shrink-0 border-r sm:block min-[900px]:w-60 ${BORDER}`}>
         <Sidebar page={page} system={system} error={error} rail />
       </aside>
