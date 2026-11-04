@@ -2,6 +2,10 @@
 
 from django.conf import settings
 
+# Higher = fewer speakers. 0.5 split one narrator into ~13 voices on an 8 min test reading;
+# 0.8 gave 7, matching its cast (sweep 0.5/0.7/0.8/0.9 -> 13/10/7/6 speakers).
+CLUSTER_THRESHOLD = 0.8
+
 
 def model_paths():
     d = settings.DIARIZE_MODELS_DIR
@@ -24,7 +28,7 @@ def diarize(wav, threads, num_speakers=-1):
             num_threads=threads,
         ),
         embedding=sherpa_onnx.SpeakerEmbeddingExtractorConfig(model=str(emb_model), num_threads=threads),
-        clustering=sherpa_onnx.FastClusteringConfig(num_clusters=num_speakers, threshold=0.5),
+        clustering=sherpa_onnx.FastClusteringConfig(num_clusters=num_speakers, threshold=CLUSTER_THRESHOLD),
     )
     sd = sherpa_onnx.OfflineSpeakerDiarization(config)
     samples, rate = sf.read(str(wav), dtype="float32")
