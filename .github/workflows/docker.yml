@@ -1,8 +1,11 @@
 # PrivMeet image release: runs when a version tag such as v0.1.0 is pushed.
 #
-# One job builds the CPU image twice-tagged as ghcr.io/vinayakkam/privmeet:
-# <version> and :latest. Compose pulls it by default, so `docker compose up`
-# needs no source checkout and no local build.
+# The CPU image is tagged ghcr.io/vinayakkam/privmeet:<version> and :latest.
+# Compose pulls it by default, so `docker compose up` needs no source checkout
+# and no local build.
+#
+# The GPU image is the same Dockerfile built with GPU=1, which adds the CUDA
+# runtime libraries CTranslate2 needs, tagged <version>-gpu for compose.gpu.yml.
 #
 # A person pushes the tag for a release, never an agent, and the same version
 # string goes into desktop/package.json and frontend/package.json (W3.5).
@@ -56,3 +59,13 @@ jobs:
             ${{ env.IMAGE }}:latest
           cache-from: type=gha,scope=cpu
           cache-to: type=gha,mode=max,scope=cpu
+
+      - name: Build and push the GPU image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: GPU=1
+          tags: ${{ env.IMAGE }}:${{ steps.version.outputs.version }}-gpu
+          cache-from: type=gha,scope=gpu
+          cache-to: type=gha,mode=max,scope=gpu
