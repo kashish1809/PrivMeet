@@ -13,6 +13,11 @@
 #
 # A person pushes the tag for a release, never an agent, and the same version
 # string goes into desktop/package.json and frontend/package.json (W3.5).
+#
+# After the first push, set the package to public once in the repo's Packages
+# settings. A package created by GITHUB_TOKEN starts private, and then neither
+# compose nor the desktop app can pull the image without a docker login.
+#
 # The GitHub Actions cache is used, one scope per build, so a rebuild after
 # a small Dockerfile change does not start from zero.
 
