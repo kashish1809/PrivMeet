@@ -53,7 +53,7 @@ def process_meeting(meeting_id):
                 batch = []
                 m.set_status(Meeting.Status.TRANSCRIBING, 2 + int(68 * s.end / max(info.duration, 1)))
         Segment.objects.bulk_create(batch)
-        del segments  # frees the Whisper model before the next stage loads
+        del segments  # the model was freed when the generator finished; drop the last ref anyway
 
         if prof["diarize"] and diarize.available():
             m.set_status(Meeting.Status.DIARIZING, 70)
