@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Mic, Plus } from "lucide-react";
+import { Mic, Plus, SearchX } from "lucide-react";
 
 import { deleteMeeting, listMeetings } from "../api";
 import MeetingRow from "../components/MeetingRow";
 import { groupByDay } from "../components/meetingGroups";
-import { Button, Card, ConfirmDialog, EmptyState } from "../ui";
+import { Button, Card, ConfirmDialog, EmptyState, SearchInput } from "../ui";
 
 /**
  * "Meetings" screen: rows grouped by day with a status badge, a New Meeting button and
@@ -13,17 +13,25 @@ import { Button, Card, ConfirmDialog, EmptyState } from "../ui";
 export default function MeetingList() {
   const [meetings, setMeetings] = useState(null);
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState(""); // debounced query actually sent to the API
   const [pendingDelete, setPendingDelete] = useState(null);
+
+  // 300 ms debounce: one request per pause, not one per key press.
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(query.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
 
   const load = useCallback(
     () =>
-      listMeetings()
+      listMeetings(search)
         .then((data) => {
           setMeetings(data.meetings);
           setError("");
         })
         .catch((e) => setError(e.message)),
-    [],
+    [search],
   );
 
   useEffect(load, [load]);
@@ -48,6 +56,14 @@ export default function MeetingList() {
         <Button icon={Plus} onClick={() => (window.location.hash = "/new")}>New Meeting</Button>
       </div>
 
+      <SearchInput
+        label="Search meetings"
+        placeholder="Search meetings and transcripts…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        className="w-full max-w-md"
+      />
+
       {error && (
         <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
           {error}
@@ -58,7 +74,7 @@ export default function MeetingList() {
         <p className="px-1 py-6 text-sm text-zinc-500 dark:text-zinc-400">Loading meetings…</p>
       )}
 
-      {meetings?.length === 0 && (
+      {meetings?.length === 0 && !search && (
         <Card>
           <EmptyState
             icon={Mic}
@@ -66,6 +82,14 @@ export default function MeetingList() {
             action={<Button onClick={() => (window.location.hash = "/new")}>Add your first meeting</Button>}
           >
             Upload an audio or video file to get a transcript, speaker labels and notes.
+          </EmptyState>
+        </Card>
+      )}
+
+      {meetings?.length === 0 && search && (
+        <Card>
+          <EmptyState icon={SearchX} title={`No matches for “${search}”`}>
+            Searches run over meeting titles and transcript lines. Try a shorter word.
           </EmptyState>
         </Card>
       )}
