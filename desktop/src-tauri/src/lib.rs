@@ -13,6 +13,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             backend::check_docker,
             backend::has_nvidia,
+            backend::start_backend,
+            backend::stop_backend,
         ])
         .run(tauri::generate_context!())
         .expect("error while running PrivMeet");
