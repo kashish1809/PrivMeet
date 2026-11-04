@@ -1,0 +1,82 @@
+# PrivMeet image release: runs when a version tag such as v0.1.0 is pushed.
+#
+# The CPU image is tagged ghcr.io/vinayakkam/privmeet:<version> and :latest.
+# Compose pulls it by default, so `docker compose up` needs no source checkout
+# and no local build.
+#
+# The GPU image is the same Dockerfile built with GPU=1, which adds the CUDA
+# runtime libraries CTranslate2 needs, tagged <version>-gpu for compose.gpu.yml.
+#
+# :latest moves only for a real release. A pre-release tag such as
+# v0.1.0-rc1 publishes 0.1.0-rc1 alone, so users following :latest are never
+# moved onto a candidate by accident.
+#
+# A person pushes the tag for a release, never an agent, and the same version
+# string goes into desktop/package.json and frontend/package.json (W3.5).
+#
+# After the first push, set the package to public once in the repo's Packages
+# settings. A package created by GITHUB_TOKEN starts private, and then neither
+# compose nor the desktop app can pull the image without a docker login.
+#
+# The GitHub Actions cache is used, one scope per build, so a rebuild after
+# a small Dockerfile change does not start from zero.
+
+name: Docker image
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+# A release tag should never be cancelled halfway; a newer tag waits.
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/vinayakkam/privmeet
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # v0.1.0 -> 0.1.0, and :latest is added for a real release only, never
+      # for a pre-release tag such as v0.1.0-rc1.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: type=semver,pattern={{version}}
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push the CPU image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha,scope=cpu
+          cache-to: type=gha,mode=max,scope=cpu
+
+      - name: Build and push the GPU image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: GPU=1
+          tags: ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}-gpu
+          cache-from: type=gha,scope=gpu
+          cache-to: type=gha,mode=max,scope=gpu

@@ -1,6 +1,10 @@
 # PrivMeet stack: Postgres, Redis, Ollama, the Django web app and one Celery worker.
 # Only the web port is published, and only on 127.0.0.1: there is no login.
 # Copy .env.example to .env first. The settings Compose reads from .env are listed there.
+#
+# web and worker pull ghcr.io/vinayakkam/privmeet:${PRIVMEET_VERSION:-latest},
+# because desktop users have no source checkout. Set PRIVMEET_VERSION to pin a
+# release; `docker compose build` or `up --build` still builds from source.
 
 name: privmeet
 
@@ -71,6 +75,7 @@ services:
     restart: unless-stopped
 
   web:
+    image: ghcr.io/vinayakkam/privmeet:${PRIVMEET_VERSION:-latest}
     build: .
     environment: *app-env
     command: ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn privmeet.wsgi -b 0.0.0.0:8000 -w 2 --timeout 300"]
@@ -97,6 +102,7 @@ services:
   # One task per child, so only one heavy model is in RAM at a time.
   # niceness keeps the web UI responsive while whisper runs.
   worker:
+    image: ghcr.io/vinayakkam/privmeet:${PRIVMEET_VERSION:-latest}
     build: .
     environment: *app-env
     command: ["nice", "-n", "10", "celery", "-A", "privmeet", "worker",
