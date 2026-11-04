@@ -37,7 +37,9 @@ export default function MeetingList() {
     [search],
   );
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Poll only while something is still processing; a finished list stops the timer.
   const processing = (meetings || []).some(isProcessing);
