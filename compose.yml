@@ -1,6 +1,6 @@
 # PrivMeet stack: Postgres, Redis, Ollama, the Django web app and one Celery worker.
 # Only the web port is published, and only on 127.0.0.1: there is no login.
-# Copy .env.example to .env first; every value below can be overridden there.
+# Copy .env.example to .env first. The settings Compose reads from .env are listed there.
 
 name: privmeet
 
