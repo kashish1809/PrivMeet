@@ -35,6 +35,9 @@
     ],
     "category": "Productivity",
     "shortDescription": "Self-hosted AI meeting notes",
-    "longDescription": "PrivMeet records or imports a meeting and returns a transcript with speaker labels, a summary, decisions and action items. Everything runs locally."
+    "longDescription": "PrivMeet records or imports a meeting and returns a transcript with speaker labels, a summary, decisions and action items. Everything runs locally.",
+    "resources": {
+      "../../compose.yml": "compose/compose.yml"
+    }
   }
 }
