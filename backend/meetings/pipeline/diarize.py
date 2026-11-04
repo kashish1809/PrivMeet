@@ -44,4 +44,10 @@ def assign_speakers(segments, turns):
             if o > 0:
                 overlap[spk] = overlap.get(spk, 0) + o
         seg.speaker = max(overlap, key=overlap.get) if overlap else None
+    # Cluster ids have gaps (clusters that won no segment); renumber 0..n-1 by first appearance
+    # so the UI shows "Speaker 1, 2, 3" and not "Speaker 1, 4, 12".
+    order = {}
+    for seg in segments:
+        if seg.speaker is not None:
+            seg.speaker = order.setdefault(seg.speaker, len(order))
     return segments
