@@ -4,7 +4,10 @@ import { Mic, Plus, SearchX } from "lucide-react";
 import { deleteMeeting, listMeetings } from "../api";
 import MeetingRow from "../components/MeetingRow";
 import { groupByDay } from "../components/meetingGroups";
+import { isProcessing } from "../format";
 import { Button, Card, ConfirmDialog, EmptyState, SearchInput } from "../ui";
+
+const POLL_MS = 2000;
 
 /**
  * "Meetings" screen: rows grouped by day with a status badge, a New Meeting button and
@@ -35,6 +38,14 @@ export default function MeetingList() {
   );
 
   useEffect(load, [load]);
+
+  // Poll only while something is still processing; a finished list stops the timer.
+  const processing = (meetings || []).some(isProcessing);
+  useEffect(() => {
+    if (!processing) return;
+    const timer = setInterval(load, POLL_MS);
+    return () => clearInterval(timer);
+  }, [processing, load]);
 
   // DELETE also removes the audio file on disk, so ask first.
   const confirmDelete = async () => {
