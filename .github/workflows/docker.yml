@@ -7,6 +7,10 @@
 # The GPU image is the same Dockerfile built with GPU=1, which adds the CUDA
 # runtime libraries CTranslate2 needs, tagged <version>-gpu for compose.gpu.yml.
 #
+# :latest moves only for a real release. A pre-release tag such as
+# v0.1.0-rc1 publishes 0.1.0-rc1 alone, so users following :latest are never
+# moved onto a candidate by accident.
+#
 # A person pushes the tag for a release, never an agent, and the same version
 # string goes into desktop/package.json and frontend/package.json (W3.5).
 # The GitHub Actions cache is used, one scope per build, so a rebuild after
@@ -37,9 +41,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # v0.1.0 -> 0.1.0: the tag name without the "v" is the image version.
-      - id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      # v0.1.0 -> 0.1.0, and :latest is added for a real release only, never
+      # for a pre-release tag such as v0.1.0-rc1.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: type=semver,pattern={{version}}
 
       - uses: docker/login-action@v3
         with:
@@ -54,9 +62,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
-            ${{ env.IMAGE }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha,scope=cpu
           cache-to: type=gha,mode=max,scope=cpu
 
@@ -66,6 +72,6 @@ jobs:
           context: .
           push: true
           build-args: GPU=1
-          tags: ${{ env.IMAGE }}:${{ steps.version.outputs.version }}-gpu
+          tags: ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}-gpu
           cache-from: type=gha,scope=gpu
           cache-to: type=gha,mode=max,scope=gpu
