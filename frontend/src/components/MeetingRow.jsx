@@ -27,7 +27,9 @@ export default function MeetingRow({ meeting, group, onDelete }) {
   // shortcut: the list endpoint returns no speaker count, so participants only shows once
   // names were saved; upgrade when the API returns a per-meeting speaker count (U1.4).
   const participants = Object.keys(meeting.speaker_names || {}).length;
-  const when = group === "Older" ? dayAndTime(meeting.created) : timeOfDay(meeting.created);
+  // "Today" and "Yesterday" sections show the clock time; longer buckets need the date,
+  // otherwise every row in "Last week" would read like the same day.
+  const when = group === "Today" || group === "Yesterday" ? timeOfDay(meeting.created) : dayAndTime(meeting.created);
   const processing = isProcessing(meeting);
 
   return (
