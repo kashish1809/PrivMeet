@@ -5,14 +5,26 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Mutex;
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::path::BaseDirectory;
-use tauri::{AppHandle, Manager};
-use tokio::process::Command;
+use tauri::{AppHandle, Emitter, Manager, State};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpStream;
+use tokio::process::{Child, Command};
 
 /// Compose project name, so `up`/`down`/`logs` always address the same stack.
 const PROJECT: &str = "privmeet";
+
+/// Where the app answers once the stack is healthy.
+const API_HOST: &str = "127.0.0.1";
+const API_PORT: u16 = 8000;
+const API_PATH: &str = "/api/system/";
+
+/// Timeout for the status probe, so a half-started stack cannot hang the launcher.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// What `check_docker` reports to the launcher.
 #[derive(Serialize)]
@@ -22,6 +34,20 @@ pub struct DockerReport {
     pub compose: bool,
     pub version: String,
 }
+
+/// What `backend_status` reports to the launcher.
+#[derive(Serialize)]
+pub struct BackendStatus {
+    pub running: bool,
+    pub status: u16,
+    pub system: Option<serde_json::Value>,
+    pub error: String,
+}
+
+/// Holder for the running `docker compose logs -f` child, so a second call (or a
+/// stop) can end the previous stream.
+#[derive(Default)]
+pub struct Logs(Mutex<Option<Child>>);
 
 /// Run docker with `args` and return trimmed stdout, or the trimmed stderr as the error.
 async fn docker_capture(args: &[&str]) -> Result<String, String> {
@@ -138,7 +164,7 @@ fn random_secret() -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0x9e37_79b9_7f4a_7c15);
-    let mut state = nanos ^ ((std::process::id() as u64) << 32) | 1;
+    let mut state = (nanos ^ ((std::process::id() as u64) << 32)) | 1;
     (0..50)
         .map(|_| {
             state ^= state << 13;
@@ -201,4 +227,107 @@ pub async fn stop_backend(app: AppHandle, dir: Option<String>) -> Result<String,
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
         Err(if stderr.is_empty() { "docker compose down failed".to_string() } else { stderr })
     }
+}
+
+/// Ask the app itself whether it is up. Never a shell call: one request on a socket
+/// with a 3 s timeout, so a closed port fails fast.
+#[tauri::command]
+pub async fn backend_status() -> BackendStatus {
+    match http_get(API_PATH).await {
+        Ok((status, body)) => BackendStatus {
+            running: (200..300).contains(&status),
+            status,
+            system: serde_json::from_str(&body).ok(),
+            error: String::new(),
+        },
+        Err(error) => BackendStatus { running: false, status: 0, system: None, error },
+    }
+}
+
+/// Minimal HTTP/1.1 GET with `Connection: close`; enough for a localhost JSON health check
+/// and one less dependency than a full HTTP client.
+async fn http_get(path: &str) -> Result<(u16, String), String> {
+    let connect = tokio::time::timeout(PROBE_TIMEOUT, TcpStream::connect((API_HOST, API_PORT))).await;
+    let mut stream = match connect {
+        Ok(Ok(stream)) => stream,
+        Ok(Err(e)) => return Err(format!("{API_HOST}:{API_PORT} is not reachable: {e}")),
+        Err(_) => return Err(format!("Timed out connecting to {API_HOST}:{API_PORT}")),
+    };
+
+    let request = format!("GET {path} HTTP/1.1\r\nHost: {API_HOST}:{API_PORT}\r\nConnection: close\r\n\r\n");
+    stream
+        .write_all(request.as_bytes())
+        .await
+        .map_err(|e| format!("Could not send the request: {e}"))?;
+
+    let mut raw = Vec::new();
+    match tokio::time::timeout(PROBE_TIMEOUT, stream.read_to_end(&mut raw)).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => return Err(format!("Could not read the response: {e}")),
+        Err(_) => return Err("The backend did not answer in time".to_string()),
+    }
+
+    let text = String::from_utf8_lossy(&raw);
+    let (head, body) = text
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "Malformed HTTP response from the backend".to_string())?;
+    let status = head
+        .split_whitespace()
+        .nth(1)
+        .and_then(|code| code.parse::<u16>().ok())
+        .ok_or_else(|| "Malformed status line from the backend".to_string())?;
+    Ok((status, body.to_string()))
+}
+
+/// Stream `docker compose logs -f` to the launcher as `backend-log` events, one line
+/// per event, followed by `backend-log-end` when the stream closes. Stops any stream
+/// started before, so repeated retries never stack up.
+#[tauri::command]
+pub async fn backend_logs(
+    app: AppHandle,
+    state: State<'_, Logs>,
+    dir: Option<String>,
+) -> Result<(), String> {
+    let dir = compose_dir(&app, dir)?;
+    stop_log_stream(&state).await;
+
+    let mut child = compose_command(&dir, has_nvidia().await)
+        .args(["logs", "-f", "--tail", "80", "--no-color"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Could not run docker compose logs: {e}"))?;
+    let stdout = child.stdout.take().ok_or("docker compose logs gave no output pipe")?;
+    let stderr = child.stderr.take().ok_or("docker compose logs gave no error pipe")?;
+
+    pump(app.clone(), stdout);
+    pump(app, stderr);
+
+    *state.0.lock().map_err(|_| "The log stream state is poisoned".to_string())? = Some(child);
+    Ok(())
+}
+
+/// Kill the previous `logs -f` child without holding the mutex across the await.
+async fn stop_log_stream(state: &State<'_, Logs>) {
+    let previous = match state.0.lock() {
+        Ok(mut slot) => slot.take(),
+        Err(_) => None,
+    };
+    if let Some(mut child) = previous {
+        let _ = child.kill().await;
+    }
+}
+
+/// Forward every line of `reader` as an event, then signal the end of the stream.
+fn pump<R>(app: AppHandle, reader: R)
+where
+    R: AsyncRead + Unpin + Send + 'static,
+{
+    tauri::async_runtime::spawn(async move {
+        let mut lines = BufReader::new(reader).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            let _ = app.emit("backend-log", line);
+        }
+        let _ = app.emit("backend-log-end", ());
+    });
 }
