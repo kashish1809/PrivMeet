@@ -10,8 +10,8 @@ import { Button, Card, ConfirmDialog, EmptyState, SearchInput } from "../ui";
 const POLL_MS = 2000;
 
 /**
- * "Meetings" screen: rows grouped by day with a status badge, a New Meeting button and
- * (in the next commits) search, kebab actions and polling while processing.
+ * "Meetings" screen: search box, rows grouped by day, status badge with progress, kebab
+ * actions and a 2 s poll while anything is still processing.
  */
 export default function MeetingList() {
   const [meetings, setMeetings] = useState(null);
