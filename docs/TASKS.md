@@ -217,7 +217,6 @@ Read this with `docs/ui/mockup.webp` open. Hex values are sampled from the mocku
 - **Needs:** A2.2
 - **Files:** `desktop/**`
 - **Do:**
-  - First commit: untrack `desktop/node_modules` with `git rm -r --cached desktop/node_modules`. It was committed by mistake (17 files, 20 MB) although `desktop/.gitignore` lists it.
   - Steps with clear status: "Checking Docker", "Starting PrivMeet (first run downloads ~2 GB)", "Waiting for server", then navigate the window to `http://127.0.0.1:8000`.
   - If Docker is missing or stopped, show install/start instructions per OS with a link (opened via the opener plugin), plus a Retry button.
   - Show a log viewer on failure.
