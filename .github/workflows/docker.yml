@@ -1,6 +1,6 @@
 # PrivMeet image release: runs when a version tag such as v0.1.0 is pushed.
 #
-# The CPU image is tagged ghcr.io/vinayakkam/privmeet:<version> and :latest.
+# The CPU image is tagged ghcr.io/kashish1809/privmeet:<version> and :latest.
 # Compose pulls it by default, so `docker compose up` needs no source checkout
 # and no local build.
 #
@@ -38,7 +38,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/vinayakkam/privmeet
+  IMAGE: ghcr.io/kashish1809/privmeet
 
 jobs:
   build:
