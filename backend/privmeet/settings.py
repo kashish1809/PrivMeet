@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 env = os.environ.get
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -12,8 +14,14 @@ MODELS_DIR = Path(env("MODELS_DIR", DATA_DIR / "models"))
 DIARIZE_MODELS_DIR = Path(env("DIARIZE_MODELS_DIR", MODELS_DIR / "diarize"))
 FRONTEND_DIST = Path(env("FRONTEND_DIST", BASE_DIR / "frontend_dist"))
 
-SECRET_KEY = env("SECRET_KEY", "dev-insecure-change-me")
 DEBUG = env("DEBUG") == "1"
+SECRET_KEY = env("SECRET_KEY") or "dev-insecure-change-me"
+# The built-in key is in the public repo, so it is only good for DEBUG runs.
+if not DEBUG and SECRET_KEY == "dev-insecure-change-me":
+    raise ImproperlyConfigured(
+        "SECRET_KEY is required when DEBUG is off. Set it in the environment "
+        "(see .env.example) or run with DEBUG=1 for local development."
+    )
 ALLOWED_HOSTS = env("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS", "http://localhost:5173").split(",")
 
