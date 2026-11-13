@@ -21,11 +21,17 @@
     ],
     "security": {
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
-    }
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "deb", "nsis", "msi"],
+    "targets": [
+      "appimage",
+      "deb",
+      "nsis",
+      "msi"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -45,8 +51,15 @@
     },
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"],
-        "recommends": ["docker.io", "docker-compose-v2", "nvidia-container-toolkit"]
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0"
+        ],
+        "recommends": [
+          "docker.io",
+          "docker-compose-v2",
+          "nvidia-container-toolkit"
+        ]
       }
     },
     "windows": {
