@@ -1,31 +1,42 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Upload } from "lucide-react";
 
 import { upload } from "../api";
-import { Button, Card, ProgressBar } from "../ui";
+import UploadDropzone, { checkFile } from "../components/UploadDropzone";
+import { Button, Card, Input, ProgressBar } from "../ui";
 
-// Mirrors ALLOWED_EXT in backend/meetings/views.py so a bad pick fails before the upload.
-const ACCEPT = ".mp3,.wav,.mp4,.m4a,.webm,.ogg,.opus,.flac,.mkv,.mov";
-
-/** Temporary upload page: T2.3 adds drag and drop, real validation and server errors. */
+/**
+ * "New meeting": pick or drop one audio/video file, an optional title, then upload.
+ * Finishing sends the user straight to the meeting page, which shows processing.
+ * R2.9 adds the template picker, language and multi-file queue.
+ */
 export default function NewMeeting() {
-  const fileRef = useRef(null);
+  const [file, setFile] = useState(null);
   const [title, setTitle] = useState("");
-  const [progress, setProgress] = useState(null);
+  const [progress, setProgress] = useState(null); // null = not uploading, else 0..1
   const [error, setError] = useState("");
+
+  const busy = progress !== null;
+
+  function choose(next) {
+    setFile(next);
+    setError(checkFile(next) || "");
+  }
 
   async function onSubmit(e) {
     e.preventDefault();
-    const file = fileRef.current?.files?.[0];
-    if (!file) {
-      setError("Pick an audio or video file first.");
+    const problem = checkFile(file);
+    if (problem) {
+      setError(problem);
       return;
     }
     setError("");
     setProgress(0);
+
     const form = new FormData();
     form.append("file", file);
     if (title.trim()) form.append("title", title.trim());
+
     try {
       const meeting = await upload("/api/meetings/", form, setProgress);
       window.location.hash = `/m/${meeting.id}`;
@@ -37,51 +48,58 @@ export default function NewMeeting() {
 
   return (
     <section className="mx-auto flex max-w-xl flex-col gap-4">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">New meeting</h1>
+      <div>
+        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">New meeting</h1>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          Add a recording and get a transcript, speaker labels and notes.
+        </p>
+      </div>
 
-      <Card className="flex flex-col gap-4 px-5 py-5">
+      <Card className="px-5 py-5">
         <form onSubmit={onSubmit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Title
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Team sync"
-              className="h-9 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm font-normal text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-            />
-          </label>
+          <UploadDropzone
+            file={file}
+            onSelect={choose}
+            onClear={() => {
+              setFile(null);
+              setError("");
+            }}
+            disabled={busy}
+            invalid={!!error && !file}
+          />
 
-          <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Audio or video file
-            <input
-              ref={fileRef}
-              type="file"
-              accept={ACCEPT}
-              className="text-sm font-normal text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-primary-600 file:px-3 file:py-1.5 file:text-sm file:text-white dark:text-zinc-300"
-            />
-          </label>
+          <Input
+            label="Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Team sync"
+            hint="Optional. The file name is used when this is blank."
+            disabled={busy}
+          />
 
-          {progress !== null && (
+          {busy && (
             <div className="flex flex-col gap-1.5">
               <ProgressBar value={progress * 100} label="Upload progress" />
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                {progress < 1 ? `Uploading ${Math.round(progress * 100)}%` : "Uploaded, processing…"}
+                {progress < 1 ? `Uploading ${Math.round(progress * 100)}%` : "Uploaded, starting the pipeline…"}
               </p>
             </div>
           )}
 
           {error && (
-            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+            <p
+              role="alert"
+              className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+            >
               {error}
             </p>
           )}
 
           <div className="flex items-center gap-3">
-            <Button type="submit" icon={Upload} disabled={progress !== null && progress < 1}>
-              Upload
+            <Button type="submit" icon={Upload} disabled={busy || !file}>
+              {busy ? "Uploading…" : "Upload"}
             </Button>
-            <Button variant="ghost" onClick={() => (window.location.hash = "/record")}>
+            <Button variant="ghost" onClick={() => (window.location.hash = "/record")} disabled={busy}>
               Record instead
             </Button>
           </div>
