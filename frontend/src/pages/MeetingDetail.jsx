@@ -108,7 +108,17 @@ export default function MeetingDetail({ id }) {
         onRetry={() => retryMeeting(id).then(load).catch((e) => setError(e.message))}
       />
 
-      <Tabs id={tabsId} tabs={TABS} value={tab} onChange={setTab} label="Meeting sections" />
+      {/* Phones: the four labels do not fit, so they scroll sideways instead of wrapping. */}
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <Tabs
+          id={tabsId}
+          tabs={TABS}
+          value={tab}
+          onChange={setTab}
+          label="Meeting sections"
+          className="min-w-max"
+        />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div {...tabPanelProps(tabsId, tab)} className="min-w-0">
