@@ -33,6 +33,7 @@ let logLines = [];
 let logStreamStarted = false;
 let docsUrl = "";
 let running = false; // guards against a second Retry while a start is in flight
+let currentStep = ""; // the step in flight, so a thrown error can mark the right one failed
 
 /** "busy" | "done" | "error" — drives the spinner and the colours in launcher.css. */
 function setStatus(text, state = "busy") {
@@ -47,7 +48,10 @@ function setStep(name, state) {
     if (item.dataset.step !== name) continue;
     item.classList.remove("active", "done", "failed");
     if (state && state !== "idle") item.classList.add(state);
-    if (state === "active") item.setAttribute("aria-current", "step");
+    if (state === "active") {
+      item.setAttribute("aria-current", "step");
+      currentStep = name;
+    }
     else item.removeAttribute("aria-current");
   }
 }
@@ -79,7 +83,7 @@ function fail({ title, text, items = [], docs = "", logs = false }) {
   // Docker problems are not in the container logs; start-up problems are.
   if (logs) showLogs(true);
   el.panel.hidden = false;
-  el.panelTitle.textContent = title;
+  // The status line already carries the headline; the panel heading stays "What to do".
   el.panelText.textContent = text;
   el.panelList.replaceChildren(
     ...items.map((item) => {
@@ -244,6 +248,7 @@ async function run() {
     setStatus("Opening PrivMeet…", "done");
     window.location.replace(APP_URL);
   } catch (err) {
+    if (currentStep) setStep(currentStep, "failed");
     setStatus("PrivMeet could not start", "error");
     await startLogStream();
     fail({
