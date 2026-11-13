@@ -48,7 +48,9 @@ RUN set -eux; \
 
 COPY backend/ /app
 COPY --from=frontend /build/frontend/dist /app/frontend_dist
-RUN python manage.py collectstatic --noinput
+# Secret key here is throwaway: collectstatic never serves a request, and
+# settings.py rejects the built-in key because DEBUG is off in the image.
+RUN SECRET_KEY=build-only python manage.py collectstatic --noinput
 
 EXPOSE 8000
 CMD ["gunicorn", "privmeet.wsgi", "-b", "0.0.0.0:8000", "-w", "2", "--timeout", "300"]

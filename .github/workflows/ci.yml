@@ -26,6 +26,10 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    env:
+      # settings.py refuses the built-in key unless DEBUG=1, and CI never
+      # serves requests, so any non-default value is enough here.
+      SECRET_KEY: ci-only-not-a-real-secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -56,13 +56,25 @@ def meetings(request):
 
 
 def create_meeting(request):
+    limit = settings.MAX_UPLOAD_MB * 1024 * 1024
+    too_big = f"File is larger than {settings.MAX_UPLOAD_MB} MB."
+    # Refuse on the header alone when it is clearly over the limit: the size
+    # check below only runs after Django has streamed the body to a temp file,
+    # so a huge upload could fill the disk before the 413. 1 MB covers the
+    # multipart overhead. The file-size check stays authoritative.
+    try:
+        length = int(request.META.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        length = 0
+    if length > limit + 1024 * 1024:
+        return bad(too_big, 413)
     f = request.FILES.get("file")
     if not f:
         return bad("No file uploaded.")
     if Path(f.name).suffix.lower() not in ALLOWED_EXT:
         return bad(f"Unsupported file type. Allowed: {', '.join(sorted(ALLOWED_EXT))}")
-    if f.size > settings.MAX_UPLOAD_MB * 1024 * 1024:
-        return bad(f"File is larger than {settings.MAX_UPLOAD_MB} MB.", 413)
+    if f.size > limit:
+        return bad(too_big, 413)
     title = (request.POST.get("title") or Path(f.name).stem)[:200]
     m = Meeting.objects.create(title=title, file=f)
     duration = audio.probe(m.file.path)
