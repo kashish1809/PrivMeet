@@ -83,6 +83,8 @@ function fail({ title, text, items = [], docs = "", logs = false }) {
   // Docker problems are not in the container logs; start-up problems are.
   if (logs) showLogs(true);
   el.panel.hidden = false;
+  el.panel.setAttribute("tabindex", "-1");
+  el.panel.focus();
   // The status line already carries the headline; the panel heading stays "What to do".
   el.panelText.textContent = text;
   el.panelList.replaceChildren(
@@ -192,6 +194,7 @@ async function run() {
     return;
   }
   running = true;
+  el.retry.disabled = true;
   hidePanel();
   resetSteps();
   showLogs(false);
@@ -259,6 +262,7 @@ async function run() {
     });
   } finally {
     running = false;
+    el.retry.disabled = false;
   }
 }
 

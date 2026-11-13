@@ -237,6 +237,16 @@ h1 {
   display: none;
 }
 
+.button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.panel:focus-visible {
+  outline: 2px solid var(--danger);
+  outline-offset: 2px;
+}
+
 .link {
   padding: 0;
   border: 0;
