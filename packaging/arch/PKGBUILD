@@ -1,0 +1,34 @@
+# Repackages the PrivMeet .deb for Arch Linux / CachyOS / Manjaro / EndeavourOS.
+#
+# Build: download PrivMeet_<version>_amd64.deb from the GitHub release into this
+# directory, set pkgver to that release, put the .deb's sha256 in sha256sums and
+# run `makepkg -si`. docs/RELEASING.md has the release steps.
+pkgname=privmeet-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Self-hosted AI meeting notes: transcript, speakers, summary and search, all on your machine"
+arch=('x86_64')
+url="https://github.com/vinayakkam/privmeet"
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3' 'libsoup3' 'hicolor-icon-theme')
+optdepends=(
+  'docker: run the PrivMeet backend and the speech models'
+  'docker-compose: start and stop the stack from the app or scripts/privmeet.sh'
+  'nvidia-container-toolkit: transcribe on an NVIDIA GPU instead of the CPU'
+)
+provides=('privmeet')
+conflicts=('privmeet')
+options=('!strip' '!debug')
+source=("PrivMeet_${pkgver}_amd64.deb")
+sha256sums=('SKIP') # put the release checksum here before publishing, see docs/RELEASING.md
+
+package() {
+  # makepkg unpacks the .deb (an ar archive) into $srcdir, and data.tar.gz is the
+  # part that holds the app's files.
+  bsdtar -xf "${srcdir}/data.tar.gz" -C "${pkgdir}"
+  chmod 755 "${pkgdir}/usr/bin/privmeet"
+  # Tauri names this icon size "256x256@2"; hicolor expects "256x256@2x".
+  if [[ -d "${pkgdir}/usr/share/icons/hicolor/256x256@2" ]]; then
+    mv "${pkgdir}/usr/share/icons/hicolor/256x256@2" "${pkgdir}/usr/share/icons/hicolor/256x256@2x"
+  fi
+}
