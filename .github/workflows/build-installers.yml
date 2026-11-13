@@ -89,6 +89,16 @@ jobs:
     needs: [linux, windows]
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v4
+      # Refuse to publish v0.2.0 while the app still reports 0.1.0: the
+      # installers and the About dialog would disagree with the release.
+      - name: Check the tag matches the app version
+        run: |
+          VERSION=$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")
+          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match version ${VERSION} in desktop/src-tauri/tauri.conf.json"
+            exit 1
+          fi
       - uses: actions/download-artifact@v4
         with:
           path: dist
