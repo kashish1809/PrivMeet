@@ -146,7 +146,7 @@ export default function TranscriptPanel({ meeting, startAt = 0 }) {
         aria-label="Transcript"
       >
         {shown.map((s) => {
-          const active = s.i === current && !matches;
+          const active = s.i === current;
           return (
             <li key={s.i} ref={(el) => (rows.current[s.i] = el)}>
               <button
