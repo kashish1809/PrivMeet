@@ -78,16 +78,17 @@ export default function NewMeeting() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Team sync"
               hint="Optional. The file name is used when this is blank."
+              maxLength={200}
               disabled={busy}
             />
 
             {busy && (
               <div className="flex flex-col gap-1.5">
                 <ProgressBar value={progress * 100} label="Upload progress" />
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                <p aria-live="polite" className="text-xs text-zinc-500 dark:text-zinc-400">
                   {progress < 1
-                    ? `Uploading ${fileSize(file.size * progress)} of ${fileSize(file.size)} · ${Math.round(progress * 100)}%`
-                    : "Uploaded, starting the pipeline…"}
+                    ? `Uploading ${file.name} · ${fileSize(file.size * progress)} of ${fileSize(file.size)} · ${Math.round(progress * 100)}%`
+                    : `Uploaded ${file.name}, starting the pipeline…`}
                 </p>
               </div>
             )}
