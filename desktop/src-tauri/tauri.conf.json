@@ -36,8 +36,31 @@
     "category": "Productivity",
     "shortDescription": "Self-hosted AI meeting notes",
     "longDescription": "PrivMeet records or imports a meeting and returns a transcript with speaker labels, a summary, decisions and action items. Everything runs locally.",
+    "publisher": "PrivMeet",
+    "copyright": "\u00a9 2026 Kashish R Shetty, K Vinayak Kamath, HM Karthik",
+    "homepage": "https://github.com/vinayakkam/privmeet",
+    "license": "MIT",
     "resources": {
       "../../compose.yml": "compose/compose.yml"
+    },
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"],
+        "recommends": ["docker.io", "docker-compose-v2", "nvidia-container-toolkit"]
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "../../packaging/windows/nsis-header.bmp",
+        "sidebarImage": "../../packaging/windows/nsis-sidebar.bmp",
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "bannerPath": "../../packaging/windows/wix-banner.bmp",
+        "dialogImagePath": "../../packaging/windows/wix-dialog.bmp"
+      }
     }
   }
 }
