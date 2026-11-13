@@ -4,7 +4,7 @@ import { ListChecks, Plus, Trash2 } from "lucide-react";
 import { Button, Card, cx } from "../ui";
 
 const BLANK = { owner: "", task: "", due: "", done: false };
-const cell = "w-full rounded-md bg-transparent px-1 py-1 text-sm text-zinc-800 placeholder:text-zinc-400 hover:bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-primary-500/30 focus:outline-none dark:text-zinc-100 dark:hover:bg-zinc-800 dark:focus:bg-zinc-900";
+const cell = "rounded-md bg-transparent px-1 py-1 text-sm text-zinc-800 placeholder:text-zinc-400 hover:bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-primary-500/30 focus:outline-none dark:text-zinc-100 dark:hover:bg-zinc-800 dark:focus:bg-zinc-900";
 
 /**
  * Action Items. Without `compact` it is the tab's table (checkbox, task, owner, due, delete);
@@ -126,13 +126,13 @@ export default function ActionItemsPanel({ meeting, onSave, compact }) {
               <tr key={i} className="border-b border-zinc-100 last:border-0 dark:border-zinc-800/60">
                 <td className="py-2 pl-5">{checkbox(i)}</td>
                 <td className="py-2 pr-2">
-                  <input aria-label={`Task ${i + 1}`} placeholder="Task" {...field(i, "task")} className={cell} />
+                  <input aria-label={`Task ${i + 1}`} placeholder="Task" {...field(i, "task")} className={cx(cell, "w-full")} />
                 </td>
                 <td className="py-2 pr-2">
-                  <input aria-label={`Owner ${i + 1}`} placeholder="Owner" {...field(i, "owner")} className={cell} />
+                  <input aria-label={`Owner ${i + 1}`} placeholder="Owner" {...field(i, "owner")} className={cx(cell, "w-full")} />
                 </td>
                 <td className="py-2 pr-2">
-                  <input aria-label={`Due ${i + 1}`} placeholder="Due" {...field(i, "due")} className={cell} />
+                  <input aria-label={`Due ${i + 1}`} placeholder="Due" {...field(i, "due")} className={cx(cell, "w-full")} />
                 </td>
                 <td className="py-2 pr-5 text-right">
                   <button
