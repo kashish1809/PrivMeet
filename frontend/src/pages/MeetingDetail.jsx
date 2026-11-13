@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
-import { getMeeting, meetingAudioUrl, patchMeeting, retryMeeting } from "../api";
+import { getMeeting, patchMeeting, retryMeeting } from "../api";
 import { dateTime, duration, isProcessing } from "../format";
-import { Badge, Button, Card, ProgressBar } from "../ui";
+import { Badge, Button, ProgressBar } from "../ui";
 import ActionItemsPanel from "../components/ActionItemsPanel";
 import MeetingInfo from "../components/MeetingInfo";
 import ProcessingStatus from "../components/ProcessingStatus";
-import QABox from "../components/QABox";
 import SummaryPanel from "../components/SummaryPanel";
+import TranscriptPanel from "../components/TranscriptPanel";
 
 const POLL_MS = 2000;
 
@@ -16,7 +15,6 @@ const POLL_MS = 2000;
 export default function MeetingDetail({ id }) {
   const [meeting, setMeeting] = useState(null);
   const [error, setError] = useState("");
-  const audio = useRef(null);
 
   const load = useCallback(() => {
     getMeeting(id)
@@ -44,13 +42,6 @@ export default function MeetingDetail({ id }) {
     },
     [id],
   );
-
-  const seek = useCallback((seconds) => {
-    const el = audio.current;
-    if (!el) return;
-    el.currentTime = Math.max(0, seconds);
-    el.play().catch(() => {}); // autoplay may be blocked until the user interacts
-  }, []);
 
   if (error && !meeting) {
     return (
@@ -91,45 +82,15 @@ export default function MeetingDetail({ id }) {
         onRetry={() => retryMeeting(id).then(load).catch((e) => setError(e.message))}
       />
 
-      <Card className="px-5 py-4">
-        <audio ref={audio} controls src={meetingAudioUrl(id)} className="w-full" />
-      </Card>
-
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="flex flex-col gap-2 px-5 py-4 lg:col-span-2">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Transcript</h2>
-          {meeting.segments?.length ? (
-            <ol className="flex flex-col gap-2 text-sm">
-              {meeting.segments.map((s, i) => (
-                <li key={i}>
-                  <button
-                    type="button"
-                    onClick={() => seek(s.start)}
-                    className="flex w-full gap-3 rounded-md px-1 py-0.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  >
-                    <span className="font-mono text-xs text-zinc-400">{duration(s.start)}</span>
-                    <span className="text-zinc-700 dark:text-zinc-300">
-                      {s.speaker !== null && (
-                        <span className="font-medium">{meeting.speaker_names?.[s.speaker] || `Speaker ${s.speaker + 1}`}: </span>
-                      )}
-                      {s.text}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              {isProcessing(meeting) ? "Transcript appears when processing finishes." : "No transcript."}
-            </p>
-          )}
-        </Card>
+        <div className="flex flex-col gap-4 lg:col-span-2">
+          <TranscriptPanel meeting={meeting} />
+        </div>
 
         <div className="flex flex-col gap-4">
           <MeetingInfo meeting={meeting} onSave={onSave} />
           <SummaryPanel meeting={meeting} onSave={onSave} />
           <ActionItemsPanel meeting={meeting} onSave={onSave} />
-          <QABox meetingId={id} onSeek={seek} />
         </div>
       </div>
     </section>
