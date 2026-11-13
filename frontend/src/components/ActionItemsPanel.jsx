@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ListChecks, Plus, Trash2 } from "lucide-react";
 
-import { Button, Card } from "../ui";
+import { Button, Card, cx } from "../ui";
 
 const BLANK = { owner: "", task: "", due: "", done: false };
 const cell = "w-full rounded-md bg-transparent px-1 py-1 text-sm text-zinc-800 placeholder:text-zinc-400 hover:bg-zinc-50 focus:bg-white focus:ring-2 focus:ring-primary-500/30 focus:outline-none dark:text-zinc-100 dark:hover:bg-zinc-800 dark:focus:bg-zinc-900";
@@ -63,7 +63,46 @@ export default function ActionItemsPanel({ meeting, onSave, compact }) {
     />
   );
 
-  if (compact) return null; // the mockup's right-column card follows in the next commit
+  if (compact) {
+    return (
+      <Card>
+        <div className="flex items-center gap-2 px-4 pt-4">
+          <ListChecks className="size-4 text-primary-600 dark:text-primary-400" aria-hidden="true" />
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Action Items</h3>
+        </div>
+        <ul className="space-y-1 px-2 pt-2">
+          {items.map((item, i) => (
+            <li key={i} className="flex items-start gap-2 rounded-lg px-2 py-1.5">
+              <span className="flex h-6 items-center">{checkbox(i)}</span>
+              <input
+                aria-label={`Task ${i + 1}`}
+                placeholder="Task"
+                {...field(i, "task")}
+                className={cx(cell, "flex-1", item.done && "text-zinc-400 line-through dark:text-zinc-500")}
+              />
+              <input
+                aria-label={`Owner ${i + 1}`}
+                placeholder="Owner"
+                {...field(i, "owner")}
+                className={cx(cell, "w-20 shrink-0 text-right text-zinc-500 dark:text-zinc-400")}
+              />
+            </li>
+          ))}
+        </ul>
+        {!items.length && <p className="px-4 pt-2 text-sm text-zinc-500 dark:text-zinc-400">No action items yet.</p>}
+        <div className="px-4 py-3">
+          <Button variant="secondary" size="sm" icon={Plus} onClick={add} disabled={busy} className="w-full">
+            Add Action Item
+          </Button>
+        </div>
+        {error && (
+          <p role="alert" className="px-4 pb-3 text-xs text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
+      </Card>
+    );
+  }
 
   return (
     <Card>
