@@ -6,6 +6,7 @@ import { dateTime, duration, isProcessing } from "../format";
 import { Badge, Button, Card, ProgressBar } from "../ui";
 import ActionItemsPanel from "../components/ActionItemsPanel";
 import MeetingInfo from "../components/MeetingInfo";
+import ProcessingStatus from "../components/ProcessingStatus";
 import QABox from "../components/QABox";
 import SummaryPanel from "../components/SummaryPanel";
 
@@ -85,20 +86,10 @@ export default function MeetingDetail({ id }) {
         </p>
       </div>
 
-      {meeting.error && (
-        <Card className="flex flex-wrap items-center justify-between gap-3 border-red-200 px-5 py-4 dark:border-red-900">
-          <p role="alert" className="text-sm text-red-700 dark:text-red-300">{meeting.error}</p>
-          {meeting.status === "failed" && (
-            <Button
-              variant="secondary"
-              icon={RotateCcw}
-              onClick={() => retryMeeting(id).then(load).catch((e) => setError(e.message))}
-            >
-              Retry
-            </Button>
-          )}
-        </Card>
-      )}
+      <ProcessingStatus
+        meeting={meeting}
+        onRetry={() => retryMeeting(id).then(load).catch((e) => setError(e.message))}
+      />
 
       <Card className="px-5 py-4">
         <audio ref={audio} controls src={meetingAudioUrl(id)} className="w-full" />
