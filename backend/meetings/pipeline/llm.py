@@ -215,12 +215,83 @@ def parse_notes(raw):
     return {"summary": str(summary or "").strip(), "decisions": decisions, "action_items": items}
 
 
+GENERIC = {"the", "next", "this", "end", "of", "by", "on", "before", "after", "week", "day", "until", "and", "or"}
+
+
+def _grounded(value, source):
+    """Whether a model-written owner or due date was actually said. Small models fill an
+    empty slot with a plausible name or "Friday"; a blank is better than a wrong deadline."""
+    tokens = [t for t in re.findall(r"\w+", value.lower()) if t not in GENERIC]
+    return bool(tokens) and any(t in source for t in tokens)
+
+
+def ground(notes, transcript):
+    source = transcript.lower()
+    for item in notes["action_items"]:
+        for key in ("owner", "due"):
+            if item[key] and not _grounded(item[key], source):
+                log.info("dropping %s %r: not in the transcript", key, item[key])
+                item[key] = ""
+    return notes
+
+
+LINE = re.compile(r"^\W*(DECISION|TASK)\s*:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+MAX_DECISIONS, MAX_ITEMS = 15, 20
+
+
+def harvest(notes):
+    """DECISION: and TASK: lines from the map step, in meeting order.
+
+    A 1.5b model asked to fold 20 topics into one JSON keeps three or four of them. The map
+    step already found every decision and task chunk by chunk, so they are read straight
+    from its notes and only the summary paragraph is left to the reduce call.
+    """
+    decisions, items = [], []
+    for kind, rest in LINE.findall(notes):
+        if kind.upper() == "DECISION":
+            decisions.append(rest)
+            continue
+        owner, task, due = ([*(p.strip() for p in rest.split("|")), "", ""])[:3] if "|" in rest else ("", rest, "")
+        due = re.sub(r"^due\s*:\s*", "", due, flags=re.IGNORECASE)
+        items.append({"owner": owner, "task": task, "due": due})
+    return parse_notes(json.dumps({"decisions": decisions, "action_items": items}))
+
+
+def _key(text):
+    return " ".join(re.findall(r"\w+", text.lower()))[:60]
+
+
+def dedupe(values, key):
+    seen, out = set(), []
+    for v in values:
+        k = _key(key(v))
+        if k and k not in seen:
+            seen.add(k)
+            out.append(v)
+    return out
+
+
+def merge(found, notes):
+    """Decisions and tasks from the map step, the summary from the reduce call.
+
+    The reduce reply's own lists are used only when the map step found none: given notes,
+    small models re-word every decision (so nothing dedupes) and invent follow-up tasks.
+    """
+    decisions = found["decisions"] or notes["decisions"]
+    items = found["action_items"] or notes["action_items"]
+    return {
+        **notes,
+        "decisions": dedupe(decisions, str)[:MAX_DECISIONS],
+        "action_items": dedupe(items, lambda i: i["task"])[:MAX_ITEMS],
+    }
+
+
 def summarize(transcript, prof, on_progress=lambda frac: None):
     if not transcript.strip():
         return parse_notes("{}")
     chain = MAP_PROMPT | chat(prof, num_predict=MAP_REPLY_TOKENS) | StrOutputParser()
     reduce_room = input_chars(prof, REDUCE_REPLY_TOKENS)
-    notes = transcript
+    notes, found = transcript, None
     # Map until the notes fit the reduce call. Each round shrinks the text ~5-10x, so a
     # 60 min meeting on a 4k-context model needs two rounds at most.
     for _ in range(MAX_ROUNDS):
@@ -232,6 +303,8 @@ def summarize(transcript, prof, on_progress=lambda frac: None):
             parts.append(chain.invoke({"text": c}).strip())
             on_progress((i + 1) / len(chunks))
         notes = "\n\n".join(p for p in parts if p)
+        if found is None:  # first round: the lines straight from the transcript
+            found = harvest(notes)
     if len(notes) > reduce_room:
         # Still too long after MAX_ROUNDS: keep the start and the end (outcomes come late in a
         # meeting) rather than letting Ollama drop the start without telling anyone.
@@ -241,7 +314,10 @@ def summarize(transcript, prof, on_progress=lambda frac: None):
     raw = (REDUCE_PROMPT | chat(prof, json_mode=True, num_predict=REDUCE_REPLY_TOKENS) | StrOutputParser()).invoke(
         {"text": notes}
     )
-    return parse_notes(raw)
+    result = parse_notes(raw)
+    if found is not None:
+        result = merge(found, result)
+    return ground(result, transcript)
 
 
 def answer(excerpts, question, prof):
