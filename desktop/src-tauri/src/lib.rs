@@ -3,6 +3,9 @@
 //! The window shows the bundled launcher page (`frontendDist` in
 //! tauri.conf.json). The launcher drives the Docker stack through the commands
 //! in [`backend`], then navigates to the app served on 127.0.0.1:8000.
+//!
+//! Only one copy runs at a time: `tauri-plugin-single-instance` hands a second
+//! launch to the running window instead of letting it start a second stack.
 
 mod backend;
 mod media;
@@ -12,6 +15,15 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Must come first: the plugin has to decide there is already a PrivMeet before the
+        // rest of the app is set up, otherwise a second launch starts a second stack.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         // Opens the per-OS Docker install guides from the launcher's failure panel.
         .plugin(tauri_plugin_opener::init())
         // Holds the running `docker compose logs -f` child so a retry replaces it.
