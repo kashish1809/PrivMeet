@@ -9,6 +9,7 @@
 
 mod backend;
 mod media;
+mod window_title;
 
 use tauri::Manager;
 
@@ -67,6 +68,7 @@ pub fn run() {
         // inside the window; media.rs grants that to 127.0.0.1:8000 only.
         .setup(|app| {
             media::install(app.handle());
+            window_title::install(app.handle());
             Ok(())
         })
         // Quitting stops the containers unless "keep running in background" is on.

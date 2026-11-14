@@ -43,6 +43,11 @@ let docsUrl = "";
 let running = false; // guards against a second Retry while a start is in flight
 let currentStep = ""; // the step in flight, so a thrown error can mark the right one failed
 
+/** The window title follows this page, so say which step the launcher is on. */
+function setTitle(text) {
+  document.title = `PrivMeet — ${text}`;
+}
+
 /** "busy" | "done" | "error" — drives the spinner and the colours in launcher.css. */
 function setStatus(text, state = "busy") {
   el.statusText.textContent = text;
@@ -103,6 +108,7 @@ function fail({ title, text, items = [], docs = "", logs = false }) {
       return li;
     }),
   );
+  setTitle("Needs attention");
   docsUrl = docs;
   el.docs.hidden = !docs;
   el.retry.hidden = false;
@@ -207,6 +213,7 @@ async function run() {
   resetSteps();
   showLogs(false);
   appendLog("");
+  setTitle("Checking Docker");
   setStatus("Checking Docker…");
   setStep("docker", "active");
 
@@ -234,6 +241,7 @@ async function run() {
     // Someone may have left the stack up ("keep running"): reuse it instead of restarting.
     const already = await invoke("backend_status");
     if (!already.running) {
+      setTitle("Starting PrivMeet");
       setStatus("Starting PrivMeet (first run downloads about 2 GB)…");
       await startLogStream();
       const output = await invoke("start_backend");
@@ -241,6 +249,7 @@ async function run() {
     }
     setStep("start", "done");
     setStep("wait", "active");
+    setTitle("Waiting for the server");
     setStatus("Waiting for the server on 127.0.0.1:8000…");
 
     const ready = await waitForServer(Date.now() + FIRST_RUN_MS);
@@ -256,6 +265,7 @@ async function run() {
     }
 
     setStep("wait", "done");
+    setTitle("Opening");
     setStatus("Opening PrivMeet…", "done");
     window.location.replace(APP_URL);
   } catch (err) {
