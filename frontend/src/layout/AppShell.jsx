@@ -1,10 +1,14 @@
 import { useEffect, useRef } from "react";
 import { Menu, X } from "lucide-react";
 
-import { IconButton } from "../ui";
+import { IconButton, PixelScape, PixelStars } from "../ui";
 import Sidebar, { Logo } from "./Sidebar";
 
 const BORDER = "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900";
+// The phone bar sits over the scenery: slightly see-through, text still on a near-solid surface.
+// The sidebar stays solid and the scenery starts at its edge. No backdrop blur: it would repaint
+// on every scroll on low-end machines.
+const GLASS = "border-zinc-200/80 bg-white/85 dark:border-zinc-800/80 dark:bg-zinc-900/85";
 
 /**
  * Page frame: sidebar + content. Pages render only their content.
@@ -19,17 +23,25 @@ export default function AppShell({ page, system, error, children }) {
 
   return (
     // color-scheme follows the app theme, not the OS, so native scrollbars match in a forced dark/light theme.
-    <div className="flex min-h-dvh bg-zinc-50 scheme-light dark:bg-zinc-950 dark:scheme-dark">
+    <div className="relative isolate flex min-h-dvh bg-zinc-50 scheme-light dark:bg-zinc-950 dark:scheme-dark">
+      {/* The scenery stays put behind the page area while pages scroll over it: stars filling the
+          window on dark themes, the landscape along the bottom of the window. */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-y-0 right-0 -z-10 max-sm:left-0 sm:max-[899px]:left-17 min-[900px]:left-60">
+        <PixelStars className="absolute inset-0" />
+        <PixelScape className="absolute inset-x-0 bottom-0 h-[42vh] min-h-56 [mask-image:linear-gradient(to_bottom,transparent_0%,black_35%)]" />
+      </div>
+
       <aside className={`sticky top-0 hidden h-dvh w-17 shrink-0 border-r sm:block min-[900px]:w-60 ${BORDER}`}>
         <Sidebar page={page} system={system} error={error} rail />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className={`sticky top-0 z-10 flex h-14 items-center gap-2 border-b px-3 sm:hidden ${BORDER}`}>
+        <header className={`sticky top-0 z-10 flex h-14 items-center gap-2 border-b px-3 sm:hidden ${GLASS}`}>
           <IconButton icon={Menu} label="Open menu" onClick={() => drawer.current?.showModal()} />
           <Logo />
         </header>
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        {/* Bottom padding lets the last row scroll clear of the landscape. */}
+        <main className="flex-1 px-4 pt-6 pb-[30vh] sm:px-6 lg:px-8">{children}</main>
       </div>
 
       {/* Native modal <dialog>: focus trap, Esc to close and an inert page behind it for free. */}

@@ -1,29 +1,21 @@
-import { cx, focusRing } from "./cx";
+import { cx } from "./cx";
 
+// Pixel buttons (theme.css "Pixel buttons"): a retro block in the look of the logo tile with a
+// pixel font. The variant picks the colours; the theme presets re-colour every one of them.
 const VARIANTS = {
-  primary: "bg-primary-600 text-white hover:bg-primary-700 disabled:bg-primary-300 dark:disabled:bg-primary-900",
-  secondary:
-    "border border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800",
-  danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300",
-  ghost: "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800",
+  primary: "pm-btn-primary",
+  secondary: "pm-btn-secondary",
+  danger: "pm-btn-danger",
+  ghost: "pm-btn-ghost",
 };
-const SIZES = { sm: "h-8 px-3 text-xs gap-1.5", md: "h-9 px-4 text-sm gap-2", lg: "h-11 px-5 text-sm gap-2" };
+// Heights land on the 2px pixel grid of the frame; the font steps with them.
+const SIZES = { sm: "h-8 px-3 text-[11px] gap-1.5", md: "h-10 px-4 text-xs gap-2", lg: "h-12 px-5 text-sm gap-2.5" };
 
 /** Text button with an optional lucide icon: <Button icon={Plus}>New Meeting</Button> */
 export function Button({ variant = "primary", size = "md", icon: Icon, className, type = "button", children, ...props }) {
   return (
-    <button
-      type={type}
-      className={cx(
-        "inline-flex items-center justify-center rounded-lg font-medium transition-colors disabled:cursor-not-allowed",
-        VARIANTS[variant],
-        SIZES[size],
-        focusRing,
-        className,
-      )}
-      {...props}
-    >
-      {Icon && <Icon className="size-4 shrink-0" aria-hidden="true" />}
+    <button type={type} className={cx("pm-btn", VARIANTS[variant], SIZES[size], className)} {...props}>
+      {Icon && <Icon className="size-4 shrink-0" strokeWidth={2.25} aria-hidden="true" />}
       {children}
     </button>
   );
@@ -37,16 +29,10 @@ export function IconButton({ icon: Icon, label, variant = "ghost", size = "md", 
       type={type}
       aria-label={label}
       title={label}
-      className={cx(
-        "inline-flex items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        VARIANTS[variant],
-        box,
-        focusRing,
-        className,
-      )}
+      className={cx("pm-btn", VARIANTS[variant], box, className)}
       {...props}
     >
-      <Icon className="size-4" aria-hidden="true" />
+      <Icon className="size-4" strokeWidth={2.25} aria-hidden="true" />
     </button>
   );
 }

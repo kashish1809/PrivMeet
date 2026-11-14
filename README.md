@@ -1,233 +1,168 @@
 # PrivMeet
 
-Self-hosted AI meeting notes. Upload or record a meeting and get back a transcript with
-speaker labels, a summary, decisions, action items, full-text search and Q&A. Every stage
-runs on your machine: no account, no cloud API, no audio leaving the box.
+Self-hosted AI meeting notes. Upload or record a meeting and get back a transcript with speaker labels, a summary, decisions, action items, search across all meetings, and Q&A with `[mm:ss]` citations. **Everything runs on your own machine**: the audio never leaves it, and by default neither does the text.
 
-It is built for low-end hardware (CPU only, about 6 GB of RAM, no GPU) and uses an NVIDIA
-GPU automatically when one is present.
+- Runs on a low-end laptop (CPU only, about 6 GB RAM) and uses an NVIDIA GPU when there is one.
+- Records straight from the browser, including the audio of a Meet, Zoom or Teams tab.
+- Four themes (Indigo, Teal, Amber, Slate), a pixel or a normal font, a desktop app for Windows and Linux.
 
-Stack: Django + Celery, React + Tailwind, PostgreSQL, Redis, Docker, OpenAI Whisper
-(faster-whisper on CTranslate2), sherpa-onnx diarization, LangChain + Ollama.
+**Stack:**
+- Backend: Django + Celery, PostgreSQL, Redis.
+- AI: OpenAI Whisper via faster-whisper (no PyTorch), sherpa-onnx speaker diarization, LangChain + Ollama.
+- Frontend: React + Tailwind. Desktop: Tauri.
+- Runs in Docker Compose.
 
-## What it does
-
-- **Upload or record.** MP3, WAV, MP4, M4A, WebM, OGG, Opus, FLAC, MKV or MOV. The browser
-  recorder captures the microphone plus the shared tab's audio, so online meetings work.
-- **Transcript with speaker labels.** Whisper transcribes, sherpa-onnx separates speakers,
-  and each line gets a speaker you can rename.
-- **Notes.** A summary, the decisions and the action items with owner and due date when
-  they were spoken.
-- **Search and Q&A.** Postgres full-text search over every transcript, and questions about
-  one meeting answered with `[mm:ss]` citations you can click.
-- **Export.** Markdown notes and the audio file.
+> ⚠️ **There is no login.** PrivMeet is single-user and trusts whoever can reach it. Compose publishes the app on `127.0.0.1:8000` only. **Do not expose that port to your network or the internet** (no `0.0.0.0`, no port forwarding, no public reverse proxy) unless you put your own authentication in front of it. See [SECURITY.md](SECURITY.md).
 
 ## Requirements
 
-| | |
-|---|---|
-| Docker | Docker Engine or Docker Desktop with Compose v2 |
-| RAM | 6 GB minimum. 8 GB or more gives the mid tier, an NVIDIA GPU the high tier |
-| Disk | About 2 GB for the models on the first run, plus your recordings |
-| CPU | Any x86-64 or arm64 CPU. AVX2 helps Whisper a lot |
-| GPU | Optional. NVIDIA with a working driver and the NVIDIA Container Toolkit |
-| Network | Only for the image pull and the model downloads. Nothing else |
+| | Minimum | Better |
+|---|---|---|
+| OS | Linux, Windows 10/11 or macOS with Docker | |
+| RAM | 6 GB (low tier) | 8 GB+ (mid tier: speaker labels, a 3B model) |
+| CPU | 4 threads | 8+ threads |
+| GPU | none | NVIDIA with 4 GB+ VRAM and the NVIDIA Container Toolkit |
+| Disk | ~6 GB free (images and models) | more for long recordings |
+| Software | [Docker](https://docs.docker.com/get-docker/) with Compose v2 | |
 
-## Quick start
+## Quick start (Docker)
 
-```sh
+```bash
+git clone https://github.com/kashish1809/PrivMeet.git
+cd PrivMeet
 cp .env.example .env
-# Put a real secret in .env. The stack refuses to start without one.
+# put a long random value in SECRET_KEY, e.g. the output of:
 python -c "import secrets; print(secrets.token_urlsafe(50))"
 docker compose up -d
 ```
 
-Open <http://127.0.0.1:8000>. The web container migrates the database on start, so the
-first page load takes a few seconds while Postgres and Ollama come up.
+Open **http://127.0.0.1:8000**.
 
-`scripts/privmeet.sh` wraps the common commands (`up`, `down`, `logs`, `status`,
-`update`) and adds the GPU override when `nvidia-smi` works. See
-[docs/RELEASING.md](docs/RELEASING.md) for the release steps.
+The launcher scripts do the same in one step. They create `.env` with a random `SECRET_KEY`, add the GPU override when an NVIDIA GPU answers, wait for the server and open the browser:
 
-To stop the stack: `docker compose down`. Your data lives in the `db`, `data` and
-`ollama` volumes and survives `down`; `docker compose down -v` deletes it.
-
-### First run downloads models
-
-The image already contains the diarization models, so nothing extra is needed for
-speakers. The other two download on demand, once:
-
-- **Whisper.** faster-whisper fetches the tier's model from Hugging Face the first time a
-  meeting is transcribed (`base` is about 140 MB, `small` about 480 MB,
-  `large-v3-turbo` about 1.6 GB). The meeting stays in `transcribing` until the download
-  finishes; after that the model is cached in the `data` volume.
-- **Ollama.** The tier's chat model is pulled by the worker on the first summary
-  (`qwen2.5:1.5b` is about 1 GB, `qwen2.5:3b` about 2 GB, `qwen2.5:7b` about 4.7 GB) and
-  stays in the `ollama` volume.
-
-So the first upload on a fresh install takes several minutes even on a fast machine. To
-pre-download the Ollama model while you make coffee:
-
-```sh
-docker compose exec ollama ollama pull qwen2.5:1.5b   # the low tier's model
+```bash
+scripts/privmeet.sh up          # Linux / macOS: up | down | logs | update | status
+.\scripts\privmeet.ps1 up       # Windows PowerShell, same commands
 ```
 
-Diarization models for a non-Docker run come from `scripts/download_models.sh`.
+Prefer an app? Install the desktop app from the [releases](https://github.com/kashish1809/PrivMeet/releases) (`.exe`/`.msi` for Windows, `.deb`/`.AppImage` for Linux). It starts and stops the Docker stack for you.
 
-### GPU
+### The first run downloads models
+The first start pulls the Docker images, and the first meeting downloads its models, **about 2 GB in total on the low tier**:
+- the Whisper model for your tier, into the `data` volume
+- the Ollama LLM, into the `ollama` volume
 
-With an NVIDIA GPU, `compose.gpu.yml` adds the device reservations and builds the worker
-with the CUDA runtime:
+The speaker-diarization models (~35 MB) are already in the image.
 
-```sh
-docker compose -f compose.yml -f compose.gpu.yml up -d --build
+The first meeting therefore takes longer than the rest. Later meetings start at once, and the models survive `docker compose down`. `docker compose down -v` deletes the volumes, and with them your meetings and models.
+
+To fetch the LLM before the first meeting:
+```bash
+docker compose exec ollama ollama pull qwen2.5:1.5b    # the low tier's model; see the tier table
 ```
 
-Then check `curl -s http://127.0.0.1:8000/api/system/`: it should report
-`"tier": "high"` and `"device": "cuda"`. Without a GPU that file is not used at all and
-the stack stays on the CPU tiers.
+## Using an NVIDIA GPU
+1. Install the NVIDIA driver and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+2. Check that it works: `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi`.
+3. Start with the GPU override:
+   ```bash
+   docker compose -f compose.yml -f compose.gpu.yml up -d
+   ```
+   The launcher scripts and the desktop app add it on their own when `nvidia-smi` works.
 
-The desktop app and `scripts/privmeet.sh up` add the override for you when `nvidia-smi`
-answers.
+The worker (Whisper) and Ollama get the GPU, and the tier becomes `high`. Check it at http://127.0.0.1:8000/api/system/ (`"device": "cuda"`).
 
-### Desktop app
-
-A Tauri 2 shell that starts the stack for you and opens the same UI in the system webview
-(no Electron, no second browser engine). Installers, the launcher and its own notes are in
-[desktop/README.md](desktop/README.md).
-
-## Local development without Docker
-
-Needs Python 3.12, Node 20+, `ffmpeg` on `PATH` and Ollama listening on
-<http://localhost:11434> (`ollama serve`, then `ollama pull qwen2.5:1.5b`).
-
-```sh
-# backend
-cd backend
-uv venv -p 3.12 .venv && uv pip install -p .venv -r requirements.txt
-DEBUG=1 CELERY_EAGER=1 .venv/bin/python manage.py migrate
-DEBUG=1 CELERY_EAGER=1 .venv/bin/python manage.py runserver     # :8000
-
-# frontend, in a second shell
-cd frontend
-npm install
-npm run dev                                                     # :5173
-```
-
-On Windows the interpreter is `.venv\Scripts\python.exe` and the variables are set with
-`$env:DEBUG="1"; $env:CELERY_EAGER="1"`.
-
-- `CELERY_EAGER=1` runs the pipeline inside the web process, so neither Redis nor a worker
-  is needed. It is only for development: the server must answer while the task runs.
-- `DEBUG=1` allows the built-in development `SECRET_KEY`. With `DEBUG` off, settings.py
-  refuses to start until a real `SECRET_KEY` is set.
-- Without `POSTGRES_HOST` the app uses SQLite. Search falls back to a `LIKE` query instead
-  of Postgres full-text search, so results are slower and less ranked.
-- The Vite dev server proxies `/api` to :8000 and `CSRF_TRUSTED_ORIGINS` already allows
-  <http://localhost:5173>.
-- Voice diarization stays off until `scripts/download_models.sh` has fetched the two ONNX
-  models, unless you point `DIARIZE_MODELS_DIR` at an existing copy.
-
-There is no login in development either: the dev server binds `127.0.0.1` for the same
-reason.
+On a GPU with less than 6 GB of VRAM, the LLM drops to the 3B model so it fits whole in VRAM. If CUDA fails at run time (missing libraries, out of memory), transcription logs the error and **finishes on the CPU**: a broken GPU costs speed, not the meeting.
 
 ## Hardware tiers
+`backend/meetings/hw.py` picks a tier from the RAM and the GPU when the worker starts:
 
-`backend/meetings/hw.py` picks a tier from total RAM and CUDA availability. Nothing else
-hard-codes a model name.
+| Tier | When | Whisper | LLM (Ollama) | Speakers | 10 min of audio* |
+|---|---|---|---|---|---|
+| `low` | < 7.5 GB RAM, no GPU | `base`, int8, CPU | `qwen2.5:1.5b`, 4k context | off | ~45 s |
+| `mid` | ≥ 7.5 GB RAM, no GPU | `small`, int8, CPU | `qwen2.5:3b`, 8k context | on | ~2.5 min |
+| `high` | NVIDIA GPU | `large-v3-turbo`, int8_float16, CUDA | `qwen2.5:7b` (`3b` under 6 GB VRAM) | on | ~2 min on a 4 GB GTX 1650 |
 
-| Tier | Detected when | Whisper | Chat model | Diarization |
-|---|---|---|---|---|
-| `low` | under 8 GB RAM, no GPU | `base`, int8 CPU, beam 1 | `qwen2.5:1.5b`, num_ctx 4096 | off (opt in) |
-| `mid` | 8 GB or more, no GPU | `small`, int8 CPU, beam 5 | `qwen2.5:3b`, num_ctx 8192 | on |
-| `high` | NVIDIA GPU present | `large-v3-turbo`, float16 CUDA | `qwen2.5:7b`, num_ctx 8192 | on |
+\* Measured on a Ryzen 5 5600; see [docs/BENCHMARKS.md](docs/BENCHMARKS.md). Run `scripts/bench.py <audio>` on your own machine.
 
-The worker writes the tier it detected to the `data` volume, and `GET /api/system/` serves
-it, so the UI and the API always agree even when the web container cannot see the GPU.
+Only one heavy model is in memory at a time. The worker runs one job at a time, runs ffmpeg, Whisper, diarization and the LLM one after another, and restarts after each job, so the memory goes back to the system.
 
-## Configuration
+## Settings and overrides
+Most things can be changed in the app under **Settings**:
+- **General:** your name and the default recording title.
+- **AI Model:** the Ollama server and model, context length, CPU threads and speaker detection.
+- **Recording:** the default microphone, tab audio and camera.
+- **Appearance:** theme and font.
 
-Everything comes from environment variables, so the same image runs on every tier. Compose
-reads them from `.env`; the full annotated list is [.env.example](.env.example).
+A model picked there is used from the next meeting on, with no restart.
+
+**Cloud models (optional).** The AI Model tab can also send the notes to **OpenAI, OpenRouter, Anthropic** or any OpenAI-compatible server with your own API key.
+- Only the transcript *text* is sent, for the summary and Q&A.
+- Audio, transcription and speaker detection always stay local.
+- The app warns you before switching, and Ollama stays the default.
+
+**Environment variables.** The same knobs exist as variables in `.env` (see [.env.example](.env.example)). The Settings page wins over them.
 
 | Variable | Default | What it does |
 |---|---|---|
-| `SECRET_KEY` | none, required | Django key. Compose refuses to start without it, and settings.py rejects the built-in key when `DEBUG` is off |
-| `DEBUG` | `0` | `1` turns on Django debug pages and allows the development key. Never in Docker |
-| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Host headers Django answers for |
-| `CSRF_TRUSTED_ORIGINS` | `127.0.0.1:8000,localhost:8000` in compose, `http://localhost:5173` otherwise | Origins allowed to POST/PATCH/DELETE with the CSRF cookie |
-| `MAX_UPLOAD_MB` | `2048` | Upload size cap |
-| `TIER` | empty = auto | `low`, `mid` or `high`. Forcing `high` without a GPU falls back to CPU |
-| `CPU_THREADS` | half the cores | Whisper threads |
-| `WHISPER_MODEL` | tier default | Any faster-whisper size: `tiny`, `base`, `small`, `medium`, `large-v3-turbo` |
-| `LLM_MODEL` | tier default | Any Ollama model name |
-| `NUM_CTX` | tier default | Ollama context window. Long meetings are chunked to fit it |
-| `BEAM_SIZE` | tier default | Whisper beam size. Higher is slower and slightly better |
-| `DIARIZE` | tier default | `1` or `0` |
-| `OLLAMA_URL` | `http://ollama:11434` | Chat model server. `http://localhost:11434` for a local run |
-| `POSTGRES_HOST` and friends | `db` in compose, empty locally | Empty means SQLite |
-| `DATA_DIR` | `backend/data` | Uploads, the database file and the worker profile |
-| `REDIS_URL` | `redis://redis:6379/0` | Celery broker |
-| `CELERY_EAGER` | empty | `1` runs tasks inline. Development only |
-| `DB_MEM`, `REDIS_MEM`, `WEB_MEM`, `WORKER_MEM`, `OLLAMA_MEM` | `256m`, `64m`, `1g`, `4g`, `4g` | Compose `mem_limit` per service. Lower them on a 6 GB box |
-| `PRIVMEET_VERSION` | `latest` | Image tag to pull. Pin it for a reproducible install |
+| `SECRET_KEY` | (required) | Django secret; the app refuses to start without one unless `DEBUG=1` |
+| `TIER` | auto | force `low`, `mid` or `high` |
+| `WHISPER_MODEL`, `LLM_MODEL` | tier | e.g. `small`, `qwen2.5:3b` |
+| `NUM_CTX`, `BEAM_SIZE` | tier | LLM context length, Whisper beam size |
+| `DIARIZE` | tier | `1` or `0` for speaker labels |
+| `CPU_THREADS` | half the cores | threads for Whisper and the local LLM |
+| `MAX_UPLOAD_MB` | 2048 | largest upload |
+| `WORKER_MEM`, `OLLAMA_MEM`, `WEB_MEM`, `DB_MEM`, `REDIS_MEM` | 4g, 4g, 1g, 256m, 64m | container memory limits |
+| `PRIVMEET_VERSION` | latest | pin the image version, e.g. `0.1.0` |
+
+## Running locally without Docker (development)
+You need Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20+, ffmpeg on `PATH` and [Ollama](https://ollama.com) on `localhost:11434`.
+
+```bash
+# backend
+cd backend
+uv venv -p 3.12 .venv && uv pip install -p .venv -r requirements.txt
+export DEBUG=1 CELERY_EAGER=1          # Windows PowerShell: $env:DEBUG=1; $env:CELERY_EAGER=1
+.venv/bin/python manage.py migrate      # Windows: .venv\Scripts\python
+.venv/bin/python manage.py runserver    # http://127.0.0.1:8000/api/
+
+# frontend, in a second terminal
+cd frontend
+npm install
+npm run dev                             # http://localhost:5173, proxies /api to :8000
+```
+
+- `CELERY_EAGER=1` runs the jobs inside the web process, so you need no Redis and no worker.
+- Without `POSTGRES_HOST` the app uses SQLite.
+- `scripts/download_models.sh` fetches the speaker-diarization models.
+- `python manage.py process_file meeting.mp3` runs the whole pipeline on one file from the command line.
+- The API is described in [docs/API.md](docs/API.md), and the design in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Troubleshooting
 
-**`SECRET_KEY` is required when DEBUG is off.** Copy `.env.example` to `.env` and paste a
-generated key. For a local run without Docker, set `DEBUG=1` instead.
-
-**`port is already allocated` on 8000.** Something else holds the port. Free it, or change
-the published port in `compose.yml` (keep the `127.0.0.1:` prefix).
-
-**A meeting stays `queued`.** The worker is not running or cannot reach Redis:
-`docker compose ps` and `docker compose logs worker`. With `CELERY_EAGER=1` outside Docker
-the task runs in the request, so the page waits instead.
-
-**A meeting fails with "No audio stream found".** The file has video but no audio track, or
-the container is DRM-protected. Check with `ffprobe <file>`. A screen recording with the
-system audio muted fails the same way.
-
-**A meeting fails while summarizing.** Ollama could not pull or load the model. Check
-`docker compose logs ollama` and that the disk has room. A machine with 6 GB of RAM should
-leave `OLLAMA_MEM` at `4g` and use the low tier.
-
-**Long meetings fail on a small machine.** Lower `WORKER_MEM`/`OLLAMA_MEM` is not the fix:
-the models need the room. Force `TIER=low` so Whisper `base` and `qwen2.5:1.5b` are used,
-and close other applications.
-
-**The GPU is not used.** `curl -s http://127.0.0.1:8000/api/system/` shows the tier and
-device. If it says `cpu`, the stack was started without `compose.gpu.yml`, `nvidia-smi`
-fails on the host, or the NVIDIA Container Toolkit is missing. `docker run --rm
---gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi` proves the toolkit works.
-
-**The first transcription takes minutes.** That is the Whisper download, once per model.
-The same for the first summary and the Ollama pull. Both are cached in volumes.
-
-**Text is not searchable outside Postgres.** Expected: SQLite has no full-text search and
-`search.py` falls back to `LIKE`. Use the Docker stack for real search.
+| Problem | What to do |
+|---|---|
+| `set SECRET_KEY in .env` when starting | `.env` is missing or `SECRET_KEY=` is empty. Copy `.env.example` to `.env` and set it, or use `scripts/privmeet.sh up`, which makes one. |
+| `Cannot connect to the Docker daemon` | Start Docker Desktop (or `sudo systemctl start docker`) and try again. |
+| Port 8000 is already in use | Another app, or another PrivMeet, holds it. Stop it, or change `127.0.0.1:8000:8000` in `compose.yml` to another port such as `127.0.0.1:8080:8000`. |
+| The first meeting sits at "Summarizing" for minutes | The LLM is being downloaded (about 1 GB on the low tier). Watch it with `docker compose logs -f ollama`. Later meetings are fast. |
+| A meeting fails with a connection error (e.g. `Connection refused`) while summarizing | The `ollama` container is down or still starting: `docker compose ps`, then `docker compose restart ollama`. Retry the meeting from its page. |
+| The worker is killed, or a long meeting fails at random | Not enough memory. Use the low tier (`TIER=low`), lower `NUM_CTX`, or raise `WORKER_MEM` / `OLLAMA_MEM` if the machine has room. Close other heavy apps. |
+| Upload says `No audio stream found` | The file has no audio track, or it is not really a media file. Supported: mp3, wav, mp4, m4a, webm, ogg, opus, flac, mkv, mov. |
+| Recording: "Microphone access was blocked" | Allow the microphone for `127.0.0.1` in the browser's site settings (the icon in the address bar), then press **Try again**. |
+| Recording a Meet / Zoom / Teams tab has no other voices | When sharing, pick the **tab** and tick **Share tab audio**. Windows and Chrome can also share system audio for a whole screen. |
+| GPU not used | Check the toolkit with the `nvidia-smi` container above, start with `compose.gpu.yml`, and look for `retrying on the CPU` in `docker compose logs worker`. |
+| No speaker labels | Expected on the low tier. Turn on **Find speakers** under Settings, AI Model, Advanced options (it needs about 0.3 GB more RAM). |
+| Everything else | `scripts/privmeet.sh status` and `scripts/privmeet.sh logs web` (or `worker`) show what the stack is doing. |
 
 ## Security
+- **No login, single user.** Anyone who can reach port 8000 can read, change and delete every meeting. Keep the default `127.0.0.1` binding. To reach it from another device, use an SSH tunnel or a VPN to this machine, not a public port.
+- **Uploads are checked:** an extension allow-list, a size limit (`MAX_UPLOAD_MB`, enforced before the body is read), and `ffprobe` must find an audio stream. Files are stored under random names and served only through the API.
+- **Every write needs the CSRF token,** and `DEBUG` is off by default. With `DEBUG` off, the app refuses to start with the sample `SECRET_KEY`.
+- **Privacy:** with the default Ollama provider nothing leaves the machine, apart from downloading Docker images and models. A cloud LLM provider is opt-in and gets only transcript text.
+- Report security problems as described in [SECURITY.md](SECURITY.md).
 
-**There is no login.** PrivMeet is a single-user app for one machine. The stack publishes
-`127.0.0.1:8000` only, so it is not reachable from the network.
-
-- Do not change that to `0.0.0.0:8000` or put it behind a port forward or a tunnel. Anyone
-  who reaches the port can read, change and delete every meeting.
-- Keep `DEBUG=0` outside local development, and always set a real `SECRET_KEY`.
-- Uploads are checked for extension, size and a real audio stream, and stored under
-  random names. Media is served only through the API.
-- The app makes no outbound request except the image pull and the model downloads.
-
-See [SECURITY.md](SECURITY.md) for how to report a problem.
-
-## Docs
-
-- [docs/PLAN.md](docs/PLAN.md): design, resource strategy and milestones
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): component diagram, pipeline, data model
-- [docs/RELEASING.md](docs/RELEASING.md): how a release is cut and packaged
-- [docs/TASKS.md](docs/TASKS.md): the team's task split
-- [desktop/README.md](desktop/README.md): the desktop app and its launcher
-- [CONTRIBUTING.md](CONTRIBUTING.md), [AUTHORS.md](AUTHORS.md), [CHANGELOG.md](CHANGELOG.md)
-
-MIT licensed. See [LICENSE](LICENSE).
+## Project
+- How it works: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · API: [docs/API.md](docs/API.md) · Benchmarks: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) · Releasing: [docs/RELEASING.md](docs/RELEASING.md)
+- Design and team plan: [docs/PLAN.md](docs/PLAN.md), [docs/TASKS.md](docs/TASKS.md); rules for AI agents: [AGENTS.md](AGENTS.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md) · [CHANGELOG.md](CHANGELOG.md) · [AUTHORS.md](AUTHORS.md) · License: [MIT](LICENSE). The bundled Monocraft pixel font is under the SIL Open Font License (`frontend/src/ui/fonts/MONOCRAFT-OFL.txt`).

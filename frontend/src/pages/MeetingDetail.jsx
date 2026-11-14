@@ -1,21 +1,52 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useId, useState } from "react";
+import { NotebookPen, Users } from "lucide-react";
 
-import { getMeeting, meetingAudioUrl, patchMeeting, retryMeeting } from "../api";
-import { dateTime, duration, isProcessing } from "../format";
-import { Badge, Button, Card, ProgressBar } from "../ui";
+import { deleteMeeting, getMeeting, patchMeeting, retryMeeting } from "../api";
+import { isProcessing } from "../format";
+import { Avatar, Button, Card, CardHeader, ConfirmDialog, EmptyState, Tabs, tabPanelProps } from "../ui";
+import { navigate, useRoute } from "../App";
 import ActionItemsPanel from "../components/ActionItemsPanel";
-import MeetingInfo from "../components/MeetingInfo";
-import QABox from "../components/QABox";
+import MeetingHeader from "../components/MeetingHeader";
+import ProcessingStatus from "../components/ProcessingStatus";
 import SummaryPanel from "../components/SummaryPanel";
+import TranscriptPanel from "../components/TranscriptPanel";
 
 const POLL_MS = 2000;
 
-/** Temporary detail page: T2.4 adds tabs, a synced transcript and the right-hand info column. */
+const TABS = [
+  { value: "summary", label: "Summary" },
+  { value: "transcript", label: "Transcript" },
+  { value: "actions", label: "Action Items" },
+  { value: "notes", label: "Notes" },
+];
+
+/** Everyone the transcript mentions, in speaking order, with the saved name when there is one. */
+function participants(meeting) {
+  const seen = new Map();
+  for (const s of meeting.segments || []) {
+    if (s.speaker === null || s.speaker === undefined || seen.has(s.speaker)) continue;
+    seen.set(s.speaker, meeting.speaker_names?.[s.speaker] || `Speaker ${s.speaker + 1}`);
+  }
+  return [...seen.entries()].map(([key, name]) => ({ key, name }));
+}
+
+/**
+ * Meeting detail, laid out like docs/ui/mockup.webp: breadcrumb and Share/Download, the
+ * logo tile and title, then Summary | Transcript | Action Items | Notes with the compact
+ * action items and the participants in the right column.
+ *
+ * The page polls every 2 s while the pipeline works. `?t=<seconds>` opens the Transcript
+ * tab and seeks there. R2.3 replaces the participants list, R2.4 fills in the Notes tab.
+ */
 export default function MeetingDetail({ id }) {
+  const { query } = useRoute();
   const [meeting, setMeeting] = useState(null);
   const [error, setError] = useState("");
-  const audio = useRef(null);
+  const [tab, setTab] = useState("summary");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const tabsId = useId();
+
+  const startAt = Math.max(0, Number(query.get("t")) || 0);
 
   const load = useCallback(() => {
     getMeeting(id)
@@ -26,7 +57,9 @@ export default function MeetingDetail({ id }) {
       .catch((e) => setError(e.message));
   }, [id]);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Poll every 2 s only while the pipeline is still working (AGENTS.md project rules).
   useEffect(() => {
@@ -34,6 +67,11 @@ export default function MeetingDetail({ id }) {
     const timer = setInterval(load, POLL_MS);
     return () => clearInterval(timer);
   }, [meeting?.status, load]);
+
+  // ?t= means "show me this moment", so it wins over whichever tab was open.
+  useEffect(() => {
+    if (startAt) setTab("transcript");
+  }, [startAt, id]);
 
   const onSave = useCallback(
     async (patch) => {
@@ -44,12 +82,15 @@ export default function MeetingDetail({ id }) {
     [id],
   );
 
-  const seek = useCallback((seconds) => {
-    const el = audio.current;
-    if (!el) return;
-    el.currentTime = Math.max(0, seconds);
-    el.play().catch(() => {}); // autoplay may be blocked until the user interacts
-  }, []);
+  async function removeMeeting() {
+    setConfirmingDelete(false);
+    try {
+      await deleteMeeting(id);
+      navigate("/meetings");
+    } catch (e) {
+      setError(e.message || "Could not delete this meeting.");
+    }
+  }
 
   if (error && !meeting) {
     return (
@@ -57,90 +98,106 @@ export default function MeetingDetail({ id }) {
         <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
           {error}
         </p>
-        <Button className="mt-4" variant="secondary" onClick={load}>Try again</Button>
+        <Button className="mt-4" variant="secondary" onClick={load}>
+          Try again
+        </Button>
       </div>
     );
   }
 
   if (!meeting) return <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading meeting…</p>;
 
-  return (
-    <section className="mx-auto flex max-w-5xl flex-col gap-4">
-      <div>
-        <a href="#/meetings" className="text-xs text-zinc-500 hover:underline dark:text-zinc-400">
-          ← Back to meetings
-        </a>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">{meeting.title}</h1>
-          <div className="flex items-center gap-3">
-            <Badge status={meeting.status} />
-            {isProcessing(meeting) && (
-              <ProgressBar value={meeting.progress} label="Processing progress" className="w-32" />
-            )}
-          </div>
-        </div>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          {dateTime(meeting.created)} · {duration(meeting.duration)}
-          {meeting.language ? ` · ${meeting.language}` : ""}
-        </p>
-      </div>
+  const people = participants(meeting);
+  const busy = isProcessing(meeting);
 
-      {meeting.error && (
-        <Card className="flex flex-wrap items-center justify-between gap-3 border-red-200 px-5 py-4 dark:border-red-900">
-          <p role="alert" className="text-sm text-red-700 dark:text-red-300">{meeting.error}</p>
-          {meeting.status === "failed" && (
-            <Button
-              variant="secondary"
-              icon={RotateCcw}
-              onClick={() => retryMeeting(id).then(load).catch((e) => setError(e.message))}
-            >
-              Retry
-            </Button>
-          )}
-        </Card>
+  return (
+    <section className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+      <MeetingHeader
+        meeting={meeting}
+        onRename={(title) => onSave({ title })}
+        onDelete={() => setConfirmingDelete(true)}
+      />
+
+      {/* A failed rename, retry or delete has to be visible, not only a failed first load. */}
+      {error && (
+        <p
+          role="alert"
+          className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+        >
+          {error}
+        </p>
       )}
 
-      <Card className="px-5 py-4">
-        <audio ref={audio} controls src={meetingAudioUrl(id)} className="w-full" />
-      </Card>
+      <ProcessingStatus
+        meeting={meeting}
+        onRetry={() => retryMeeting(id).then(load).catch((e) => setError(e.message))}
+      />
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="flex flex-col gap-2 px-5 py-4 lg:col-span-2">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Transcript</h2>
-          {meeting.segments?.length ? (
-            <ol className="flex flex-col gap-2 text-sm">
-              {meeting.segments.map((s, i) => (
-                <li key={i}>
-                  <button
-                    type="button"
-                    onClick={() => seek(s.start)}
-                    className="flex w-full gap-3 rounded-md px-1 py-0.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  >
-                    <span className="font-mono text-xs text-zinc-400">{duration(s.start)}</span>
-                    <span className="text-zinc-700 dark:text-zinc-300">
-                      {s.speaker !== null && (
-                        <span className="font-medium">{meeting.speaker_names?.[s.speaker] || `Speaker ${s.speaker + 1}`}: </span>
-                      )}
-                      {s.text}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              {isProcessing(meeting) ? "Transcript appears when processing finishes." : "No transcript."}
-            </p>
-          )}
-        </Card>
-
-        <div className="flex flex-col gap-4">
-          <MeetingInfo meeting={meeting} onSave={onSave} />
-          <SummaryPanel meeting={meeting} onSave={onSave} />
-          <ActionItemsPanel meeting={meeting} onSave={onSave} />
-          <QABox meetingId={id} onSeek={seek} />
-        </div>
+      {/* Phones: the four labels do not fit, so they scroll sideways instead of wrapping. */}
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <Tabs
+          id={tabsId}
+          tabs={TABS}
+          value={tab}
+          onChange={setTab}
+          label="Meeting sections"
+          className="min-w-max"
+        />
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div {...tabPanelProps(tabsId, tab)} className="min-w-0">
+          {tab === "summary" && <SummaryPanel meeting={meeting} onSave={onSave} />}
+
+          {tab === "transcript" && (
+            <Card className="px-4 py-4 sm:px-5">
+              <TranscriptPanel meeting={meeting} startAt={startAt} />
+            </Card>
+          )}
+
+          {tab === "actions" && <ActionItemsPanel meeting={meeting} onSave={onSave} />}
+
+          {tab === "notes" && (
+            <Card>
+              <EmptyState icon={NotebookPen} title="Notes">
+                Your own notes and tags for this meeting arrive with the next update (R2.4).
+              </EmptyState>
+            </Card>
+          )}
+        </div>
+
+        <aside className="flex flex-col gap-4">
+          <ActionItemsPanel meeting={meeting} onSave={onSave} compact />
+
+          <Card>
+            <CardHeader title="Participants" icon={Users} />
+            {people.length ? (
+              <ul className="grid grid-cols-2 gap-3 px-5 pt-3 pb-5">
+                {people.map((person) => (
+                  <li key={person.key} className="flex items-center gap-2">
+                    <Avatar name={person.name} colorKey={person.key} size="sm" />
+                    <span className="truncate text-sm text-zinc-700 dark:text-zinc-300">{person.name}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="px-5 pt-3 pb-5 text-sm text-zinc-500 dark:text-zinc-400">
+                {busy ? "Speakers appear after the transcript is ready." : "No speakers were detected."}
+              </p>
+            )}
+          </Card>
+        </aside>
+      </div>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        title="Delete meeting?"
+        confirmLabel="Delete"
+        onConfirm={removeMeeting}
+        onCancel={() => setConfirmingDelete(false)}
+      >
+        “{meeting.title}” and its audio file will be removed. This cannot be undone.
+      </ConfirmDialog>
     </section>
   );
 }

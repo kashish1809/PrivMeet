@@ -1,7 +1,7 @@
-import { AudioLines, Calendar, ChevronRight, CircleDot, History, House, Settings } from "lucide-react";
+import { Calendar, ChevronRight, CircleDot, History, House, Settings } from "lucide-react";
 
 import { TOOLS } from "../pages/Tools";
-import { StatusDot, cx, focusRing } from "../ui";
+import { LogoMark, StatusDot, cx, focusRing } from "../ui";
 import { useRecording } from "./recording";
 
 // `page` is the route without "#/" and slashes: "", "meetings", "m/<id>", "tools/summarization".
@@ -81,9 +81,7 @@ function NavGroup({ title, items, rail, ...rest }) {
 export function Logo({ rail }) {
   return (
     <a href="#/" className={cx("flex items-center gap-2.5 rounded-lg", rail && "max-[899px]:justify-center", focusRing)}>
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-600 text-white">
-        <AudioLines className="size-5" aria-hidden="true" />
-      </span>
+      <LogoMark size={36} />
       <span className={cx("leading-tight", railText(rail))}>
         <span className="block text-base font-semibold text-zinc-900 dark:text-zinc-100">PrivMeet</span>
         <span className="block text-[11px] text-zinc-500 dark:text-zinc-400">Self-hosted AI meeting notes</span>

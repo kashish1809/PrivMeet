@@ -9,6 +9,8 @@
   --primary: #4f46e5;
   --primary-soft: #eef2ff;
   --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --success: #16a34a;
   color-scheme: light dark;
 }
 
@@ -22,6 +24,8 @@
     --primary: #818cf8;
     --primary-soft: #1e1b4b;
     --danger: #f87171;
+    --danger-soft: #2a1416;
+    --success: #4ade80;
   }
 }
 
@@ -42,10 +46,10 @@ body {
 }
 
 .card {
-  width: min(30rem, 100%);
+  width: min(34rem, 100%);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
   padding: 28px;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -93,6 +97,7 @@ h1 {
 }
 
 .spinner {
+  flex: none;
   width: 14px;
   height: 14px;
   border: 2px solid var(--primary-soft);
@@ -106,6 +111,14 @@ h1 {
   display: none;
 }
 
+.status.done::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
 .status.error #status-text {
   color: var(--danger);
 }
@@ -113,6 +126,12 @@ h1 {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
   }
 }
 
@@ -141,19 +160,206 @@ h1 {
   font-weight: 600;
 }
 
-.hint {
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: 12px;
+  background: var(--danger-soft);
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.panel-text {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.panel-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.panel-list code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.06);
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .panel-list code {
+    background: rgb(255 255 255 / 0.1);
+  }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.actions:empty {
+  display: none;
+}
+
+.button {
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button[hidden] {
+  display: none;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.panel:focus-visible {
+  outline: 2px solid var(--danger);
+  outline-offset: 2px;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link[hidden] {
+  display: none;
+}
+
+.button:focus-visible,
+.link:focus-visible,
+.setting input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.logs {
+  max-height: 12rem;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.logs[hidden] {
+  display: none;
+}
+
+.setting {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.setting input {
+  margin-top: 2px;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary);
+}
+
+.setting-hint {
+  display: block;
+  margin-top: 2px;
   color: var(--muted);
 }
 
 .foot {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
   font-size: 11px;
   color: var(--muted);
+}
+
+.about {
+  width: min(24rem, calc(100vw - 3rem));
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 18px 40px rgb(0 0 0 / 0.25);
+}
+
+.about::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.about h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.about-version {
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.about-line {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.about-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
 }

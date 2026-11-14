@@ -24,8 +24,9 @@ WORKER_PROFILE = settings.DATA_DIR / "worker_profile.json"
 @worker_ready.connect
 def publish_profile(**kwargs):
     # The web container may not see the GPU, so the worker tells it what tier it runs.
+    # Without the saved settings: the web side applies the current ones on every request.
     settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    WORKER_PROFILE.write_text(json.dumps(hw.profile()))
+    WORKER_PROFILE.write_text(json.dumps(hw.base_profile()))
 
 
 @shared_task

@@ -8,9 +8,10 @@ use std::process::Stdio;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_opener::OpenerExt;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::process::{Child, Command};
@@ -215,7 +216,12 @@ pub async fn start_backend(app: AppHandle, dir: Option<String>) -> Result<String
 /// Stop and remove the containers. Named volumes (meetings, models) are kept.
 #[tauri::command]
 pub async fn stop_backend(app: AppHandle, dir: Option<String>) -> Result<String, String> {
-    let dir = compose_dir(&app, dir)?;
+    stop_stack(&app, dir).await
+}
+
+/// The body of `stop_backend`, reusable from the window-close handler.
+pub async fn stop_stack(app: &AppHandle, dir: Option<String>) -> Result<String, String> {
+    let dir = compose_dir(app, dir)?;
     let out = compose_command(&dir, has_nvidia().await)
         .args(["down", "--remove-orphans"])
         .output()
@@ -227,6 +233,66 @@ pub async fn stop_backend(app: AppHandle, dir: Option<String>) -> Result<String,
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
         Err(if stderr.is_empty() { "docker compose down failed".to_string() } else { stderr })
     }
+}
+
+/// Launcher settings, kept in the app data directory so a quit can read them without
+/// the webview. Fields default, so an older file with fewer keys still loads.
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct Settings {
+    #[serde(default)]
+    pub keep_running: bool,
+}
+
+fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let base = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not find the app data directory: {e}"))?;
+    std::fs::create_dir_all(&base).map_err(|e| format!("Could not create {}: {e}", base.display()))?;
+    Ok(base.join("launcher-settings.json"))
+}
+
+/// Read the settings file. A missing or unreadable file means "defaults", never an error
+/// that would stop the launcher from opening.
+fn load_settings(app: &AppHandle) -> Settings {
+    settings_path(app)
+        .ok()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Whether the stack should outlive the window. Read by the close handler.
+pub fn keep_running(app: &AppHandle) -> bool {
+    load_settings(app).keep_running
+}
+
+/// Current launcher settings.
+#[tauri::command]
+pub fn get_settings(app: AppHandle) -> Settings {
+    load_settings(&app)
+}
+
+/// Save the launcher settings and return what was stored.
+#[tauri::command]
+pub fn set_settings(app: AppHandle, settings: Settings) -> Result<Settings, String> {
+    let path = settings_path(&app)?;
+    let text = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Could not serialise the settings: {e}"))?;
+    std::fs::write(&path, text).map_err(|e| format!("Could not write {}: {e}", path.display()))?;
+    Ok(settings)
+}
+
+/// Open an install guide in the user's browser. Only http(s) is allowed, so a bad value
+/// from the page cannot launch an arbitrary program.
+#[tauri::command]
+pub async fn open_link(app: AppHandle, url: String) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("Only http and https links can be opened.".to_string());
+    }
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| format!("Could not open the browser: {e}"))
 }
 
 /// Ask the app itself whether it is up. Never a shell call: one request on a socket
