@@ -510,13 +510,20 @@ function render(ctx, w, h, seed, opts, pal) {
     }
   }
 
-  // ---- Shores: a rocky outcrop on the left, a low bank on the right.
-  const leftEnd = w * 0.24;
-  const rightStart = w * 0.8;
+  // ---- Shores: a rocky outcrop on the left, a low bank on the right. Both slope down into
+  // the water (a curve that flattens toward the lake) instead of ending in a cliff.
+  const leftEnd = w * 0.3;
+  const rightStart = w * 0.76;
   const rock = fractal(rand, w, 0.55);
   const shoreH = (x) => {
-    if (x < leftEnd) return Math.round(h * (0.06 + 0.2 * (1 - x / leftEnd) ** 0.8) + rock[x] * 5);
-    if (x > rightStart) return Math.round(h * (0.04 + 0.1 * ((x - rightStart) / (w - rightStart)) ** 0.9) + rock[x] * 3);
+    if (x < leftEnd) {
+      const t = 1 - x / leftEnd; // 1 at the edge of the frame, 0 at the waterline
+      return Math.max(0, Math.round(h * 0.25 * t ** 1.6 + rock[x] * 5 * t));
+    }
+    if (x > rightStart) {
+      const t = (x - rightStart) / (w - rightStart);
+      return Math.max(0, Math.round(h * 0.16 * t ** 1.5 + rock[x] * 3 * t));
+    }
     return 0;
   };
   for (let x = 0; x < w; x += 1) {
@@ -528,7 +535,9 @@ function render(ctx, w, h, seed, opts, pal) {
       if (hash(x, y, 7) > 0.92) c = mix(c, pal.light, 0.12);
       put(x, y, c);
     }
-    if (hash(x, 1, seed) > 0.45) {
+    // the wet edge: the last pixel of land before the water catches the light
+    if (sh <= 6) put(x, h - sh, mix(pal.ground[0], pal.light, pal.dark ? 0.25 : 0.4));
+    if (sh > 3 && hash(x, 1, seed) > 0.45) {
       const tall = 1 + Math.floor(hash(x, 2, seed) * 4);
       for (let y = h - sh - tall; y < h - sh; y += 1) put(x, y, pal.grass);
     }
@@ -562,9 +571,10 @@ function render(ctx, w, h, seed, opts, pal) {
   overlays.blinks.push({ x: mx, y: mTop - 1, color: "red" });
 
   // ---- A dock reaching into the lake from the right bank, a lantern post at its end.
-  const dockY = h - shoreH(Math.round(rightStart + 6)) + 1;
-  const dockFrom = Math.round(rightStart - w * 0.08);
-  for (let x = dockFrom; x < rightStart + 8; x += 1) {
+  const attach = Math.round(rightStart + w * 0.07); // where the dock meets the bank
+  const dockY = Math.min(h - 7, h - shoreH(attach) + 1);
+  const dockFrom = Math.round(attach - w * 0.11);
+  for (let x = dockFrom; x < attach; x += 1) {
     put(x, dockY, pal.wood);
     put(x, dockY + 1, mix(pal.wood, BLACK, 0.3));
     if ((x - dockFrom) % 6 === 0) for (let y = dockY + 2; y < dockY + 6; y += 1) put(x, y, mix(pal.wood, BLACK, 0.45));
