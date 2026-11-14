@@ -13,3 +13,4 @@ export { Tabs, tabPanelProps } from "./Tabs";
 export { Menu } from "./Menu";
 export { Modal, ConfirmDialog } from "./Modal";
 export { PixelScape } from "./PixelScape";
+export { Logo, LogoMark, TAGLINE, SUBLINE } from "./Logo";
