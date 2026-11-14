@@ -47,10 +47,24 @@
   0%, 60%, 100% { opacity: 1; }
   70%, 90% { opacity: 0.15; }
 }
-/* The logo's two panes close for a moment every few seconds, like eyes blinking. */
+/* The logo's two panes are eyes: they glance left, then right, come back, then blink twice.
+   One 7 s loop; 1px is one logo pixel (SVG user units). */
 @keyframes pm-eyes {
-  0%, 92%, 100% { transform: scaleY(1); }
-  95% { transform: scaleY(0.15); }
+  0%, 16% { transform: translateX(0) scaleY(1); }
+  20%, 34% { transform: translateX(-1px) scaleY(1); }
+  38%, 52% { transform: translateX(1px) scaleY(1); }
+  56%, 80% { transform: translateX(0) scaleY(1); }
+  83% { transform: translateX(0) scaleY(0.12); }
+  86% { transform: translateX(0) scaleY(1); }
+  89% { transform: translateX(0) scaleY(0.12); }
+  92%, 100% { transform: translateX(0) scaleY(1); }
+}
+/* A four-point sparkle that pops on the bubble's corner, then rests. */
+@keyframes pm-sparkle {
+  0%, 55%, 100% { transform: scale(0); opacity: 0; }
+  62% { transform: scale(1.2); opacity: 1; }
+  70% { transform: scale(0.8); opacity: 0.9; }
+  78% { transform: scale(0); opacity: 0; }
 }
 @keyframes pm-twinkle {
   0%, 100% { opacity: 1; }
@@ -59,11 +73,13 @@
 @layer utilities {
   .pm-bob { animation: pm-bob 4s ease-in-out infinite; will-change: transform; }
   .pm-blink { animation: pm-blink-light 2.4s steps(1, end) infinite; }
-  .pm-eyes { animation: pm-eyes 5s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .pm-eyes { animation: pm-eyes 7s steps(1, end) infinite; transform-box: fill-box; transform-origin: center; }
+  .pm-sparkle { animation: pm-sparkle 7s ease-out infinite; transform-box: fill-box; transform-origin: center; }
   .pm-twinkle { animation: pm-twinkle 2.8s ease-in-out infinite; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pm-bob, .pm-blink, .pm-eyes, .pm-twinkle { animation: none; }
+  .pm-sparkle { animation: none; opacity: 0; }
 }
 
 /* ---- Theme presets (Settings -> Appearance): <html data-theme="indigo|teal|amber|slate">.

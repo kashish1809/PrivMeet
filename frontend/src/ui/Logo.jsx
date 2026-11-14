@@ -6,6 +6,10 @@ import { cx } from "./cx";
  * rim bottom-right, the body stepping from light to deep, the panes shaded like small screens.
  * docs/ui/logo.svg is the same art in the default Indigo colors.
  *
+ * Animated (default): the panes are eyes that glance left and right and blink twice, and a
+ * pixel sparkle pops on the corner, in one 7 s loop.
+ * Both are CSS transform/opacity only and stop for reduced motion.
+ *
  * Every fill is a primary-* or zinc-* class, so the mark follows the theme presets.
  *
  *   <Logo />                       mark on a theme tile (sidebar, phone header)
@@ -61,6 +65,13 @@ export function LogoMark({ size = 36, tile = true, animated = true, className, t
       {CELLS.filter(([, , part]) => part === "glint").map(([fill, d]) => (
         <path key={fill} d={d} className={cx(fill, animated && "pm-twinkle")} />
       ))}
+      {/* A pixel sparkle that pops on the top-right corner now and then (CSS only). */}
+      {animated && (
+        <path
+          d="M25 1h1v1h-1zM25 3h1v1h-1zM24 2h1v1h-1zM26 2h1v1h-1zM25 2h1v1h-1z"
+          className="pm-sparkle fill-white dark:fill-primary-100"
+        />
+      )}
     </svg>
   );
 }
