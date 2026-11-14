@@ -5,7 +5,8 @@
 # and no local build.
 #
 # The GPU image is the same Dockerfile built with GPU=1, which adds the CUDA
-# runtime libraries CTranslate2 needs, tagged <version>-gpu for compose.gpu.yml.
+# runtime libraries CTranslate2 needs, tagged <version>-gpu (and latest-gpu for a
+# real release) for compose.gpu.yml.
 #
 # :latest moves only for a real release. A pre-release tag such as
 # v0.1.0-rc1 publishes 0.1.0-rc1 alone, so users following :latest are never
@@ -54,6 +55,16 @@ jobs:
           images: ${{ env.IMAGE }}
           tags: type=semver,pattern={{version}}
 
+      # The same tags with a -gpu suffix: 0.1.0-gpu, and latest-gpu for a real release, so
+      # compose.gpu.yml (${PRIVMEET_VERSION:-latest}-gpu) works without a pinned version.
+      - id: meta_gpu
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: type=semver,pattern={{version}}
+          flavor: |
+            suffix=-gpu,onlatest=true
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -77,6 +88,6 @@ jobs:
           context: .
           push: true
           build-args: GPU=1
-          tags: ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}-gpu
+          tags: ${{ steps.meta_gpu.outputs.tags }}
           cache-from: type=gha,scope=gpu
           cache-to: type=gha,mode=max,scope=gpu
