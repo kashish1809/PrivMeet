@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Download, Share2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Download, Share2, Trash2 } from "lucide-react";
 
 import { meetingExportUrl } from "../api";
-import { cx, focusRing } from "../ui";
+import { Menu, cx, focusRing } from "../ui";
 
 /** "Oct 28, 2026" — local date, no time. R2.1 moves this into format.js as shortDate(). */
 export function shortDate(iso) {
@@ -44,9 +44,12 @@ const outline =
  * The title is a button: click it (or press Enter on it) to rename the meeting in place.
  * Enter or leaving the field saves, Escape throws the edit away.
  *
+ * The kebab next to Download holds "Delete meeting"; the page owns the confirmation and
+ * the navigation, so this component only asks.
+ *
  * TODO(R1.3): swap the hand-drawn tile for <Logo variant="gradient" />.
  */
-export default function MeetingHeader({ meeting, onRename }) {
+export default function MeetingHeader({ meeting, onRename, onDelete }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
 
@@ -156,6 +159,12 @@ export default function MeetingHeader({ meeting, onRename }) {
             <Download className="size-4" aria-hidden="true" />
             Download
           </a>
+          {onDelete && (
+            <Menu
+              label="Meeting actions"
+              items={[{ label: "Delete meeting", icon: Trash2, danger: true, onSelect: onDelete }]}
+            />
+          )}
         </div>
       </div>
 

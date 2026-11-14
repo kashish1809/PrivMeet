@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { NotebookPen, Users } from "lucide-react";
 
-import { getMeeting, patchMeeting, retryMeeting } from "../api";
+import { deleteMeeting, getMeeting, patchMeeting, retryMeeting } from "../api";
 import { isProcessing } from "../format";
-import { Avatar, Button, Card, CardHeader, EmptyState, Tabs, tabPanelProps } from "../ui";
-import { useRoute } from "../App";
+import { Avatar, Button, Card, CardHeader, ConfirmDialog, EmptyState, Tabs, tabPanelProps } from "../ui";
+import { navigate, useRoute } from "../App";
 import ActionItemsPanel from "../components/ActionItemsPanel";
 import MeetingHeader from "../components/MeetingHeader";
 import ProcessingStatus from "../components/ProcessingStatus";
@@ -43,6 +43,7 @@ export default function MeetingDetail({ id }) {
   const [meeting, setMeeting] = useState(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("summary");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const tabsId = useId();
 
   const startAt = Math.max(0, Number(query.get("t")) || 0);
@@ -81,6 +82,16 @@ export default function MeetingDetail({ id }) {
     [id],
   );
 
+  async function removeMeeting() {
+    setConfirmingDelete(false);
+    try {
+      await deleteMeeting(id);
+      navigate("/meetings");
+    } catch (e) {
+      setError(e.message || "Could not delete this meeting.");
+    }
+  }
+
   if (error && !meeting) {
     return (
       <div className="mx-auto max-w-3xl">
@@ -101,7 +112,21 @@ export default function MeetingDetail({ id }) {
 
   return (
     <section className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-      <MeetingHeader meeting={meeting} onRename={(title) => onSave({ title })} />
+      <MeetingHeader
+        meeting={meeting}
+        onRename={(title) => onSave({ title })}
+        onDelete={() => setConfirmingDelete(true)}
+      />
+
+      {/* A failed rename, retry or delete has to be visible, not only a failed first load. */}
+      {error && (
+        <p
+          role="alert"
+          className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+        >
+          {error}
+        </p>
+      )}
 
       <ProcessingStatus
         meeting={meeting}
@@ -163,6 +188,16 @@ export default function MeetingDetail({ id }) {
           </Card>
         </aside>
       </div>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        title="Delete meeting?"
+        confirmLabel="Delete"
+        onConfirm={removeMeeting}
+        onCancel={() => setConfirmingDelete(false)}
+      >
+        “{meeting.title}” and its audio file will be removed. This cannot be undone.
+      </ConfirmDialog>
     </section>
   );
 }
