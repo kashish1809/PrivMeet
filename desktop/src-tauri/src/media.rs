@@ -83,9 +83,60 @@ fn grant(window: &WebviewWindow) {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(windows)]
+fn grant(window: &WebviewWindow) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2PermissionRequestedEventArgs, COREWEBVIEW2_PERMISSION_KIND_CAMERA,
+        COREWEBVIEW2_PERMISSION_KIND_MICROPHONE, COREWEBVIEW2_PERMISSION_KIND_UNKNOWN_PERMISSION,
+        COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+    };
+    use webview2_com::PermissionRequestedEventHandler;
+    use windows::core::PWSTR;
+
+    let done = window.with_webview(|webview| {
+        let controller = webview.controller();
+        let Ok(core) = (unsafe { controller.CoreWebView2() }) else {
+            return;
+        };
+
+        // WebView2 asks once per request; Allow is the same answer as pressing
+        // "Allow" in Edge's own prompt. Microphone and camera only, app origin only.
+        let handler = PermissionRequestedEventHandler::create(Box::new(
+            |_sender, args: Option<ICoreWebView2PermissionRequestedEventArgs>| {
+                let Some(args) = args else { return Ok(()) };
+
+                let mut kind = COREWEBVIEW2_PERMISSION_KIND_UNKNOWN_PERMISSION;
+                unsafe { args.PermissionKind(&mut kind)? };
+                if kind != COREWEBVIEW2_PERMISSION_KIND_MICROPHONE
+                    && kind != COREWEBVIEW2_PERMISSION_KIND_CAMERA
+                {
+                    return Ok(());
+                }
+
+                let mut raw = PWSTR::null();
+                unsafe { args.Uri(&mut raw)? };
+                let uri = unsafe { raw.to_string() }?;
+                if is_app_origin(&uri) {
+                    unsafe { args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)? };
+                }
+                Ok(())
+            },
+        ));
+
+        let mut token = 0;
+        // The handler lives as long as the webview, so the token is not kept.
+        let _ = unsafe { core.add_PermissionRequested(&handler, &mut token) };
+    });
+
+    if let Err(err) = done {
+        eprintln!("PrivMeet: could not enable media capture: {err}");
+    }
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
 fn grant(_window: &WebviewWindow) {
-    // Windows is handled in the next commit; macOS is not a target for the app yet.
+    // macOS is not a target for the desktop app yet; the web UI falls back to
+    // mic-only recording when the browser asks and gets no device.
 }
 
 #[cfg(test)]

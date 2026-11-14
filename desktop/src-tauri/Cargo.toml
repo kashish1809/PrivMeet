@@ -30,6 +30,8 @@ tokio = { version = "1", features = ["process", "io-util", "net", "sync", "time"
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2"
 
+# WebView2 is the Windows webview. These are the same versions tauri/wry pin, so
+# the COM types are shared instead of duplicated.
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
 windows = { version = "0.62", default-features = false }
