@@ -17,6 +17,7 @@
   --color-primary-500: var(--color-indigo-500);
   --color-primary-600: var(--color-indigo-600);
   --color-primary-700: var(--color-indigo-700);
+  --color-primary-800: var(--color-indigo-800);
   --color-primary-900: var(--color-indigo-900);
   --color-primary-950: var(--color-indigo-950);
 
@@ -34,4 +35,33 @@
   body {
     @apply bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
   }
+}
+
+/* Small, cheap animations (transform/opacity only, so the compositor runs them without
+   layout or paint). Used by PixelScape and the Logo; all off for reduced motion. */
+@keyframes pm-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes pm-blink-light {
+  0%, 60%, 100% { opacity: 1; }
+  70%, 90% { opacity: 0.15; }
+}
+/* The logo's two panes close for a moment every few seconds, like eyes blinking. */
+@keyframes pm-eyes {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.15); }
+}
+@keyframes pm-twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@layer utilities {
+  .pm-bob { animation: pm-bob 4s ease-in-out infinite; will-change: transform; }
+  .pm-blink { animation: pm-blink-light 2.4s steps(1, end) infinite; }
+  .pm-eyes { animation: pm-eyes 5s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .pm-twinkle { animation: pm-twinkle 2.8s ease-in-out infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-bob, .pm-blink, .pm-eyes, .pm-twinkle { animation: none; }
 }
