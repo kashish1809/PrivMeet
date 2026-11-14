@@ -16,13 +16,52 @@ Vinayak and Kashish also each have a **v2 track** of 20 tasks (`R1.x`, `R2.x`). 
 - **UI mockup (v2): `docs/ui/mockup.webp`.** It is the look for every screen.
 - `docs/ui/mockup-v1.webp` is the old mockup. Use it only for the **layout** of screens v2 does not draw (Record / Live, Settings, the Meetings list filters). Colors, cards, buttons and the sidebar always come from v2.
 
-## Status (2026-11-11)
-Days 1 and 2 are merged into `main`. Their task text is in git history (`git log -p docs/TASKS.md`).
+## Status (2026-11-14)
+Days 1–5 are done. They are all merged into `main`, except T3.5, which is in PR #40 waiting to merge. Days 1 and 2 task text is in git history (`git log -p docs/TASKS.md`); Days 3–5 stay below for reference.
 
 | Done | Vinayak | Kashish | Karthik |
 |---|---|---|---|
 | Day 1 | T1.1 migrations, U1.1 design system | T2.1 frontend scaffold, A2.1 Tauri scaffold | T3.1 Dockerfile, W3.1 CI |
 | Day 2 | T1.2 pipeline run, U1.2 app shell | T2.2 meeting list, A2.2 backend manager | T3.2 compose, W3.2 Docker image |
+| Day 3 | T1.3 LLM quality (#30), U1.3 Record / Live (#31) | T2.3 new meeting (#25), A2.3 launcher flow (#24) | T3.3 Postgres + security (#20), W3.3 build-installers (#19) |
+| Day 4 | T1.4 benchmarks (#32), U1.4 UI backend + Home (#33, #34) | T2.4 meeting detail (#27), A2.4 media permissions (#26) | T3.4 notes panels (#21), W3.4 packaging (#22) |
+| Day 5 | T1.5 GPU + CPU fallback (#36), U1.5 Settings (#37, #38) | T2.5 polish (#28), A2.5 branding (#29) | **T3.5 README + architecture (#40, waiting to merge)**, W3.5 launchers + release docs (#23, #39) |
+
+**v2 track:**
+- Done: **R1.7** (settings store, feature flags, API reference). It was merged with U1.4 (#33) because U1.4 needs it.
+- Partly done in other branches: R1.1 (the four theme presets, `useTheme` and `THEMES`) and R1.3 (`docs/ui/logo.svg`, `Logo.jsx` with `TAGLINE` and `SUBLINE`, the favicon; the four logo variants are still missing). The rest of R1.x and all of R2.x are open.
+
+**Day 6:** not started. It starts only after every R task is merged or marked `(cut)` here.
+
+**Added beyond the task list** (Vinayak, approved during review; all merged):
+- **Themes:** the four theme presets (Indigo, Teal, Amber, Slate) with a picker in Settings → Appearance.
+- **Art:** pixel landscapes behind every page. Each theme has its own scene and easter eggs, plus a starfield on dark themes.
+- **Logo:** the pixel speech-bubble logo, animated (it glances and blinks). The master is `docs/ui/logo.svg`; the structure and texture references are in `docs/ui/logo-mockup.png` and `docs/ui/logo-texture-ref.jpg`.
+- **Font and buttons:** the Monocraft pixel font (OFL, bundled) with textured pixel buttons, plus a font switch to a normal font, where the buttons go flat.
+- **Cloud LLM providers:** OpenAI, OpenRouter, Anthropic and any OpenAI-compatible server. They are opt-in from Settings with a privacy warning. Ollama stays the default, and audio never leaves the machine.
+
+### Known issues to fix (found in the Day 5 review)
+| Owner | Issue |
+|---|---|
+| Kashish | The meeting detail page shows no status pill. "Processed" (done, no summary) is invisible. Add `<Badge status>` / the "Processed" pill to `MeetingHeader.jsx`. |
+| Kashish | `MeetingHeader.participantCount()` (speaker names, then segments) and `MeetingDetail.participants()` (segments only) can disagree. Use one helper (R2.1 `format.participants`). |
+| Kashish | The desktop app copies `compose.gpu.yml`, but `tauri.conf.json` bundles only `compose.yml`, so the GPU override never reaches installed users. |
+| Karthik | `docker.yml` tags the GPU image only as `<version>-gpu`. Add `latest-gpu`, so `compose.gpu.yml` works with the default `PRIVMEET_VERSION`. |
+| Vinayak | Home's "View Templates" opens "Page not found" until R1.4 adds `#/templates`. The sidebar still shows History and Tools until R1.4. |
+
+### Checked on `main` (2026-11-14)
+- `npm run build` passes. Django `check` passes with no missing migrations. `bash -n scripts/privmeet.sh` passes, and the PowerShell parser accepts `privmeet.ps1`.
+- **Smoke run** (runserver, `CELERY_EAGER=1`, low tier, headless Chrome), all passing:
+  - upload, with notes and tags → processed
+  - a bad extension gives 400, and a write without CSRF gives 403
+  - search, audio Range (206), export.md
+  - Q&A with a `[mm:ss]` citation
+  - the features list, tags, action items, delete
+- **Every route in all four themes** renders with no page errors: Home, Meetings, search, New Meeting, detail (also with `?t=`), Record, Settings, the old History page and the not-yet-built Templates page.
+- **Not run here:**
+  - Docker Compose (no Docker on this machine)
+  - the desktop app (no Rust toolchain)
+  - real cloud LLM accounts (no API keys)
 
 ## Day plan
 | Day | Vinayak | Kashish | Karthik |
