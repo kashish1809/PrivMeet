@@ -66,3 +66,44 @@ run of a tier downloads its models; run it twice and keep the second numbers.
 - **CUDA on a local Windows run** needs `cublas64_12.dll` and cuDNN 9 on `PATH`, e.g. `pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"` plus their `bin` folders. Without them, loading the high-tier Whisper fails with `Library cublas64_12.dll is not found`. T1.5 adds the CPU fallback for that case. The Docker image installs them with `GPU=1`.
 - **Ollama on Windows** also uses Vulkan. Hiding a GPU from it needs `OLLAMA_VULKAN=false` as well as `CUDA_VISIBLE_DEVICES=-1`.
 - **Accuracy is not measured here.** The summaries were checked by hand in T1.3.
+
+## GPU path and CPU fallback (T1.5)
+
+**How the GPU is used:**
+- `compose.gpu.yml` gives the worker (Whisper) and Ollama the NVIDIA GPU. The web container gets none.
+- The worker runs the GPU image: `ghcr.io/kashish1809/privmeet:<version>-gpu`, built from the same Dockerfile with `GPU=1`, which adds cuBLAS 12 and cuDNN 9.
+- Its `build:` section lets `up --build` make that image from source.
+
+**The fallback:** if loading the CUDA model or decoding the first segment fails, `pipeline/transcribe.py`:
+1. logs the error,
+2. switches the profile to `device="cpu", compute_type="int8"` (`hw.cpu_fallback`),
+3. retries once.
+
+The rest of the task (the LLM thread count) sees the CPU profile.
+
+### Checked on this machine (GTX 1650 4 GB, Windows, no Docker)
+Full pipeline, `TIER=high`, 3 min stand-up recording, `CELERY_EAGER=1`:
+
+| Case | Whisper ran on | Result | Time |
+|---|---|---|---:|
+| CUDA libraries missing (no cuBLAS on PATH) | cpu / int8, after `CUDA transcription failed (Library cublas64_12.dll is not found or cannot be loaded); retrying on the CPU with int8` | done, 35 segments | 116 s |
+| CUDA libraries present | cuda / int8_float16, no fallback | done, 34 segments | 60 s |
+
+The CPU path on the low and mid tiers is unchanged; see the table above.
+
+### Docker on an NVIDIA host: not run here (no Docker on this machine)
+Steps to check it:
+1. Install the NVIDIA driver and the NVIDIA Container Toolkit, then confirm the toolkit works:
+   `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi`
+2. Start the stack with the override:
+   `docker compose -f compose.yml -f compose.gpu.yml up -d --build`
+   `--build` makes the `-gpu` worker image locally until a release publishes it.
+3. `docker compose exec worker python -c "import ctranslate2; print(ctranslate2.get_cuda_device_count())"` prints `1` or more.
+4. `curl -s 127.0.0.1:8000/api/system/` shows `"tier": "high"` and `"device": "cuda"`.
+5. Upload a file and confirm the worker log has no `retrying on the CPU` line.
+6. `docker compose exec ollama ollama ps` shows the model at `100% GPU`.
+7. To check the fallback, run with `NVIDIA_VISIBLE_DEVICES=void`. The worker logs the retry and the meeting still finishes.
+
+Two follow-ups for other owners:
+- `docker.yml` (Karthik) tags the GPU image only as `<version>-gpu`. A `latest-gpu` tag would let `compose.gpu.yml` work with the default `PRIVMEET_VERSION`.
+- The desktop app (Kashish) copies `compose.gpu.yml`, but `tauri.conf.json` bundles only `compose.yml`.
