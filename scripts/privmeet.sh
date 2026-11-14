@@ -19,6 +19,8 @@ usage: scripts/privmeet.sh <command> [service]
                     works, then open http://127.0.0.1:8000
   down              stop the stack; the data volumes are kept
   logs [service]    follow the logs
+  update            pull the image named in .env, then restart the stack
+  status            show the containers and the tier the server reports
 EOF
   exit "${1:-0}"
 }
@@ -106,10 +108,33 @@ cmd_logs() {
   compose logs -f --tail=100 "$@"
 }
 
+cmd_update() {
+  ensure_env
+  need_docker
+  compose pull
+  compose up -d
+  wait_for_server
+}
+
+cmd_status() {
+  ensure_env
+  need_docker
+  compose ps
+  if have curl; then
+    if system=$(curl -fsS "$URL/api/system/" 2>/dev/null); then
+      printf '\nServer: %s\n' "$system"
+    else
+      printf '\nServer: not answering at %s\n' "$URL"
+    fi
+  fi
+}
+
 case "${1:-}" in
   up) shift; cmd_up "$@" ;;
   down) shift; cmd_down "$@" ;;
   logs) shift; cmd_logs "$@" ;;
+  update) shift; cmd_update "$@" ;;
+  status) shift; cmd_status "$@" ;;
   help | -h | --help) usage 0 ;;
   *) usage 1 ;;
 esac
