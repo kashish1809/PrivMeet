@@ -1,8 +1,10 @@
 """LangChain + Ollama: map-reduce summaries and transcript Q&A sized to small local models.
 
-Every call caps its reply (`num_predict`) so prompt + reply always fit inside `num_ctx`: Ollama
-silently drops the *start* of a prompt that is too long, which used to cut the first part of
-long meetings.
+Tuned for qwen2.5:1.5b (low tier) and qwen2.5:3b (mid). Small models follow short, concrete
+instructions with one worked example far better than long rules, so every prompt is a system
+message with the rules plus a human message with the text. Every call also caps its reply
+(`num_predict`) so prompt + reply always fit inside `num_ctx`: Ollama silently drops the
+*start* of a prompt that is too long, which used to cut the first part of long meetings.
 """
 
 import json
@@ -19,7 +21,7 @@ log = logging.getLogger(__name__)
 # Token budget. qwen2.5 averages ~3.5 chars per token on English meeting talk and less on
 # names, numbers and other languages, so 3 is the safe side.
 CHARS_PER_TOKEN = 3
-PROMPT_TOKENS = 450  # the longest prompt below plus chat-template overhead, with room to grow
+PROMPT_TOKENS = 450  # the longest system prompt below plus chat-template overhead
 MAP_REPLY_TOKENS = 500
 REDUCE_REPLY_TOKENS = 900
 QA_REPLY_TOKENS = 350
@@ -28,21 +30,59 @@ MAX_ROUNDS = 4
 # meeting kept the decisions of one topic in five. ~1500 tokens per map call keeps them all.
 MAP_CHUNK_TOKENS = 1500
 
-MAP_PROMPT = ChatPromptTemplate.from_template(
-    "Summarize this part of a meeting transcript as short bullet notes. "
-    "Keep names, numbers, decisions and tasks with their owners.\n\n{text}"
+MAP_SYSTEM = (
+    "You take notes on one part of a meeting transcript. Lines look like "
+    '"[mm:ss] Name: words" or "[mm:ss] words".\n'
+    "For every topic discussed write these lines, in English:\n"
+    "TOPIC: <topic> - <one sentence: the problem or point, with numbers as said>\n"
+    "DECISION: <what was agreed, one sentence>   (only if something was agreed)\n"
+    "TASK: <owner> | <task> | <due>   (one line per task someone agreed to do)\n"
+    "Owner is the name of the person doing the task, only if that name is in the text; "
+    "otherwise leave it empty. Due is the deadline only if one was said, else empty.\n"
+    "Example:\n"
+    "TOPIC: museum trip - transport is still open\n"
+    "DECISION: take the 9 am bus\n"
+    "TASK: Asha | book the bus | June 3\n"
+    "TASK:  | collect consent forms | \n"
+    "Never copy the example. Do not add anything that is not in the transcript."
 )
-REDUCE_PROMPT = ChatPromptTemplate.from_template(
-    "Below are notes or the transcript of one meeting. Reply with JSON only, using these keys:\n"
-    '"summary": a short paragraph,\n'
-    '"decisions": a list of strings,\n'
-    '"action_items": a list of objects with "owner", "task" and "due" strings (empty string when unknown).\n'
-    "Use [] when there are none. Do not invent facts.\n\n{text}"
+MAP_PROMPT = ChatPromptTemplate.from_messages([("system", MAP_SYSTEM), ("human", "{text}")])
+
+REDUCE_SYSTEM = (
+    "You write the final notes of one meeting from its transcript or from notes on its parts. "
+    "Reply with one JSON object and nothing else:\n"
+    '{{"summary": "...", "decisions": ["..."], '
+    '"action_items": [{{"owner": "...", "task": "...", "due": "..."}}]}}\n'
+    "Rules:\n"
+    "- summary: 3 to 6 sentences in English: the purpose, the main points and the outcome. "
+    "When the text lists many TOPIC lines, name every topic briefly.\n"
+    "- decisions: things the group agreed or concluded, one short sentence each. "
+    "[] if none.\n"
+    "- action_items: concrete tasks someone will do after the meeting. task starts with a verb. "
+    "owner is the person's name as spoken, or \"\" if nobody took it. due is the deadline as "
+    "spoken (\"Friday\", \"next week\", \"Oct 30\"), or \"\" if none was said. [] if none.\n"
+    "- Use only facts from the text. Never invent names, dates or tasks.\n"
+    "Example, for a different meeting about a school trip:\n"
+    '{{"summary": "The teachers planned the museum trip. Transport was the open issue. They chose '
+    'the 9 am bus.", "decisions": ["Take the 9 am bus"], '
+    '"action_items": [{{"owner": "Asha", "task": "Book the bus", "due": "June 3"}}, '
+    '{{"owner": "", "task": "Collect consent forms", "due": ""}}]}}\n'
+    "Never copy names, tasks or dates from this example."
 )
-QA_PROMPT = ChatPromptTemplate.from_template(
-    "Answer the question using only these meeting transcript excerpts. "
-    "Cite timestamps like [12:34]. If the excerpts do not contain the answer, say so.\n\n"
-    "Excerpts:\n{text}\n\nQuestion: {question}"
+REDUCE_PROMPT = ChatPromptTemplate.from_messages([("system", REDUCE_SYSTEM), ("human", "{text}")])
+
+QA_SYSTEM = (
+    "You answer questions about one meeting using only the transcript excerpts given. "
+    "Lines look like \"[mm:ss] Name: words\".\n"
+    "- Answer the question directly in your own words, in 1 to 3 sentences. Do not just "
+    "repeat transcript lines.\n"
+    "- End each sentence with the timestamp of the line it comes from, in square brackets, "
+    "copied exactly, for example [12:34]. Never make up a timestamp.\n"
+    "- If the excerpts do not contain the answer, reply: The meeting does not say.\n"
+    "Example: Question: Who books the bus? Answer: Asha books the bus by June 3 [04:12]."
+)
+QA_PROMPT = ChatPromptTemplate.from_messages(
+    [("system", QA_SYSTEM), ("human", "Excerpts:\n{text}\n\nQuestion: {question}")]
 )
 
 
@@ -56,7 +96,7 @@ def chat(prof, json_mode=False, num_predict=None):
         num_predict=num_predict,
         keep_alive=prof["keep_alive"],
         num_thread=None if prof["device"] == "cuda" else prof["cpu_threads"],
-        temperature=0.2,
+        temperature=0.1,
         format="json" if json_mode else None,
     )
 
