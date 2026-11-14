@@ -1,5 +1,26 @@
 import { useCallback, useEffect, useId, useState } from "react";
-import { AlertTriangle, Check, Cpu, Mic, Palette, PlugZap, Save, Settings as SettingsIcon, UserRound } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  AudioLines,
+  Check,
+  Cloud,
+  CloudUpload,
+  Cpu,
+  FileText,
+  HardDrive,
+  Info,
+  Lock,
+  MessageSquare,
+  Mic,
+  Palette,
+  PlugZap,
+  Save,
+  Settings as SettingsIcon,
+  ShieldAlert,
+  UserRound,
+  Users,
+} from "lucide-react";
 
 import { api } from "../api";
 import { KEYS, TITLE_FORMATS, readPrefs, writePref } from "../record/prefs";
@@ -8,8 +29,8 @@ import {
   Button,
   Card,
   CardHeader,
-  ConfirmDialog,
   FONTS,
+  Modal,
   Input,
   Select,
   StatusDot,
@@ -124,6 +145,90 @@ function General({ settings, onSaved }) {
 }
 
 // ---------------------------------------------------------------- AI Model
+
+function Fact({ icon: Icon, children }) {
+  return (
+    <li className="flex items-start gap-2">
+      <Icon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <span>{children}</span>
+    </li>
+  );
+}
+
+/**
+ * Asked before leaving the local model: what goes to the provider, what stays here, and the
+ * fine print, laid out so it can be read at a glance. Nothing is saved until Save Settings.
+ */
+function PrivacyDialog({ provider, onCancel, onConfirm }) {
+  const label = PROVIDERS.find((p) => p.value === provider)?.label || "";
+  const name = CLOUD_NAME[provider] || "the provider";
+  return (
+    <Modal
+      open={!!provider}
+      onClose={onCancel}
+      className="w-[min(38rem,calc(100vw-2rem))]!"
+      title={
+        <span className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+            <ShieldAlert className="size-5" aria-hidden="true" />
+          </span>
+          Privacy might be compromised
+        </span>
+      }
+      footer={
+        <>
+          <Button variant="secondary" icon={HardDrive} onClick={onCancel} autoFocus>
+            Keep Ollama
+          </Button>
+          <Button icon={Cloud} onClick={onConfirm}>
+            Use {label}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {/* where the notes are written, before and after */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+            <Lock className="size-3.5" aria-hidden="true" /> Ollama · on this machine
+          </span>
+          <ArrowRight className="size-4 text-zinc-400" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <Cloud className="size-3.5" aria-hidden="true" /> {label} · on the internet
+          </span>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+            <p className="mb-2 flex items-center gap-2 text-xs font-semibold tracking-wide uppercase">
+              <CloudUpload className="size-4" aria-hidden="true" /> Leaves this machine
+            </p>
+            <ul className="flex flex-col gap-1.5 text-sm">
+              <Fact icon={FileText}>The text of every meeting transcript</Fact>
+              <Fact icon={MessageSquare}>Your questions in Q&amp;A</Fact>
+            </ul>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+            <p className="mb-2 flex items-center gap-2 text-xs font-semibold tracking-wide uppercase">
+              <HardDrive className="size-4" aria-hidden="true" /> Stays on this machine
+            </p>
+            <ul className="flex flex-col gap-1.5 text-sm">
+              <Fact icon={AudioLines}>Audio recordings</Fact>
+              <Fact icon={Mic}>Transcription (Whisper)</Fact>
+              <Fact icon={Users}>Speaker detection</Fact>
+            </ul>
+          </div>
+        </div>
+
+        <p className="flex items-start gap-2 rounded-lg bg-zinc-100 px-3 py-2 text-xs text-zinc-600 dark:bg-zinc-800/70 dark:text-zinc-300">
+          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          {name} may store or log what it receives under its own terms, and bills your API key. Keep Ollama for
+          meetings that must not leave your computer. Nothing changes until you press Save Settings.
+        </p>
+      </div>
+    </Modal>
+  );
+}
 
 function Connection({ result }) {
   if (!result) return null;
@@ -363,28 +468,15 @@ function AiModel({ settings, system, onSaved }) {
           )}
         </div>
 
-        <ConfirmDialog
-          open={!!pending}
-          title="Privacy might be compromised"
-          confirmLabel={`Use ${PROVIDERS.find((p) => p.value === pending)?.label || "it"}`}
-          danger={false}
+        <PrivacyDialog
+          provider={pending}
           onCancel={() => setPending(null)}
           onConfirm={() => {
             set({ llm_provider: pending });
             setTest(null);
             setPending(null);
           }}
-        >
-          <span className="flex flex-col gap-2">
-            <span>
-              With {CLOUD_NAME[pending] || "a cloud provider"}, the text of every meeting transcript is sent off this
-              machine to write summaries and answer questions. It may be stored or logged under that provider&apos;s
-              terms, and your API key is billed.
-            </span>
-            <span>Audio, transcription and speaker detection still stay on this machine.</span>
-            <span>Keep Ollama for meetings that must not leave your computer. Nothing changes until you save.</span>
-          </span>
-        </ConfirmDialog>
+        />
 
         <SaveRow
           state={state}
