@@ -222,6 +222,21 @@ def system(request):
     return JsonResponse({**data, "features": FEATURES})
 
 
+@require_http_methods(["GET", "PATCH"])
+def user_settings(request):
+    """The saved overrides. PATCH merges; a key set to null goes back to the tier default."""
+    if request.method == "GET":
+        return JsonResponse(settings_store.load())
+    try:
+        data = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return bad("Invalid JSON.")
+    try:
+        return JsonResponse(settings_store.save(data))
+    except settings_store.SettingsError as e:
+        return bad(str(e))
+
+
 @ensure_csrf_cookie
 def spa(request):
     index = settings.FRONTEND_DIST / "index.html"
