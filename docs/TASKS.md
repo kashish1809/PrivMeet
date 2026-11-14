@@ -783,13 +783,27 @@ Meeting pages first, then the desktop app. None of these needs a Vinayak task. W
 #### R2.5 · Download menu
 - **Branch:** `v2/kashish/R2.5-download-menu`
 - **Needs:** T2.4, R2.1
-- **Files:** `frontend/src/components/DownloadMenu.jsx` (new), `frontend/src/pages/MeetingDetail.jsx`, `frontend/src/components/MeetingRow.jsx`
+- **Files:** `frontend/src/components/DownloadMenu.jsx` (new), `frontend/src/components/exportCsv.js` (new), `frontend/src/pages/MeetingDetail.jsx`, `frontend/src/components/MeetingRow.jsx`
 - **Do:**
-  - The "Download" button opens a Menu: Markdown (always) and Audio file (the original upload).
-  - With the `exports` flag also: Plain text, Subtitles (SRT), Subtitles (VTT), JSON.
+  - **The menu.** The "Download" button opens a Menu: Markdown (always) and Audio file (the original upload).
+  - **Server formats.** With the `exports` flag also: Plain text, Subtitles (SRT), Subtitles (VTT) and JSON.
+  - **PDF:** "PDF (print / save)" opens the print view from R2.15 (`printMeeting.js`), where the browser's "Save as PDF" makes the file. Hide the entry until R2.15 is on `main`.
+  - **Action items (CSV):** columns Task, Owner, Due, Done, Meeting, Date. One row per action item, for spreadsheets or a Jira/Trello import.
+  - **Transcript (CSV):** columns Start (`mm:ss`), End, Speaker (the saved name, else "Speaker N") and Text.
+  - **How the CSVs are built** (in `exportCsv.js`):
+    - In the browser from the meeting JSON: no request, no flag, no new dependency. They work against today's backend.
+    - RFC 4180 quoting (commas, quotes and newlines inside a field).
+    - A UTF-8 BOM, so Excel shows accents and other scripts correctly.
+    - Any cell that starts with `=`, `+`, `-` or `@` gets a leading `'`, so a spreadsheet never runs meeting text as a formula.
+  - **Grouping:** Notes (PDF, Markdown, Plain text, JSON), Transcript (SRT, VTT, CSV), Action items (CSV), Audio file. Empty groups are hidden: a meeting with no action items has no action-items CSV.
   - Hide "Audio file" when `has_audio === false`.
   - The list row's kebab uses the same component in place of its own export code.
-- **Done when:** every shown entry downloads a file with the meeting's title as its name.
+  - **Not in this task:** Word/ODT (needs a library, so ask first), calendar `.ics` (due dates are free text), and audio as MP3/Opus (needs a backend endpoint).
+- **Done when:**
+  - every shown entry downloads a file with the meeting's title as its name;
+  - both CSVs open correctly in Excel and LibreOffice, including commas, quotes, line breaks and non-English text;
+  - a cell starting with `=` stays plain text;
+  - "PDF" opens the print dialog.
 
 #### R2.6 · Share menu
 - **Branch:** `v2/kashish/R2.6-share-menu`
