@@ -137,3 +137,32 @@ npm run dev                             # http://localhost:5173, proxies /api to
 - `scripts/download_models.sh` fetches the speaker-diarization models.
 - `python manage.py process_file meeting.mp3` runs the whole pipeline on one file from the command line.
 - The API is described in [docs/API.md](docs/API.md), and the design in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Troubleshooting
+
+| Problem | What to do |
+|---|---|
+| `set SECRET_KEY in .env` when starting | `.env` is missing or `SECRET_KEY=` is empty. Copy `.env.example` to `.env` and set it, or use `scripts/privmeet.sh up`, which makes one. |
+| `Cannot connect to the Docker daemon` | Start Docker Desktop (or `sudo systemctl start docker`) and try again. |
+| Port 8000 is already in use | Another app, or another PrivMeet, holds it. Stop it, or change `127.0.0.1:8000:8000` in `compose.yml` to another port such as `127.0.0.1:8080:8000`. |
+| The first meeting sits at "Summarizing" for minutes | The LLM is being downloaded (about 1 GB on the low tier). Watch it with `docker compose logs -f ollama`. Later meetings are fast. |
+| A meeting fails with a connection error (e.g. `Connection refused`) while summarizing | The `ollama` container is down or still starting: `docker compose ps`, then `docker compose restart ollama`. Retry the meeting from its page. |
+| The worker is killed, or a long meeting fails at random | Not enough memory. Use the low tier (`TIER=low`), lower `NUM_CTX`, or raise `WORKER_MEM` / `OLLAMA_MEM` if the machine has room. Close other heavy apps. |
+| Upload says `No audio stream found` | The file has no audio track, or it is not really a media file. Supported: mp3, wav, mp4, m4a, webm, ogg, opus, flac, mkv, mov. |
+| Recording: "Microphone access was blocked" | Allow the microphone for `127.0.0.1` in the browser's site settings (the icon in the address bar), then press **Try again**. |
+| Recording a Meet / Zoom / Teams tab has no other voices | When sharing, pick the **tab** and tick **Share tab audio**. Windows and Chrome can also share system audio for a whole screen. |
+| GPU not used | Check the toolkit with the `nvidia-smi` container above, start with `compose.gpu.yml`, and look for `retrying on the CPU` in `docker compose logs worker`. |
+| No speaker labels | Expected on the low tier. Turn on **Find speakers** under Settings, AI Model, Advanced options (it needs about 0.3 GB more RAM). |
+| Everything else | `scripts/privmeet.sh status` and `scripts/privmeet.sh logs web` (or `worker`) show what the stack is doing. |
+
+## Security
+- **No login, single user.** Anyone who can reach port 8000 can read, change and delete every meeting. Keep the default `127.0.0.1` binding. To reach it from another device, use an SSH tunnel or a VPN to this machine, not a public port.
+- **Uploads are checked:** an extension allow-list, a size limit (`MAX_UPLOAD_MB`, enforced before the body is read), and `ffprobe` must find an audio stream. Files are stored under random names and served only through the API.
+- **Every write needs the CSRF token,** and `DEBUG` is off by default. With `DEBUG` off, the app refuses to start with the sample `SECRET_KEY`.
+- **Privacy:** with the default Ollama provider nothing leaves the machine, apart from downloading Docker images and models. A cloud LLM provider is opt-in and gets only transcript text.
+- Report security problems as described in [SECURITY.md](SECURITY.md).
+
+## Project
+- How it works: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · API: [docs/API.md](docs/API.md) · Benchmarks: [docs/BENCHMARKS.md](docs/BENCHMARKS.md) · Releasing: [docs/RELEASING.md](docs/RELEASING.md)
+- Design and team plan: [docs/PLAN.md](docs/PLAN.md), [docs/TASKS.md](docs/TASKS.md); rules for AI agents: [AGENTS.md](AGENTS.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md) · [CHANGELOG.md](CHANGELOG.md) · [AUTHORS.md](AUTHORS.md) · License: [MIT](LICENSE). The bundled Monocraft pixel font is under the SIL Open Font License (`frontend/src/ui/fonts/MONOCRAFT-OFL.txt`).
