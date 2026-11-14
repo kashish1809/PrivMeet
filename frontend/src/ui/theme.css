@@ -161,6 +161,8 @@ html[data-theme="slate"] {
 }
 @theme {
   --font-pixel: "Monocraft", ui-monospace, "Cascadia Code", monospace;
+  /* The pixel font is the app's font: every font-sans text uses it. */
+  --font-sans: "Monocraft", ui-monospace, "Cascadia Code", monospace;
 }
 @layer components {
   .pm-btn {
@@ -179,7 +181,12 @@ html[data-theme="slate"] {
     font-weight: 400;
     letter-spacing: 0.02em;
     color: var(--ink);
-    background: var(--face);
+    background-color: var(--face);
+    /* pixel grain on the face, like the logo's texture: a 4x4 tile with two light and one
+       dark pixel, drawn over whatever colour the variant and theme give the face */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4' shape-rendering='crispEdges'%3E%3Crect x='0' y='0' width='1' height='1' fill='%23fff' fill-opacity='.14'/%3E%3Crect x='2' y='2' width='1' height='1' fill='%23fff' fill-opacity='.09'/%3E%3Crect x='3' y='1' width='1' height='1' fill='%23000' fill-opacity='.10'/%3E%3C/svg%3E");
+    background-size: 4px 4px;
+    image-rendering: pixelated;
     text-shadow: 1px 1px 0 var(--ink-shadow);
     /* notched corners: the 2px corner pixels are cut, like the logo tile */
     clip-path: polygon(
@@ -195,7 +202,7 @@ html[data-theme="slate"] {
     cursor: pointer;
     user-select: none;
   }
-  .pm-btn:hover:not(:disabled) { background: var(--face-hover); }
+  .pm-btn:hover:not(:disabled) { background-color: var(--face-hover); }
   .pm-btn:active:not(:disabled) {
     transform: translateY(2px);
     box-shadow:
@@ -239,6 +246,7 @@ html[data-theme="slate"] {
   .pm-btn-ghost:not(:hover),
   .pm-btn-ghost:disabled {
     --face: transparent;
+    background-image: none;
     box-shadow: none;
   }
   .pm-btn-ghost { --ink: var(--color-zinc-700); }
