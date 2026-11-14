@@ -65,3 +65,71 @@
 @media (prefers-reduced-motion: reduce) {
   .pm-bob, .pm-blink, .pm-eyes, .pm-twinkle { animation: none; }
 }
+
+/* ---- Theme presets (Settings -> Appearance): <html data-theme="indigo|teal|amber|slate">.
+   A preset only re-maps the primary-* (accent) and zinc-* (neutral) scales, so every page
+   re-colors with no edit. indigo, teal and amber are dark (useTheme adds .dark); slate is light.
+   Values from docs/TASKS.md "UI v2 spec". */
+html[data-theme="indigo"] {
+  --color-primary-50: #eeeefd; --color-primary-100: #dfddfc; --color-primary-200: #c4c0fa;
+  --color-primary-300: #afa1fc; --color-primary-400: #8579f0; --color-primary-500: #5b52e8;
+  --color-primary-600: #4942e3; --color-primary-700: #3a33c4; --color-primary-800: #2e2899;
+  --color-primary-900: #262273; --color-primary-950: #16144a;
+  --color-zinc-50: #f6f6fc; --color-zinc-100: #ecedf8; --color-zinc-200: #dee0f1;
+  --color-zinc-300: #c3c7e3; --color-zinc-400: #9aa0c6; --color-zinc-500: #6870a0;
+  --color-zinc-600: #3f4a7a; --color-zinc-700: #2c3561; --color-zinc-800: #1e2647;
+  --color-zinc-900: #121831; --color-zinc-950: #080c1a;
+}
+html[data-theme="teal"] {
+  --color-primary-50: #f0fdfa; --color-primary-100: #ccfbf1; --color-primary-200: #99f6e4;
+  --color-primary-300: #5eead4; --color-primary-400: #2dd4bf; --color-primary-500: #14b8a6;
+  --color-primary-600: #0d9488; --color-primary-700: #0f766e; --color-primary-800: #115e59;
+  --color-primary-900: #134e4a; --color-primary-950: #085e56;
+  --color-zinc-50: #f5f9fa; --color-zinc-100: #eaf2f3; --color-zinc-200: #d8e5e8;
+  --color-zinc-300: #b8cdd3; --color-zinc-400: #8da8b2; --color-zinc-500: #5e7d89;
+  --color-zinc-600: #3a5a67; --color-zinc-700: #284551; --color-zinc-800: #1b323d;
+  --color-zinc-900: #12242d; --color-zinc-950: #0b171e;
+}
+html[data-theme="amber"] {
+  --color-primary-50: #fffbeb; --color-primary-100: #fef3c7; --color-primary-200: #fde68a;
+  --color-primary-300: #fcd34d; --color-primary-400: #fbbf24; --color-primary-500: #f59e0b;
+  --color-primary-600: #d97706; --color-primary-700: #b45309; --color-primary-800: #92400e;
+  --color-primary-900: #78350f; --color-primary-950: #6c441f;
+  --color-zinc-50: #f9f6f3; --color-zinc-100: #f1ebe7; --color-zinc-200: #e3dad5;
+  --color-zinc-300: #c8bdb8; --color-zinc-400: #a39794; --color-zinc-500: #7a6f6e;
+  --color-zinc-600: #574e4f; --color-zinc-700: #3f383a; --color-zinc-800: #2e282b;
+  --color-zinc-900: #221d20; --color-zinc-950: #171315;
+}
+html[data-theme="slate"] {
+  --color-primary-50: #f0f0fe; --color-primary-100: #e2e2fd; --color-primary-200: #c6c6fc;
+  --color-primary-300: #a5a4f8; --color-primary-400: #8482f1; --color-primary-500: #6966e8;
+  --color-primary-600: #5551db; --color-primary-700: #4541bd; --color-primary-800: #383599;
+  --color-primary-900: #2f2d7a; --color-primary-950: #1c1a4a;
+  --color-zinc-50: #eaecfc; --color-zinc-100: #dfe2f5; --color-zinc-200: #cdd1ea;
+  --color-zinc-300: #b2b7d6; --color-zinc-400: #8a90b3; --color-zinc-500: #666c8f;
+  --color-zinc-600: #4c5274; --color-zinc-700: #393e5c; --color-zinc-800: #262a45;
+  --color-zinc-900: #171a2e; --color-zinc-950: #0c0e1c;
+}
+
+/* Scene easter-egg motion: a lighthouse beam, a campfire, a paper plane. Off for reduced motion. */
+@keyframes pm-sweep {
+  0%, 100% { transform: rotate(-18deg); opacity: 0.25; }
+  50% { transform: rotate(14deg); opacity: 0.55; }
+}
+@keyframes pm-flicker {
+  0%, 100% { transform: scaleY(1); opacity: 1; }
+  33% { transform: scaleY(0.8); opacity: 0.85; }
+  66% { transform: scaleY(1.15); opacity: 0.95; }
+}
+@keyframes pm-drift {
+  from { transform: translateX(-10vw); }
+  to { transform: translateX(110vw); }
+}
+@layer utilities {
+  .pm-sweep { animation: pm-sweep 7s ease-in-out infinite; transform-origin: 0 50%; }
+  .pm-flicker { animation: pm-flicker 0.9s steps(3, end) infinite; transform-origin: 50% 100%; }
+  .pm-drift { animation: pm-drift 38s linear infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-sweep, .pm-flicker, .pm-drift { animation: none; }
+}
