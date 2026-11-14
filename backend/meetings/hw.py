@@ -116,7 +116,10 @@ def cpu_fallback(prof):
 
 
 # Settings keys that override a profile value of the same name (settings_store.SCHEMA).
-OVERRIDES = ("llm_model", "ollama_url", "whisper_model", "num_ctx", "diarize", "cpu_threads")
+OVERRIDES = (
+    "llm_model", "ollama_url", "whisper_model", "num_ctx", "diarize", "cpu_threads",
+    "llm_provider", "api_base_url", "api_key", "api_model",
+)
 
 
 def apply_overrides(p, saved):
@@ -126,6 +129,7 @@ def apply_overrides(p, saved):
         if key in saved:
             p[key] = saved[key]
     p.setdefault("ollama_url", None)  # None = settings.OLLAMA_URL from the environment
+    p.setdefault("llm_provider", "ollama")
     return p
 
 

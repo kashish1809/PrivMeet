@@ -18,8 +18,9 @@ All endpoints are under `/api/`. They are plain Django views that return JSON.
 The hardware tier and the models the next meeting will use: the worker's tier with the saved settings applied. It also sets the CSRF cookie.
 ```json
 {"tier": "mid", "whisper_model": "small", "llm_model": "qwen2.5:3b", "device": "cpu", "diarize": true,
- "features": ["settings", "notes", "tags", "filters"]}
+ "llm_provider": "ollama", "features": ["settings", "notes", "tags", "filters", "providers"]}
 ```
+When `llm_provider` is not `ollama`, `llm_model` is the cloud model (`api_model`) that writes the notes.
 
 ## Settings (flag `settings`)
 The settings are stored in `DATA_DIR/settings.json`, written atomically. They override the tier defaults and the env vars, and the worker re-reads them at the start of every task, so a change applies to the next meeting without a restart.
@@ -42,8 +43,24 @@ Merges the keys you send into the saved settings and returns them all. Sending `
 | `num_ctx` | int | 512 to 131072 |
 | `diarize` | bool | |
 | `cpu_threads` | int | 1 to 256 |
+| `llm_provider` | string | `ollama` (default), `openai`, `openrouter`, `anthropic`, `custom` (flag `providers`) |
+| `api_base_url` | string | `http(s)://` URL of an OpenAI-compatible API, for `custom` |
+| `api_key` | string | at most 300 chars; **never returned**: GET and PATCH show `api_key_set: true/false` instead |
+| `api_model` | string | the provider's model id, `^[\w.\-/:]+$` |
+
+With a cloud provider, the transcript text is sent to that provider for the summary and Q&A. Audio, Whisper and diarization always stay on this machine.
 
 An unknown key or a wrong type gives 400 (e.g. `{"error": "num_ctx must be a whole number."}`), and nothing is saved.
+
+### `POST /api/settings/test` (flag `providers`)
+Tries an LLM server before you save it. The body takes any provider settings. Values you send win over the saved ones, and an empty `api_key` keeps the saved key.
+- Ollama is asked for `/api/tags`.
+- Cloud providers are asked for `/models`.
+
+```json
+{"connected": true, "provider": "ollama", "models": ["qwen2.5:1.5b", "qwen2.5:3b"], "error": ""}
+```
+When it fails, `connected` is false and `error` says why (e.g. `Could not reach Ollama at http://...`, or `401 from the provider: ...`).
 
 ## Meetings
 

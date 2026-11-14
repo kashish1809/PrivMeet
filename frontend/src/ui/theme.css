@@ -149,3 +149,117 @@ html[data-theme="slate"] {
 @media (prefers-reduced-motion: reduce) {
   .pm-sweep, .pm-flicker, .pm-drift { animation: none; }
 }
+
+/* ---- Pixel buttons: the look of the logo tile, a chunky retro block with a light band on top
+   and left, a shade band on the bottom and right, notched corners and a pixel font (Monocraft,
+   OFL, bundled: fonts/MONOCRAFT-OFL.txt). Every colour is a theme variable, so the presets
+   re-colour them. Pressing sinks the face 2px and swaps the bands. */
+@font-face {
+  font-family: "Monocraft";
+  src: url("./fonts/monocraft.woff2") format("woff2");
+  font-display: swap;
+}
+@theme {
+  --font-pixel: "Monocraft", ui-monospace, "Cascadia Code", monospace;
+  /* The pixel font is the app's font: every font-sans text uses it. */
+  --font-sans: "Monocraft", ui-monospace, "Cascadia Code", monospace;
+}
+@layer components {
+  .pm-btn {
+    --face: var(--color-zinc-100);
+    --face-hover: var(--color-white);
+    --light: var(--color-white);
+    --shade: var(--color-zinc-300);
+    --edge: var(--color-zinc-400);
+    --ink: var(--color-zinc-800);
+    --ink-shadow: transparent;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-pixel);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    background-color: var(--face);
+    /* Textured like the logo: flat colour bands stepping from light at the top to deep at the
+       bottom, and two glint pixels in the top-right corner. All derived from the face colour,
+       so every variant and theme follows. */
+    --band-top: color-mix(in srgb, var(--face) 62%, var(--light));
+    --band-low: color-mix(in srgb, var(--face) 58%, var(--shade));
+    --glint: color-mix(in srgb, white 75%, var(--light));
+    background-image:
+      linear-gradient(var(--glint), var(--glint)),
+      linear-gradient(var(--glint), var(--glint)),
+      linear-gradient(to bottom, var(--band-top) 0 34%, var(--face) 34% 68%, var(--band-low) 68% 100%);
+    background-size: 2px 2px, 2px 2px, 100% 100%;
+    background-position: right 6px top 4px, right 8px top 6px, 0 0;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
+    text-shadow: 1px 1px 0 var(--ink-shadow);
+    /* notched corners: the 2px corner pixels are cut, like the logo tile */
+    clip-path: polygon(
+      2px 0, calc(100% - 2px) 0, calc(100% - 2px) 2px, 100% 2px, 100% calc(100% - 2px),
+      calc(100% - 2px) calc(100% - 2px), calc(100% - 2px) 100%, 2px 100%, 2px calc(100% - 2px),
+      0 calc(100% - 2px), 0 2px, 2px 2px
+    );
+    box-shadow:
+      inset 0 0 0 2px var(--edge),
+      inset 4px 4px 0 0 var(--light),
+      inset -4px -5px 0 0 var(--shade);
+    padding-bottom: 2px; /* the shade band is thicker at the bottom: keep the text centred on the face */
+    cursor: pointer;
+    user-select: none;
+  }
+  .pm-btn:hover:not(:disabled) { --face: var(--face-hover); }
+  .pm-btn:active:not(:disabled) {
+    --glint: transparent;
+    transform: translateY(2px);
+    box-shadow:
+      inset 0 0 0 2px var(--edge),
+      inset 4px 4px 0 0 var(--shade),
+      inset -4px -3px 0 0 var(--light);
+  }
+  /* clip-path would cut an outline off, so keyboard focus lights the frame itself */
+  .pm-btn:focus-visible { outline: none; --edge: var(--color-primary-300); }
+  .pm-btn:disabled { cursor: not-allowed; opacity: 0.5; filter: saturate(0.4); }
+
+  .pm-btn-primary {
+    --face: var(--color-primary-600);
+    --face-hover: var(--color-primary-500);
+    --light: var(--color-primary-400);
+    --shade: var(--color-primary-800);
+    --edge: var(--color-primary-950);
+    --ink: var(--color-white);
+    --ink-shadow: var(--color-primary-900);
+  }
+  .pm-btn-danger {
+    --face: var(--color-red-600);
+    --face-hover: var(--color-red-500);
+    --light: var(--color-red-400);
+    --shade: var(--color-red-800);
+    --edge: var(--color-red-950);
+    --ink: var(--color-white);
+    --ink-shadow: var(--color-red-900);
+  }
+  .dark .pm-btn-secondary,
+  .dark .pm-btn-ghost:hover:not(:disabled) {
+    --face: var(--color-zinc-800);
+    --face-hover: var(--color-zinc-700);
+    --light: var(--color-zinc-600);
+    --shade: var(--color-zinc-900);
+    --edge: var(--color-zinc-950);
+    --ink: var(--color-zinc-100);
+    --ink-shadow: var(--color-zinc-950);
+  }
+  /* ghost (icon buttons, quiet actions): no block until hovered */
+  .pm-btn-ghost:not(:hover),
+  .pm-btn-ghost:disabled {
+    --face: transparent;
+    background-image: none;
+    box-shadow: none;
+  }
+  .pm-btn-ghost { --ink: var(--color-zinc-700); }
+  .dark .pm-btn-ghost { --ink: var(--color-zinc-300); }
+  .pm-btn-ghost:focus-visible { box-shadow: inset 0 0 0 2px var(--color-primary-400); }
+}

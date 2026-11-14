@@ -21,7 +21,7 @@ ALLOWED_EXT = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac"
 
 # What this server supports beyond the v1 API; GET /api/system/ returns it so the frontend
 # shows a control only when its endpoint exists (docs/TASKS.md "Feature flags").
-FEATURES = ["settings", "notes", "tags", "filters"]
+FEATURES = ["settings", "notes", "tags", "filters", "providers"]
 
 MAX_TAGS, MAX_TAG_LEN, MAX_NOTES = 10, 30, 20000
 PROCESSING = [
@@ -325,7 +325,9 @@ def system(request):
     except (OSError, ValueError):
         prof = hw.base_profile()
     prof = hw.apply_overrides(prof, settings_store.load())
-    data = {k: prof[k] for k in ("tier", "whisper_model", "llm_model", "device", "diarize")}
+    data = {k: prof[k] for k in ("tier", "whisper_model", "llm_model", "device", "diarize", "llm_provider")}
+    if prof["llm_provider"] != "ollama":
+        data["llm_model"] = prof.get("api_model") or ""  # the model that will write the notes
     return JsonResponse({**data, "features": FEATURES})
 
 
@@ -333,15 +335,49 @@ def system(request):
 def user_settings(request):
     """The saved overrides. PATCH merges; a key set to null goes back to the tier default."""
     if request.method == "GET":
-        return JsonResponse(settings_store.load())
+        return JsonResponse(settings_store.public(settings_store.load()))
     try:
         data = json.loads(request.body or b"{}")
     except json.JSONDecodeError:
         return bad("Invalid JSON.")
     try:
-        return JsonResponse(settings_store.save(data))
+        return JsonResponse(settings_store.public(settings_store.save(data)))
     except settings_store.SettingsError as e:
         return bad(str(e))
+
+
+@require_POST
+def settings_test(request):
+    """Try an LLM server before saving it. Body: any of the provider settings (unsaved values
+    win over saved ones; an empty api_key keeps the saved key). Returns
+    {connected, provider, models, error}. Ollama is asked for /api/tags, others for /models."""
+    import urllib.error
+    import urllib.request
+
+    from .pipeline import providers
+
+    try:
+        body = json.loads(request.body or b"{}")
+        if not isinstance(body, dict):
+            raise ValueError
+        cfg = {**settings_store.load(), **settings_store.validate({k: v for k, v in body.items() if v not in ("", None)})}
+    except ValueError as e:
+        return bad(str(e) or "Expected a JSON object.")
+    provider = cfg.get("llm_provider", "ollama")
+    if provider == "ollama":
+        url = (cfg.get("ollama_url") or settings.OLLAMA_URL).rstrip("/")
+        try:
+            with urllib.request.urlopen(f"{url}/api/tags", timeout=5) as r:
+                tags = json.load(r)
+            names = sorted(m.get("name") for m in tags.get("models", []) if m.get("name"))
+            return JsonResponse({"connected": True, "provider": provider, "models": names, "error": ""})
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            reason = getattr(e, "reason", e)
+            return JsonResponse({"connected": False, "provider": provider, "models": [], "error": f"Could not reach Ollama at {url}: {reason}"})
+    try:
+        return JsonResponse({"connected": True, "provider": provider, "models": providers.list_models(cfg), "error": ""})
+    except providers.ProviderError as e:
+        return JsonResponse({"connected": False, "provider": provider, "models": [], "error": str(e)})
 
 
 @require_GET
