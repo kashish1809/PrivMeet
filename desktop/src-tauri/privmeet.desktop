@@ -1,0 +1,15 @@
+[Desktop Entry]
+# Tauri renders this template for the .deb (bundle.linux.deb.desktopTemplate).
+# Categories are fixed here, not taken from bundle.category, because PrivMeet is both
+# an audio/video tool and an office tool and the mapping from Tauri's single category
+# value to freedesktop categories only ever yields one of the two.
+Categories=AudioVideo;Office;
+{{#if comment}}
+Comment={{comment}}
+{{/if}}
+Exec={{exec}}
+Icon={{icon}}
+Name={{name}}
+Terminal=false
+Type=Application
+StartupWMClass=PrivMeet
