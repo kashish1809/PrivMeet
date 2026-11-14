@@ -136,6 +136,7 @@ def split(text, prof, size=None):
 
 
 FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
+SUMMARY_FIELD = re.compile(r'"summary"\s*:\s*"((?:[^"\\]|\\.)*)"', re.IGNORECASE)
 EMPTY = {"", "none", "n/a", "na", "unknown", "unassigned", "not specified", "not mentioned", "tbd", "-", "null",
          "no fixed date", "no date", "no deadline", "not set"}
 
@@ -177,7 +178,13 @@ def _as_list(value):
 def parse_notes(raw):
     """Turn the model's reply into {summary, decisions, action_items}. Never raises."""
     data = _json_object(raw)
-    if data is None:
+    if data is None and (raw or "").lstrip().startswith(("{", "```")):
+        # JSON cut off by num_predict (a model listing tasks forever): keep the summary
+        # string if it got that far, never the raw JSON as the summary.
+        log.warning("LLM returned truncated JSON, salvaging the summary")
+        m = SUMMARY_FIELD.search(raw)
+        data = {"summary": json.loads(f'"{m.group(1)}"') if m else ""}
+    elif data is None:
         log.warning("LLM returned invalid JSON, keeping raw text")
         data = {"summary": raw}
     if not isinstance(data, dict):
@@ -268,7 +275,17 @@ LINE = re.compile(r"^\W*(DECISION|TASK)\s*:\s*(.+)$", re.IGNORECASE | re.MULTILI
 MAX_DECISIONS, MAX_ITEMS = 15, 20
 
 
-def harvest(notes):
+PER_CHUNK = 6
+DECISION_LEAD = re.compile(r"^(?:so\s+)?(?:the\s+)?decision\s+(?:is|was)\s*(?:to|that)?\s*:?\s*", re.IGNORECASE)
+NO_DECISION = re.compile(r"^(?:none|no\b|n/a|nothing\b)", re.IGNORECASE)
+
+
+def _strip_md(text):
+    """Drop the markdown a model wraps a line in: **bold**, `code`, a trailing period."""
+    return text.strip().strip("*_`").strip().rstrip(".").strip()
+
+
+def harvest(parts):
     """DECISION: and TASK: lines from the map step, in meeting order.
 
     A 1.5b model asked to fold 20 topics into one JSON keeps three or four of them. The map
@@ -276,13 +293,24 @@ def harvest(notes):
     from its notes and only the summary paragraph is left to the reduce call.
     """
     decisions, items = [], []
-    for kind, rest in LINE.findall(notes):
-        if kind.upper() == "DECISION":
-            decisions.append(rest)
-            continue
-        owner, task, due = ([*(p.strip() for p in rest.split("|")), "", ""])[:3] if "|" in rest else ("", rest, "")
-        due = re.sub(r"^due\s*:\s*", "", due, flags=re.IGNORECASE)
-        items.append({"owner": owner, "task": task, "due": due})
+    for part in parts:
+        # A looping model can write dozens of TASK lines for one chunk; a ~1500 token stretch
+        # of talk never holds more than a handful, so only the first few count.
+        d_n = t_n = 0
+        for kind, rest in LINE.findall(part):
+            rest = _strip_md(rest)
+            if kind.upper() == "DECISION":
+                rest = DECISION_LEAD.sub("", rest).strip()
+                if rest and not NO_DECISION.match(rest) and d_n < PER_CHUNK:
+                    decisions.append(rest[:1].upper() + rest[1:])
+                    d_n += 1
+                continue
+            if t_n >= PER_CHUNK:
+                continue
+            owner, task, due = ([*(_strip_md(p) for p in rest.split("|")), "", ""])[:3] if "|" in rest else ("", rest, "")
+            due = re.sub(r"^due\s*:\s*", "", due, flags=re.IGNORECASE)
+            items.append({"owner": owner, "task": task, "due": due})
+            t_n += 1
     return parse_notes(json.dumps({"decisions": decisions, "action_items": items}))
 
 
@@ -300,14 +328,20 @@ def dedupe(values, key):
     return out
 
 
-def merge(found, notes):
+def merge(found, notes, union=False):
     """Decisions and tasks from the map step, the summary from the reduce call.
 
-    The reduce reply's own lists are used only when the map step found none: given notes,
-    small models re-word every decision (so nothing dedupes) and invent follow-up tasks.
+    When the reduce call read only map notes (a long meeting), its own lists are used only if
+    the map step found nothing: given notes, small models re-word every decision (so nothing
+    dedupes) and invent follow-up tasks. When it read the whole transcript (`union`), its
+    lists are as trustworthy as the map lines and are added after them.
     """
-    decisions = found["decisions"] or notes["decisions"]
-    items = found["action_items"] or notes["action_items"]
+    if union:
+        decisions = found["decisions"] + notes["decisions"]
+        items = found["action_items"] + notes["action_items"]
+    else:
+        decisions = found["decisions"] or notes["decisions"]
+        items = found["action_items"] or notes["action_items"]
     return {
         **notes,
         "decisions": dedupe(decisions, str)[:MAX_DECISIONS],
@@ -321,19 +355,24 @@ def summarize(transcript, prof, on_progress=lambda frac: None):
     chain = MAP_PROMPT | chat(prof, num_predict=MAP_REPLY_TOKENS) | StrOutputParser()
     reduce_room = input_chars(prof, REDUCE_REPLY_TOKENS)
     notes, found = transcript, None
-    # Map until the notes fit the reduce call. Each round shrinks the text ~5-10x, so a
-    # 60 min meeting on a 4k-context model needs two rounds at most.
-    for _ in range(MAX_ROUNDS):
-        if len(notes) <= reduce_room:
+    # The first map round always runs, even when the transcript fits the reduce call:
+    # asked for JSON straight away qwen2.5:3b listed one task of a stand-up's four, while
+    # TASK: lines from the map step catch them all. Later rounds only run until the notes fit;
+    # each shrinks the text ~5-10x, so a 60 min meeting on a 4k-context model needs two at most.
+    for round_ in range(MAX_ROUNDS):
+        if round_ and len(notes) <= reduce_room:
             break
         chunks = split(notes, prof)
         parts = []
         for i, c in enumerate(chunks):
             parts.append(chain.invoke({"text": c}).strip())
             on_progress((i + 1) / len(chunks))
-        notes = "\n\n".join(p for p in parts if p)
+        mapped = "\n\n".join(p for p in parts if p)
         if found is None:  # first round: the lines straight from the transcript
-            found = harvest(notes)
+            found = harvest(parts)
+        if len(notes) <= reduce_room:
+            break  # short meeting: the reduce call reads the transcript itself
+        notes = mapped
     if len(notes) > reduce_room:
         # Still too long after MAX_ROUNDS: keep the start and the end (outcomes come late in a
         # meeting) rather than letting Ollama drop the start without telling anyone.
@@ -345,7 +384,7 @@ def summarize(transcript, prof, on_progress=lambda frac: None):
     )
     result = parse_notes(raw)
     if found is not None:
-        result = merge(found, result)
+        result = merge(found, result, union=notes is transcript)
     return ground(result, transcript)
 
 
