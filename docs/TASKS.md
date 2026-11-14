@@ -17,7 +17,7 @@ Vinayak and Kashish also each have a **v2 track** of 20 tasks (`R1.x`, `R2.x`). 
 - `docs/ui/mockup-v1.webp` is the old mockup. Use it only for the **layout** of screens v2 does not draw (Record / Live, Settings, the Meetings list filters). Colors, cards, buttons and the sidebar always come from v2.
 
 ## Status (2026-11-14)
-Days 1–5 are done. They are all merged into `main`, except T3.5, which is in PR #40 waiting to merge. Days 1 and 2 task text is in git history (`git log -p docs/TASKS.md`); Days 3–5 stay below for reference.
+Days 1–5 are done and merged into `main` for all three people. Days 1 and 2 task text is in git history (`git log -p docs/TASKS.md`); Days 3–5 stay below for reference.
 
 | Done | Vinayak | Kashish | Karthik |
 |---|---|---|---|
@@ -25,7 +25,7 @@ Days 1–5 are done. They are all merged into `main`, except T3.5, which is in P
 | Day 2 | T1.2 pipeline run, U1.2 app shell | T2.2 meeting list, A2.2 backend manager | T3.2 compose, W3.2 Docker image |
 | Day 3 | T1.3 LLM quality (#30), U1.3 Record / Live (#31) | T2.3 new meeting (#25), A2.3 launcher flow (#24) | T3.3 Postgres + security (#20), W3.3 build-installers (#19) |
 | Day 4 | T1.4 benchmarks (#32), U1.4 UI backend + Home (#33, #34) | T2.4 meeting detail (#27), A2.4 media permissions (#26) | T3.4 notes panels (#21), W3.4 packaging (#22) |
-| Day 5 | T1.5 GPU + CPU fallback (#36), U1.5 Settings (#37, #38) | T2.5 polish (#28), A2.5 branding (#29) | **T3.5 README + architecture (#40, waiting to merge)**, W3.5 launchers + release docs (#23, #39) |
+| Day 5 | T1.5 GPU + CPU fallback (#36), U1.5 Settings (#37, #38) | T2.5 polish (#28), A2.5 branding (#29) | T3.5 README + architecture (#40), W3.5 launchers + release docs (#23, #39) |
 
 **v2 track:**
 - Done: **R1.7** (settings store, feature flags, API reference). It was merged with U1.4 (#33) because U1.4 needs it.
