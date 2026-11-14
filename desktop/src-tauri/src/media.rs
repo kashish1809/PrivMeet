@@ -19,6 +19,21 @@ use tauri::{AppHandle, Manager, WebviewWindow};
 /// other host, or the same host on another port, is refused.
 pub const ALLOWED_ORIGIN: &str = "http://127.0.0.1:8000";
 
+/// Whether a page URL is the PrivMeet app on this machine. Compared by origin, not by
+/// prefix: `http://127.0.0.1:8000.example.com/` and `http://127.0.0.1:80001/` are both
+/// different origins and both have to come out false.
+pub fn is_app_origin(url: &str) -> bool {
+    match url.strip_prefix(ALLOWED_ORIGIN) {
+        Some(rest) => {
+            rest.is_empty()
+                || rest.starts_with('/')
+                || rest.starts_with('?')
+                || rest.starts_with('#')
+        }
+        None => false,
+    }
+}
+
 /// Wire up media capture on the main window. Called once from `setup`.
 pub fn install(app: &AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
@@ -50,10 +65,7 @@ fn grant(window: &WebviewWindow) {
         }
 
         view.connect_permission_request(|view, request| {
-            let from_app = view
-                .uri()
-                .map(|uri| uri.starts_with(ALLOWED_ORIGIN))
-                .unwrap_or(false);
+            let from_app = view.uri().map(|uri| is_app_origin(&uri)).unwrap_or(false);
             // enumerateDevices() asks for the device list, getUserMedia() for the device.
             let wants_media = request.is::<UserMediaPermissionRequest>()
                 || request.is::<DeviceInfoPermissionRequest>();
@@ -74,4 +86,35 @@ fn grant(window: &WebviewWindow) {
 #[cfg(not(target_os = "linux"))]
 fn grant(_window: &WebviewWindow) {
     // Windows is handled in the next commit; macOS is not a target for the app yet.
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_the_app_and_its_pages() {
+        assert!(is_app_origin("http://127.0.0.1:8000"));
+        assert!(is_app_origin("http://127.0.0.1:8000/"));
+        assert!(is_app_origin("http://127.0.0.1:8000/#/m/42?t=90"));
+        assert!(is_app_origin("http://127.0.0.1:8000/api/system/"));
+    }
+
+    #[test]
+    fn rejects_the_launcher_and_other_hosts() {
+        assert!(!is_app_origin("tauri://localhost/index.html"));
+        assert!(!is_app_origin("https://127.0.0.1:8000/"));
+        assert!(!is_app_origin("http://localhost:8000/"));
+        assert!(!is_app_origin("http://127.0.0.1:8001/"));
+        assert!(!is_app_origin("http://192.168.1.10:8000/"));
+        assert!(!is_app_origin("http://example.com/"));
+        assert!(!is_app_origin(""));
+    }
+
+    #[test]
+    fn rejects_lookalike_hosts_and_ports() {
+        assert!(!is_app_origin("http://127.0.0.1:8000.example.com/"));
+        assert!(!is_app_origin("http://127.0.0.1:80000/"));
+        assert!(!is_app_origin("http://127.0.0.1:8000@evil.example/"));
+    }
 }
