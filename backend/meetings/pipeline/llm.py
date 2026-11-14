@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 
 from django.conf import settings
 from langchain_core.output_parsers import StrOutputParser
@@ -59,24 +60,84 @@ def split(text, prof):
     return RecursiveCharacterTextSplitter(chunk_size=size, chunk_overlap=size // 20).split_text(text)
 
 
-def parse_notes(raw):
+FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
+EMPTY = {"", "none", "n/a", "na", "unknown", "unassigned", "not specified", "not mentioned", "tbd", "-", "null"}
+
+
+def _json_object(raw):
+    """The first JSON object in a reply. Small models sometimes wrap it in ``` or add a line."""
+    text = FENCE.sub("", (raw or "").strip())
     try:
-        data = json.loads(raw)
+        return json.loads(text)
     except json.JSONDecodeError:
+        pass
+    start, end = text.find("{"), text.rfind("}")
+    if 0 <= start < end:
+        try:
+            return json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
+def _pick(d, *keys):
+    for k in keys:
+        if k in d and d[k] not in (None, ""):
+            return d[k]
+    return None
+
+
+def _clean(value, limit=500):
+    s = str(value or "").strip()
+    return "" if s.lower() in EMPTY else s[:limit]
+
+
+def _as_list(value):
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
+def parse_notes(raw):
+    """Turn the model's reply into {summary, decisions, action_items}. Never raises."""
+    data = _json_object(raw)
+    if data is None:
         log.warning("LLM returned invalid JSON, keeping raw text")
         data = {"summary": raw}
     if not isinstance(data, dict):
         data = {}
-    items = [i for i in data.get("action_items") or [] if isinstance(i, dict)]
-    return {
-        "summary": str(data.get("summary") or ""),
-        "decisions": [str(d) for d in data.get("decisions") or [] if d],
-        "action_items": [
-            {"owner": str(i.get("owner") or ""), "task": str(i.get("task") or ""),
-             "due": str(i.get("due") or ""), "done": False}
-            for i in items if i.get("task")
-        ],
-    }
+    norm = {re.sub(r"[\s_-]", "", str(k).lower()): v for k, v in data.items()}
+
+    summary = _pick(norm, "summary", "overview")
+    if isinstance(summary, list):
+        summary = " ".join(str(s) for s in summary)
+
+    decisions = []
+    for d in _as_list(_pick(norm, "decisions", "keypoints", "decision")):
+        if isinstance(d, dict):
+            d = _pick(d, "decision", "text", "point", "description")
+        d = _clean(d)
+        if d and d not in decisions:
+            decisions.append(d)
+
+    items = []
+    for i in _as_list(_pick(norm, "actionitems", "actions", "tasks", "todos")):
+        if isinstance(i, str):
+            i = {"task": i}
+        if not isinstance(i, dict):
+            continue
+        i = {re.sub(r"[\s_-]", "", str(k).lower()): v for k, v in i.items()}
+        task = _clean(_pick(i, "task", "action", "item", "description", "what"))
+        if not task:
+            continue
+        items.append({
+            "owner": _clean(_pick(i, "owner", "assignee", "who", "person", "responsible"), 60),
+            "task": task,
+            "due": _clean(_pick(i, "due", "duedate", "deadline", "when", "by"), 60),
+            "done": False,
+        })
+
+    return {"summary": str(summary or "").strip(), "decisions": decisions, "action_items": items}
 
 
 def summarize(transcript, prof, on_progress=lambda frac: None):
