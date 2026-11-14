@@ -320,7 +320,40 @@ def summarize(transcript, prof, on_progress=lambda frac: None):
     return ground(result, transcript)
 
 
+STAMP = re.compile(r"\[(\d{1,2}(?::\d{2}){1,2})\]")
+CITE_SKIP = {"the", "and", "will", "was", "were", "that", "this", "with", "for", "they", "said", "meeting"}
+
+
+def _content(text):
+    return {w for w in re.findall(r"\w+", text.lower()) if len(w) > 2 and w not in CITE_SKIP}
+
+
+def cite(reply, excerpts, max_cites=2):
+    """Make sure an answer points at the transcript.
+
+    qwen2.5:1.5b answers well in its own words but often leaves out the [mm:ss] the prompt asks
+    for. When it does, append the timestamps of the excerpt lines that share the most words
+    with the answer, so the UI still has something to seek to.
+    """
+    if STAMP.search(reply) or reply.lower().startswith("the meeting does not say"):
+        return reply
+    words = _content(reply)
+    scored = []
+    for line in excerpts.splitlines():
+        m = STAMP.match(line)
+        if m:
+            overlap = len(words & _content(line[m.end():]))
+            if overlap >= 2:
+                scored.append((overlap, m.group(0)))
+    stamps = []
+    for _, stamp in sorted(scored, key=lambda s: -s[0]):
+        if stamp not in stamps:
+            stamps.append(stamp)
+    return f"{reply} {' '.join(stamps[:max_cites])}" if stamps else reply
+
+
 def answer(excerpts, question, prof):
-    return (
+    reply = (
         QA_PROMPT | chat(prof, num_predict=QA_REPLY_TOKENS) | StrOutputParser()
     ).invoke({"text": excerpts, "question": question}).strip()
+    return cite(reply, excerpts)
