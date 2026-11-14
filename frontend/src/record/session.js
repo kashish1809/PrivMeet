@@ -10,7 +10,7 @@ import { useSyncExternalStore } from "react";
 import { upload } from "../api";
 import { setRecording } from "../layout/recording";
 import { createMixer } from "./mixer";
-import { KEYS, readPrefs, writePref } from "./prefs";
+import { KEYS, formatTitle, readPrefs, writePref } from "./prefs";
 
 // What we ask MediaRecorder for, best first. WebKitGTK and Safari only do MP4.
 const AUDIO_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
@@ -29,9 +29,7 @@ export function extensionFor(type, video) {
 }
 
 function defaultTitle(now = new Date()) {
-  const date = now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  const time = now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  return `Recording ${date}, ${time}`;
+  return formatTitle(readPrefs().titleFormat, now); // Settings -> General -> Default title
 }
 
 function initial() {
