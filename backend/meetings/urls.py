@@ -11,4 +11,7 @@ urlpatterns = [
     path("meetings/<uuid:pk>/export.md", views.meeting_export),
     path("questions/<int:pk>/", views.question_detail),
     path("system/", views.system),
+    path("settings/", views.user_settings),
+    path("tags/", views.tags),
+    path("action-items/", views.action_items),
 ]

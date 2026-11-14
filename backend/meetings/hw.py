@@ -104,7 +104,36 @@ def build_profile(environ, ram_gb, cuda, cpus, vram_gb=None):
     return p
 
 
+# Settings keys that override a profile value of the same name (settings_store.SCHEMA).
+OVERRIDES = ("llm_model", "ollama_url", "whisper_model", "num_ctx", "diarize", "cpu_threads")
+
+
+def apply_overrides(p, saved):
+    """Saved settings win over the tier and the env vars: they are what the user picked last."""
+    p = dict(p)
+    for key in OVERRIDES:
+        if key in saved:
+            p[key] = saved[key]
+    p.setdefault("ollama_url", None)  # None = settings.OLLAMA_URL from the environment
+    return p
+
+
 @cache
-def profile():
+def detected():
+    """The hardware: read once per process, it does not change while the app runs."""
     cuda = has_cuda()
-    return build_profile(os.environ, total_ram_gb(), cuda, os.cpu_count() or 2, gpu_vram_gb() if cuda else None)
+    return total_ram_gb(), cuda, os.cpu_count() or 2, gpu_vram_gb() if cuda else None
+
+
+def base_profile():
+    """Tier + env vars, without the saved settings."""
+    ram, cuda, cpus, vram = detected()
+    return build_profile(os.environ, ram, cuda, cpus, vram)
+
+
+def profile():
+    """Tier + env + saved settings. Re-read on every call (each task starts with one), so a
+    model picked in Settings is used by the next meeting without restarting the worker."""
+    from . import settings_store
+
+    return apply_overrides(base_profile(), settings_store.load())

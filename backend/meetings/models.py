@@ -35,6 +35,8 @@ class Meeting(models.Model):
     decisions = models.JSONField(default=list)
     action_items = models.JSONField(default=list)
     speaker_names = models.JSONField(default=dict)  # {"0": "Alice"}
+    notes = models.TextField(blank=True, default="")  # the user's own notes, not the AI summary
+    tags = models.JSONField(default=list, blank=True)  # ["Development", "API"]: max 10, 30 chars each
     tier_used = models.CharField(max_length=8, blank=True)
     created = models.DateTimeField(auto_now_add=True)
 
