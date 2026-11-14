@@ -136,7 +136,8 @@ def split(text, prof, size=None):
 
 
 FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
-EMPTY = {"", "none", "n/a", "na", "unknown", "unassigned", "not specified", "not mentioned", "tbd", "-", "null"}
+EMPTY = {"", "none", "n/a", "na", "unknown", "unassigned", "not specified", "not mentioned", "tbd", "-", "null",
+         "no fixed date", "no date", "no deadline", "not set"}
 
 
 def _json_object(raw):
@@ -215,21 +216,49 @@ def parse_notes(raw):
     return {"summary": str(summary or "").strip(), "decisions": decisions, "action_items": items}
 
 
-GENERIC = {"the", "next", "this", "end", "of", "by", "on", "before", "after", "week", "day", "until", "and", "or"}
+GENERIC = {"the", "next", "this", "end", "of", "by", "on", "before", "after", "week", "day", "until",
+           "and", "or", "a", "an", "in", "at", "to"}
 
 
-def _grounded(value, source):
+def _words(text):
+    return set(re.findall(r"\w+", text.lower()))
+
+
+def _grounded(value, source_words):
     """Whether a model-written owner or due date was actually said. Small models fill an
-    empty slot with a plausible name or "Friday"; a blank is better than a wrong deadline."""
-    tokens = [t for t in re.findall(r"\w+", value.lower()) if t not in GENERIC]
-    return bool(tokens) and any(t in source for t in tokens)
+    empty slot with a plausible name ("Team X") or a date from the prompt's example
+    ("June 3"); a blank is better than a wrong deadline. Every word that carries meaning
+    has to occur in the transcript as a whole word."""
+    tokens = _words(value) - GENERIC
+    return bool(tokens) and tokens <= source_words
+
+
+def _said(value, source_words, source_text):
+    if _words(value) - GENERIC:
+        return _grounded(value, source_words)
+    # Only common words ("next week", "this week"): the phrase itself has to be in the text.
+    phrase = " ".join(re.findall(r"\w+", value.lower()))
+    return bool(phrase) and re.search(rf"\b{re.escape(phrase)}\b", source_text) is not None
+
+
+def _on_topic(text, source_words):
+    """More than half the content words of a task or decision occur in the transcript. Catches
+    lines lifted from a prompt example ("book the 9 am bus") in a meeting about something else."""
+    content = {w for w in _words(text) - GENERIC if len(w) > 2}
+    return len(content) < 2 or len(content & source_words) * 2 > len(content)
 
 
 def ground(notes, transcript):
-    source = transcript.lower()
+    source = _words(transcript)
+    text = " ".join(re.findall(r"\w+", transcript.lower()))
+    for kind, key in (("decisions", str), ("action_items", lambda i: i["task"])):
+        kept = [v for v in notes[kind] if _on_topic(key(v), source)]
+        if len(kept) < len(notes[kind]):
+            log.info("dropping %d %s not about this meeting", len(notes[kind]) - len(kept), kind)
+        notes[kind] = kept
     for item in notes["action_items"]:
         for key in ("owner", "due"):
-            if item[key] and not _grounded(item[key], source):
+            if item[key] and not _said(item[key], source, text):
                 log.info("dropping %s %r: not in the transcript", key, item[key])
                 item[key] = ""
     return notes
@@ -328,32 +357,41 @@ def _content(text):
     return {w for w in re.findall(r"\w+", text.lower()) if len(w) > 2 and w not in CITE_SKIP}
 
 
-def cite(reply, excerpts, max_cites=2):
+def cite(reply, excerpts, question="", max_cites=2):
     """Make sure an answer points at the transcript.
 
     qwen2.5:1.5b answers well in its own words but often leaves out the [mm:ss] the prompt asks
     for. When it does, append the timestamps of the excerpt lines that share the most words
-    with the answer, so the UI still has something to seek to.
+    with the answer and the question (a short answer such as "By next week." matches too
+    little on its own), so the UI still has something to seek to.
     """
     if STAMP.search(reply) or reply.lower().startswith("the meeting does not say"):
         return reply
     words = _content(reply)
+    asked = _content(question)
     scored = []
     for line in excerpts.splitlines():
         m = STAMP.match(line)
         if m:
-            overlap = len(words & _content(line[m.end():]))
-            if overlap >= 2:
-                scored.append((overlap, m.group(0)))
+            said = _content(line[m.end():])
+            overlap = len(words & said)
+            if overlap >= 2 or (overlap and len(words) <= 3):
+                scored.append((overlap + len(asked & said), m.group(0)))
     stamps = []
     for _, stamp in sorted(scored, key=lambda s: -s[0]):
         if stamp not in stamps:
             stamps.append(stamp)
-    return f"{reply} {' '.join(stamps[:max_cites])}" if stamps else reply
+    if not stamps:
+        # Not one excerpt line shares two words with the answer: the model made it up
+        # (asked about database backups the meeting never reached, the 1.5b model invented
+        # "the first and third weeks of every month").
+        log.info("dropping an answer with no support in the excerpts: %r", reply[:200])
+        return "The meeting does not say."
+    return f"{reply} {' '.join(stamps[:max_cites])}"
 
 
 def answer(excerpts, question, prof):
     reply = (
         QA_PROMPT | chat(prof, num_predict=QA_REPLY_TOKENS) | StrOutputParser()
     ).invoke({"text": excerpts, "question": question}).strip()
-    return cite(reply, excerpts)
+    return cite(reply, excerpts, question)
