@@ -89,6 +89,33 @@ start anything.
   from Rust, so `capabilities/default.json` keeps just `core:default` and the page
   cannot ask the plugin for anything else.
 
+## Branding (A2.5)
+
+- **About box.** The launcher footer has an About link that opens a native `<dialog>`:
+  name, version, the three authors, "MIT licensed", the tagline, a Project page link
+  (through the Rust `open_link` command) and Close. The version comes from the
+  `app_info` command, which reads `env!("CARGO_PKG_VERSION")` from the binary that is
+  running, so the box cannot drift from the build.
+- **One instance.** `tauri-plugin-single-instance` is registered first in the builder;
+  a second launch exits in under 100 ms and the callback unminimizes, shows and focuses
+  the window that is already open instead of starting a second stack.
+- **Window title.** `src/window_title.rs` mirrors the page's document title onto the
+  window (WebKitGTK `title-notify`, WebView2 `DocumentTitleChanged`), with "PrivMeet"
+  as the fallback for an empty title. The launcher names its own steps; the app page
+  uses whatever `frontend/index.html` sets.
+- **Linux categories.** `src-tauri/privmeet.desktop` is the deb's desktop template and
+  pins `Categories=AudioVideo;Office;`. The AppImage still gets the bundler's own
+  entry, so the two installers can differ until someone checks the artifact.
+- **App icons are still the scaffold set.** A2.5 wants the icons rendered from
+  `docs/ui/logo.svg`, and that file is not on `main` yet (R1.3 draws it). The mark in
+  the launcher is still the hand-drawn "P" tile. When the logo lands, the whole set is
+  one command:
+  ```
+  npm run tauri icon path/to/logo-1024.png
+  ```
+  which rewrites `src-tauri/icons/*` plus `desktop/app-icon.png`'s source. Redo it, then
+  check the launcher/start-menu entry in a real install.
+
 ## Verified
 
 - `cargo build` (dev) and `cargo build --release` both finish with no warnings on
@@ -96,6 +123,12 @@ start anything.
 - The launcher page was rendered in Chromium with a stubbed `window.__TAURI__` for
   the three states: Docker missing, Docker stopped, and a failing
   `start_backend` with streamed logs. Each shows the right step, panel and links.
+- A2.5: a second launch exits with status 0 and leaves one instance running; the
+  single-instance callback was seen running and finding the main window. The About box
+  was rendered in the real window and showed version 0.1.0, the three authors and the
+  MIT line. `_NET_WM_NAME` on the running window reads "PrivMeet - Needs attention",
+  so the title mirror works. The rendered deb desktop entry passes
+  `desktop-file-validate`.
 
 ## Not verified here
 
@@ -103,3 +136,10 @@ start anything.
   `backend_logs` and the `/api/system/` poll have never run against containers.
 - Quit behaviour: closing the window with `keep_running` on and off needs the
   containers to compare, and the window manager to close the app.
+- The single-instance raise: this XWayland session refuses focus changes that no user
+  action asked for, so the second launch could not be seen bringing the window forward.
+- The Windows half of A2.4/A2.5 (media permissions, document title) is only
+  cross-compiled with `cargo check --target x86_64-pc-windows-msvc`; no Windows
+  machine was available.
+- The installed desktop entry and icons: they need a built package, which needs Docker
+  and the bundlers (W3.4, WT3.6).
