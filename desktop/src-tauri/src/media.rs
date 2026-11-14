@@ -3,14 +3,47 @@
 //! The window shows the bundled launcher first and then navigates to
 //! `http://127.0.0.1:8000`, which is a *remote* URL as far as the webview is
 //! concerned: by default neither WebKitGTK nor WebView2 hands a remote page the
-//! microphone or the camera. The Record / Live screen (U1.3) calls
-//! `getUserMedia` for the mic and an optional camera preview, so the shell has
-//! to answer those permission requests itself.
+//! microphone or the camera, and the prompt WebKitGTK shows for it is a native
+//! dialog outside the page. The Record / Live screen (U1.3) calls `getUserMedia`
+//! for the mic and an optional camera preview, so the shell has to answer those
+//! permission requests itself.
 //!
 //! What this module allows, and nothing else: microphone and camera for the page
 //! on `127.0.0.1:8000`. Any other origin, including the bundled launcher and any
 //! site the window is ever pointed at, keeps the default answer (deny). Clipboard,
 //! notifications, geolocation and the rest are never touched.
+//!
+//! # Platforms
+//!
+//! | | microphone, camera | screen capture (`getDisplayMedia`) |
+//! |---|---|---|
+//! | Linux, WebKitGTK 2.54 | granted, verified in the app window | in the API, the portal picker is untested |
+//! | Linux, WebKitGTK < 2.48 | granted, verified | absent from the API; U1.3 falls back to mic-only |
+//! | Windows, WebView2 | granted, **not run on Windows yet** | WebView2's own picker, not this module |
+//! | macOS | not a target of the desktop app yet | — |
+//!
+//! Linux: WebKitGTK needs `enable-media-stream` to make `getUserMedia` exist at
+//! all, and `permission-request` to stop the native dialog. Both media request
+//! types are answered — `UserMediaPermissionRequest` for `getUserMedia` and
+//! `DeviceInfoPermissionRequest` for `enumerateDevices` and for device labels.
+//! Matching only the first one is not enough: on WebKitGTK 2.54.2 an
+//! `enumerateDevices()` call hangs on the native prompt without the second.
+//!
+//! Screen capture on Linux is the webview's business, not this module's: the page
+//! calls `navigator.mediaDevices.getDisplayMedia`, WebKitGTK asks PipeWire (through
+//! xdg-desktop-portal) for a source, and the user picks a window in the desktop's
+//! own dialog. Nothing is granted here. On WebKitGTK 2.54.2 the method is present;
+//! whether the portal dialog appears inside the app window was not tested, because
+//! U1.3 is not merged. U1.3 shows a clear message and keeps mic-only recording when
+//! the call is missing or rejected, so both cases are safe.
+//!
+//! Windows: WebView2 has no settings switch; the host answers each request through
+//! `ICoreWebView2.PermissionRequested`. The handler below allows only the
+//! microphone and the camera for the app origin. Screen capture in WebView2 goes
+//! through `getDisplayMedia` and WebView2's own source picker, and is left alone.
+//!
+//! The app page itself uses no Tauri API, so `capabilities/default.json` stays
+//! scoped to the bundled launcher window and no remote URL is added to it.
 
 use tauri::{AppHandle, Manager, WebviewWindow};
 

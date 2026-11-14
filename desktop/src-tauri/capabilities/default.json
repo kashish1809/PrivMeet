@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for the launcher window. It is plain HTML/JS, so only core APIs are allowed; A2.2 adds the backend-manager commands here.",
+  "description": "Permissions for the bundled launcher window only. It is plain HTML/JS, so it needs the core APIs and the A2.2 backend-manager commands. The app page on http://127.0.0.1:8000 uses no Tauri API, so no remote URL is listed here on purpose: media capture reaches it through native permission handlers in media.rs, not through capabilities.",
   "windows": ["main"],
   "permissions": ["core:default"]
 }
