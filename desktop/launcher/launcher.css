@@ -316,9 +316,50 @@ h1 {
 .foot {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
   font-size: 11px;
   color: var(--muted);
+}
+
+.about {
+  width: min(24rem, calc(100vw - 3rem));
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 18px 40px rgb(0 0 0 / 0.25);
+}
+
+.about::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.about h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.about-version {
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.about-line {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.about-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
 }

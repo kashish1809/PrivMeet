@@ -53,10 +53,27 @@
       </label>
 
       <footer class="foot">
-        <span id="version">v0.1.0</span>
+        <span id="version">PrivMeet</span>
         <span>Local only · no account · MIT</span>
+        <button type="button" class="link" id="about">About</button>
       </footer>
     </main>
+
+    <!-- Version, licence and authors, straight from the binary that is running. -->
+    <dialog id="about-dialog" class="about" aria-labelledby="about-title">
+      <h2 id="about-title">PrivMeet</h2>
+      <p class="about-version" id="about-version"></p>
+      <p class="about-line" id="about-authors"></p>
+      <p class="about-line" id="about-license"></p>
+      <p class="about-line">
+        Your meetings. Your data. Your control. Everything runs on this machine.
+      </p>
+      <div class="about-actions">
+        <button type="button" class="link" id="about-home">Project page</button>
+        <button type="button" class="button" id="about-close">Close</button>
+      </div>
+    </dialog>
+
     <script src="launcher.js"></script>
   </body>
 </html>

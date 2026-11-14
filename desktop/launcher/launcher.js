@@ -27,6 +27,14 @@ const el = {
   toggleLogs: document.getElementById("toggle-logs"),
   logs: document.getElementById("logs"),
   keepRunning: document.getElementById("keep-running"),
+  about: document.getElementById("about"),
+  aboutDialog: document.getElementById("about-dialog"),
+  aboutVersion: document.getElementById("about-version"),
+  aboutAuthors: document.getElementById("about-authors"),
+  aboutLicense: document.getElementById("about-license"),
+  aboutHome: document.getElementById("about-home"),
+  aboutClose: document.getElementById("about-close"),
+  version: document.getElementById("version"),
 };
 
 let logLines = [];
@@ -287,6 +295,24 @@ async function saveSetting() {
   }
 }
 
+// --- about ----------------------------------------------------------------------
+
+let homepage = "";
+
+async function loadAppInfo() {
+  if (!invoke) return; // opened outside the app window: the footer keeps its plain label
+  try {
+    const info = await invoke("app_info");
+    homepage = info.homepage || "";
+    el.version.textContent = `v${info.version}`;
+    el.aboutVersion.textContent = `Version ${info.version}`;
+    el.aboutAuthors.textContent = `By ${info.authors}`;
+    el.aboutLicense.textContent = `${info.license} licensed · self-hosted, no account`;
+  } catch (err) {
+    appendLog(`Could not read the app version: ${err}`);
+  }
+}
+
 // --- wiring ---------------------------------------------------------------------
 
 el.retry.addEventListener("click", run);
@@ -301,5 +327,17 @@ el.docs.addEventListener("click", async () => {
   }
 });
 
+el.about.addEventListener("click", () => el.aboutDialog.showModal());
+el.aboutClose.addEventListener("click", () => el.aboutDialog.close());
+el.aboutHome.addEventListener("click", async () => {
+  if (!homepage || !invoke) return;
+  try {
+    await invoke("open_link", { url: homepage });
+  } catch (err) {
+    appendLog(`Could not open the project page: ${err}`);
+  }
+});
+
+loadAppInfo();
 loadSetting();
 run();

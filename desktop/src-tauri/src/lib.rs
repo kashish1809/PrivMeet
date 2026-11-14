@@ -12,6 +12,28 @@ mod media;
 
 use tauri::Manager;
 
+/// What the launcher's About box shows. Compiled into the binary from Cargo.toml and
+/// tauri.conf.json, so the box can never disagree with the build that is running.
+#[derive(serde::Serialize)]
+pub struct AppInfo {
+    pub name: String,
+    pub version: String,
+    pub license: String,
+    pub authors: String,
+    pub homepage: String,
+}
+
+#[tauri::command]
+fn app_info() -> AppInfo {
+    AppInfo {
+        name: "PrivMeet".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        license: "MIT".to_string(),
+        authors: "Kashish R Shetty, K Vinayak Kamath, HM Karthik".to_string(),
+        homepage: "https://github.com/vinayakkam/privmeet".to_string(),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -39,6 +61,7 @@ pub fn run() {
             backend::get_settings,
             backend::set_settings,
             backend::open_link,
+            app_info,
         ])
         // The Record / Live screen needs the mic (and the camera, when it is on)
         // inside the window; media.rs grants that to 127.0.0.1:8000 only.
