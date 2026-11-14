@@ -100,8 +100,19 @@ def build_profile(environ, ram_gb, cuda, cpus, vram_gb=None):
     if environ.get("DIARIZE"):
         p["diarize"] = environ["DIARIZE"] == "1"
     if p["device"] == "cuda" and not cuda:  # TIER=high forced on a box without a GPU
-        p.update(device="cpu", compute_type="int8")
+        p.update(CPU_FALLBACK)
     return p
+
+
+# What a CUDA profile turns into when the GPU cannot be used after all.
+CPU_FALLBACK = dict(device="cpu", compute_type="int8")
+
+
+def cpu_fallback(prof):
+    """Switch `prof` (in place, so the rest of the task sees it) to the CPU after a CUDA
+    failure. Returns it. Keeps the model size: slower on the CPU, but the same transcript."""
+    prof.update(CPU_FALLBACK, cuda=False)
+    return prof
 
 
 # Settings keys that override a profile value of the same name (settings_store.SCHEMA).
