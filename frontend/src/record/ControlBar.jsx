@@ -12,7 +12,7 @@ import {
   Play,
 } from "lucide-react";
 
-import { cx, focusRing } from "../ui";
+import { cx } from "../ui";
 
 /** Round control with its label under it, as in the mockup's control row. */
 function Control({ icon: Icon, label, onClick, pressed, tone = "default", disabled, title }) {
@@ -26,18 +26,13 @@ function Control({ icon: Icon, label, onClick, pressed, tone = "default", disabl
         aria-label={label}
         title={title || label}
         className={cx(
-          "flex size-12 items-center justify-center rounded-2xl border transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-          tone === "danger"
-            ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-900 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
-            : tone === "active"
-              ? "border-primary-600 bg-primary-600 text-white hover:bg-primary-700"
-              : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-          focusRing,
+          "pm-btn size-12",
+          tone === "danger" ? "pm-btn-danger" : tone === "active" ? "pm-btn-primary" : "pm-btn-secondary",
         )}
       >
         <Icon className="size-5" aria-hidden="true" />
       </button>
-      <span className={cx("text-xs", tone === "danger" ? "text-red-600 dark:text-red-400" : "text-zinc-600 dark:text-zinc-400")}>
+      <span className={cx("font-pixel text-[11px]", tone === "danger" ? "text-red-600 dark:text-red-400" : "text-zinc-600 dark:text-zinc-400")}>
         {label}
       </span>
     </div>
@@ -60,7 +55,11 @@ export default function ControlBar({ s, onMute, onCamera, onShare, onRecord, onM
         : { icon: Circle, label: "Record" };
 
   return (
-    <div className="flex flex-wrap items-start justify-center gap-x-5 gap-y-3" role="toolbar" aria-label="Recorder controls">
+    <div
+      className="mx-auto flex flex-wrap items-start justify-center gap-x-5 gap-y-3 rounded-2xl border border-zinc-200 bg-white/[0.88] px-5 py-3 dark:border-zinc-800 dark:bg-zinc-900/[0.88]"
+      role="toolbar"
+      aria-label="Recorder controls"
+    >
       <Control
         icon={s.muted || micBroken ? MicOff : Mic}
         label={s.muted ? "Unmute" : "Mic"}
@@ -100,15 +99,12 @@ export default function ControlBar({ s, onMute, onCamera, onShare, onRecord, onM
           type="button"
           onClick={onLeave}
           disabled={!live}
-          className={cx(
-            "flex h-12 items-center gap-2 rounded-2xl bg-red-600 px-5 text-sm font-medium text-white shadow-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40",
-            focusRing,
-          )}
+          className="pm-btn pm-btn-danger h-12 gap-2 px-5 text-sm"
         >
           <LogOut className="size-4" aria-hidden="true" />
           Leave
         </button>
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">Stop &amp; save</span>
+        <span className="font-pixel text-[11px] text-zinc-500 dark:text-zinc-400">Stop &amp; save</span>
       </div>
     </div>
   );
