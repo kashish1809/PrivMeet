@@ -40,14 +40,16 @@ Days 1–5 are done and merged into `main` for all three people. Days 1 and 2 ta
 - **Font and buttons:** the Monocraft pixel font (OFL, bundled) with textured pixel buttons, plus a font switch to a normal font, where the buttons go flat.
 - **Cloud LLM providers:** OpenAI, OpenRouter, Anthropic and any OpenAI-compatible server. They are opt-in from Settings with a privacy warning. Ollama stays the default, and audio never leaves the machine.
 
-### Known issues to fix (found in the Day 5 review)
-| Owner | Issue |
-|---|---|
-| Kashish | The meeting detail page shows no status pill. "Processed" (done, no summary) is invisible. Add `<Badge status>` / the "Processed" pill to `MeetingHeader.jsx`. |
-| Kashish | `MeetingHeader.participantCount()` (speaker names, then segments) and `MeetingDetail.participants()` (segments only) can disagree. Use one helper (R2.1 `format.participants`). |
-| Kashish | The desktop app copies `compose.gpu.yml`, but `tauri.conf.json` bundles only `compose.yml`, so the GPU override never reaches installed users. |
-| Karthik | `docker.yml` tags the GPU image only as `<version>-gpu`. Add `latest-gpu`, so `compose.gpu.yml` works with the default `PRIVMEET_VERSION`. |
-| Vinayak | Home's "View Templates" opens "Page not found" until R1.4 adds `#/templates`. The sidebar still shows History and Tools until R1.4. |
+### Day 5 review issues: fixed in `fix/day5-review-bugs`
+| Owner | Issue | Fix |
+|---|---|---|
+| Kashish | The meeting detail page showed no status pill, so "Processed" (done, no summary) was invisible. | `MeetingHeader` shows the pill next to the date line, following the "Status pill" contract. |
+| Kashish | The header's participant count could disagree with the Participants card. | Both count the distinct speakers in the transcript. |
+| Kashish | `tauri.conf.json` bundled only `compose.yml`, so installed apps never had the GPU override. | `compose.gpu.yml` is bundled too. |
+| Karthik | `docker.yml` published only `<version>-gpu`, so `compose.gpu.yml` with the default version had no image. | A second metadata step adds `latest-gpu` for real releases. |
+| Vinayak | Home's "View Templates" opened "Page not found". | `#/templates` and `#/models` stub pages (part of R1.4). |
+
+**Still open:** the rest of R1.4. The sidebar still shows History and Tools until it gets the five v2 items.
 
 ### Checked on `main` (2026-11-14)
 - `npm run build` passes. Django `check` passes with no missing migrations. `bash -n scripts/privmeet.sh` passes, and the PowerShell parser accepts `privmeet.ps1`.

@@ -8,9 +8,11 @@ import History from "./pages/History";
 import Home from "./pages/Home";
 import MeetingDetail from "./pages/MeetingDetail";
 import MeetingList from "./pages/MeetingList";
+import Models from "./pages/Models";
 import NewMeeting from "./pages/NewMeeting";
 import RecordLive from "./pages/RecordLive";
 import Settings from "./pages/Settings";
+import Templates from "./pages/Templates";
 import Tools, { TOOLS } from "./pages/Tools";
 import { EmptyState } from "./ui";
 
@@ -44,6 +46,8 @@ function Page({ page }) {
   if (page === "record") return <RecordLive />;
   if (page === "history") return <History />;
   if (page === "settings") return <Settings />;
+  if (page === "templates") return <Templates />;
+  if (page === "models") return <Models />;
   const tool = page.startsWith("tools/") && page.slice(6);
   if (tool && TOOLS[tool]) return <Tools tool={tool} />;
   return (

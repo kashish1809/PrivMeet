@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Download, Share2, Trash2 } from "lucide-react";
 
 import { meetingExportUrl } from "../api";
-import { Menu, cx, focusRing } from "../ui";
+import { Badge, LogoMark, Menu, cx, focusRing } from "../ui";
 
 /** "Oct 28, 2026" — local date, no time. R2.1 moves this into format.js as shortDate(). */
 export function shortDate(iso) {
@@ -16,18 +16,28 @@ export function minutes(seconds = 0) {
 }
 
 /**
- * How many people were in the meeting. U1.4's list rows add `speakers`; until it is on
- * main this counts the saved names, then the distinct speakers in the transcript.
- * R2.1: format.js participants().
+ * How many people were in the meeting: the distinct speakers in the transcript, the same
+ * people the Participants card lists, so the two never disagree. Without segments (a list
+ * row) it is the server's `speakers` count. R2.1: format.js participants().
  */
 export function participantCount(meeting) {
-  if (typeof meeting?.speakers === "number") return meeting.speakers;
-  const names = Object.keys(meeting?.speaker_names || {}).length;
-  if (names) return names;
-  const seen = new Set(
-    (meeting?.segments || []).map((s) => s.speaker).filter((s) => s !== null && s !== undefined),
-  );
-  return seen.size;
+  const segments = meeting?.segments || [];
+  if (segments.length) {
+    return new Set(segments.map((s) => s.speaker).filter((s) => s !== null && s !== undefined)).size;
+  }
+  return typeof meeting?.speakers === "number" ? meeting.speakers : 0;
+}
+
+/** The status pill from docs/TASKS.md "Status pill": done without a summary is "Processed". */
+export function StatusPill({ meeting }) {
+  if (meeting.status === "done" && meeting.has_summary === false) {
+    return (
+      <Badge tone="blue" dot>
+        Processed
+      </Badge>
+    );
+  }
+  return <Badge status={meeting.status} />;
 }
 
 const outline =
@@ -47,7 +57,6 @@ const outline =
  * The kebab next to Download holds "Delete meeting"; the page owns the confirmation and
  * the navigation, so this component only asks.
  *
- * TODO(R1.3): swap the hand-drawn tile for <Logo variant="gradient" />.
  */
 export default function MeetingHeader({ meeting, onRename, onDelete }) {
   const [copied, setCopied] = useState(false);
@@ -179,12 +188,7 @@ export default function MeetingHeader({ meeting, onRename, onDelete }) {
       </p>
 
       <div className="flex items-start gap-4">
-        <span
-          aria-hidden="true"
-          className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary-400 to-primary-700 text-xl font-bold text-white shadow-sm"
-        >
-          P
-        </span>
+        <LogoMark size={48} />
         <div className="min-w-0 flex-1">
           <h1 className="min-w-0">
             {editing ? (
@@ -237,15 +241,18 @@ export default function MeetingHeader({ meeting, onRename, onDelete }) {
               </button>
             )}
           </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            {[
-              shortDate(meeting.created),
-              minutes(meeting.duration),
-              people ? `${people} ${people === 1 ? "participant" : "participants"}` : "",
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              {[
+                shortDate(meeting.created),
+                minutes(meeting.duration),
+                people ? `${people} ${people === 1 ? "participant" : "participants"}` : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+            <StatusPill meeting={meeting} />
+          </div>
         </div>
       </div>
     </div>

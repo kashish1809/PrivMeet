@@ -47,7 +47,8 @@
     "homepage": "https://github.com/vinayakkam/privmeet",
     "license": "MIT",
     "resources": {
-      "../../compose.yml": "compose/compose.yml"
+      "../../compose.yml": "compose/compose.yml",
+      "../../compose.gpu.yml": "compose/compose.gpu.yml"
     },
     "linux": {
       "deb": {
