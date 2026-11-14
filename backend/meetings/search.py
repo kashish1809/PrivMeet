@@ -19,7 +19,10 @@ STOPWORDS = set(
     "anything something please give list".split()
 )
 HITS = 8  # best segments kept for a long meeting
-CONTEXT = 2  # neighbours kept on each side of a hit, so an answer has its lead-in
+# Lines kept around a hit. Mostly after it: a topic is raised first and decided later (in the
+# 55 min test the cloud bill came up 17 lines before "move the test servers"), and the
+# answer to a question usually follows the words that match it.
+BEFORE, AFTER = 2, 20
 
 
 def words(text, question=False):
@@ -72,12 +75,23 @@ def excerpts(meeting, question, max_chars):
         head = f"Meeting summary: {meeting.summary}\n\n" if meeting.summary else ""
         return (head + full)[:max_chars]
     pos = {s.id: i for i, s in enumerate(segs)}
-    keep = sorted({j for h in hits for j in range(pos[h] - CONTEXT, pos[h] + CONTEXT + 1) if 0 <= j < len(segs)})
+    lines_of = {}
+    keep, used = set(), 0
+    # Best hit first, so when the budget runs out it is the weakest hits that lose their tail.
+    for h in hits:
+        for j in range(pos[h] - BEFORE, pos[h] + AFTER + 1):
+            if 0 <= j < len(segs) and j not in keep:
+                line = lines_of[j] = meeting.transcript(timestamps=True, segments=[segs[j]])
+                if used + len(line) + 1 > max_chars:
+                    break
+                keep.add(j)
+                used += len(line) + 1
+    keep = sorted(keep)
     # Gaps between kept runs are marked so the model does not read two far-apart lines as one exchange.
     lines, last = [], None
     for j in keep:
         if last is not None and j != last + 1:
             lines.append("...")
-        lines.append(meeting.transcript(timestamps=True, segments=[segs[j]]))
+        lines.append(lines_of[j])
         last = j
     return "\n".join(lines)[:max_chars]
