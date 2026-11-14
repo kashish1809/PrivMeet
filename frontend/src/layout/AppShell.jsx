@@ -26,7 +26,7 @@ export default function AppShell({ page, system, error, children }) {
     <div className="relative isolate flex min-h-dvh bg-zinc-50 scheme-light dark:bg-zinc-950 dark:scheme-dark">
       {/* The scenery stays put behind the page area while pages scroll over it: stars filling the
           window on dark themes, the landscape along the bottom of the window. */}
-      <div aria-hidden="true" className="pointer-events-none fixed inset-y-0 right-0 left-0 -z-10 sm:left-17 min-[900px]:left-60">
+      <div aria-hidden="true" className="pointer-events-none fixed inset-y-0 right-0 -z-10 max-sm:left-0 sm:max-[899px]:left-17 min-[900px]:left-60">
         <PixelStars className="absolute inset-0" />
         <PixelScape className="absolute inset-x-0 bottom-0 h-[42vh] min-h-56 [mask-image:linear-gradient(to_bottom,transparent_0%,black_35%)]" />
       </div>
