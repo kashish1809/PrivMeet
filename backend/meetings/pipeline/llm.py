@@ -92,6 +92,10 @@ def ollama_url(prof):
 
 
 def chat(prof, json_mode=False, num_predict=None):
+    if prof.get("llm_provider", "ollama") != "ollama":
+        from . import providers
+
+        return providers.chat(prof, json_mode=json_mode, num_predict=num_predict)
     from langchain_ollama import ChatOllama
 
     return ChatOllama(
@@ -107,7 +111,10 @@ def chat(prof, json_mode=False, num_predict=None):
 
 
 def ensure_model(prof):
-    """Pull the tier's model on first use; a no-op when it is already present."""
+    """Pull the tier's model on first use; a no-op when it is already present. Cloud
+    providers host their own models, so there is nothing to pull."""
+    if prof.get("llm_provider", "ollama") != "ollama":
+        return
     import ollama
 
     ollama.Client(host=ollama_url(prof)).pull(prof["llm_model"])
