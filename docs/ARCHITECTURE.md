@@ -26,16 +26,16 @@ flowchart LR
 
   CLOUD["Cloud LLM (optional)<br/>OpenAI, OpenRouter,<br/>Anthropic, compatible"]
 
-  UI -- "fetch /api/... (CSRF)" --> WEB
-  REC -- "upload webm/opus" --> WEB
-  WEB -- "enqueue process_meeting / answer_question" --> REDIS
+  UI -->|"fetch /api/... (CSRF)"| WEB
+  REC -->|"upload webm/opus"| WEB
+  WEB -->|"enqueue process_meeting, answer_question"| REDIS
   REDIS --> WORKER
   WEB <--> DB
   WORKER <--> DB
   WEB <--> VOL
   WORKER <--> VOL
-  WORKER -- "summary + Q&A (default)" --> OLLAMA
-  WORKER -. "transcript text, only if chosen in Settings" .-> CLOUD
+  WORKER -->|"summary and Q&A (default)"| OLLAMA
+  WORKER -.->|"transcript text, only if chosen in Settings"| CLOUD
 ```
 
 | Part | Technology | Job |
@@ -60,7 +60,7 @@ flowchart LR
   T --> D["diarizing<br/>sherpa-onnx (mid/high)"]
   D --> S["summarizing<br/>LLM map-reduce"]
   S --> OK["done"]
-  C & T & D & S -. "any error" .-> F["failed<br/>(error kept, Retry)"]
+  C & T & D & S -.->|any error| F["failed<br/>(error kept, Retry)"]
 ```
 
 1. **Upload (web).** The upload is checked before it is stored:
@@ -91,3 +91,90 @@ flowchart LR
 - The answer must cite `[mm:ss]`. When the model leaves the citation out, the timestamps of the best-matching lines are added. An answer that shares nothing with the excerpts becomes "The meeting does not say."
 
 **Search** (`GET /api/meetings/?q=`) matches title, notes and summary, plus the transcript through the Postgres full-text index (`SearchVector('text', 'english')`, GIN index in migration 0002), and returns the matching lines with their timestamps.
+
+## Resource strategy
+PrivMeet has to run on a laptop with about 6 GB of RAM and no GPU, and still use an NVIDIA GPU when there is one.
+
+1. **A hardware tier, picked at start-up.** `meetings/hw.py`:
+   - reads the total RAM (`/proc/meminfo`, or the OS API on Windows and macOS),
+   - checks for CUDA through CTranslate2,
+   - reads the VRAM through `nvidia-smi`.
+
+   The tier sets the Whisper model and precision, the LLM and its context, the beam size and whether diarization runs. Env variables and then the Settings page override it. Settings are re-read at the start of every job, so a change applies to the next meeting with no restart.
+
+   | | low | mid | high |
+   |---|---|---|---|
+   | Trigger | < 7.5 GB, no GPU | ≥ 7.5 GB, no GPU | NVIDIA GPU |
+   | Whisper | base, int8, CPU, beam 1 | small, int8, CPU, beam 5 | large-v3-turbo, int8_float16, CUDA |
+   | LLM | qwen2.5:1.5b, ctx 4096, unloads after 30 s | qwen2.5:3b, ctx 8192 | qwen2.5:7b, or 3b under 6 GB VRAM |
+   | Diarization | off | on | on |
+2. **One heavy model in memory at a time.**
+   - The worker runs with `--concurrency=1 --prefetch-multiplier=1 --max-tasks-per-child=1`: one job, then the process exits and the OS gets all its memory back.
+   - Inside a job the stages are sequential, and the Whisper model is dropped before diarization starts.
+   - Ollama runs with `OLLAMA_MAX_LOADED_MODELS=1` and `OLLAMA_NUM_PARALLEL=1`, and Q&A shares the worker queue.
+   - Measured low-tier peaks: Whisper worker 0.8 GB, then the 1.5B model 1.1 GB in Ollama, never at the same time (`docs/BENCHMARKS.md`).
+3. **CPU politeness.** Whisper and the LLM use half the cores by default, the worker runs under `nice`, and voice activity detection skips silence, so the desktop and the web UI stay responsive.
+4. **A light runtime.**
+   - The UI is built to static files at image build time and served by Django and whitenoise, with no Node server.
+   - Progress is plain polling, with no websockets.
+   - Postgres has `shared_buffers=64MB`, Redis is capped at 32 MB, and every container has a `mem_limit`.
+5. **Light diarization.** ONNX models through sherpa-onnx instead of pyannote on PyTorch: tens of megabytes instead of gigabytes.
+6. **Long meetings on small models.** Map-reduce with chunk sizes worked out from `num_ctx`, so a one-hour meeting fits a 4k-context model (see "The pipeline").
+
+## Data model
+
+```mermaid
+erDiagram
+  MEETING ||--o{ SEGMENT : has
+  MEETING ||--o{ QUESTION : has
+  MEETING {
+    uuid id PK
+    string title
+    file file "uploads/<random>.<ext>"
+    float duration "seconds"
+    string language "detected by Whisper"
+    string status "queued converting transcribing diarizing summarizing done failed"
+    int progress "0-100"
+    text error
+    text summary
+    json decisions "list of strings"
+    json action_items "owner, task, due, done"
+    json speaker_names "{'0': 'Rohan'}"
+    text notes "the user's own notes"
+    json tags "up to 10, 30 chars each"
+    string tier_used
+    datetime created
+  }
+  SEGMENT {
+    int id PK
+    uuid meeting_id FK
+    float start
+    float end
+    int speaker "null without diarization"
+    text text "GIN full-text index on Postgres"
+  }
+  QUESTION {
+    int id PK
+    uuid meeting_id FK
+    text question
+    text answer "cites [mm:ss]"
+    string status "pending done failed"
+    datetime created
+  }
+```
+
+- **Uploads** live in the `data` volume under random file names and are only ever served through `GET /api/meetings/<id>/audio`, which supports HTTP Range so the player can seek. Deleting a meeting deletes its file. Segments and questions go with it (cascade).
+- **Settings** are not in the database. They are `DATA_DIR/settings.json`, written atomically (temp file + rename) by `meetings/settings_store.py`, which validates every key and never returns the cloud API key, only `api_key_set`.
+- **Per-browser preferences** live in `localStorage`, so they differ per device and never reach the server: theme, font, default microphone, tab audio, camera and recording title.
+
+## Feature flags
+`GET /api/system/` returns `features`, the list of optional capabilities this server supports (`settings`, `notes`, `tags`, `filters`, `providers`, ...). The frontend shows a control only when its flag is there. This let the backend and frontend halves of the project be built and merged independently, without broken buttons in between. Every endpoint and flag is listed in [API.md](API.md).
+
+## Trust boundaries
+- **Single user, no login.** The only published port is `127.0.0.1:8000`. Every write needs the CSRF token. The app refuses to start in production mode with the sample `SECRET_KEY`.
+- **Untrusted input:**
+  - Uploaded files: an allow-list, a size cap and `ffprobe`. Subprocesses take list arguments only.
+  - Meeting text in the UI: React escapes it, and nothing goes through `innerHTML`.
+  - Settings values: each key is type- and range-checked.
+- **What leaves the machine:** nothing with the default Ollama provider, apart from downloading images and models. With a cloud provider chosen in Settings (after a warning), the transcript text of each summary and question goes to it. Audio never does.
+- **Desktop app:** the Tauri shell grants microphone and camera only to the page on `127.0.0.1:8000`, and the app page gets no Tauri API.
