@@ -12,3 +12,4 @@ export { TagChip } from "./TagChip";
 export { Tabs, tabPanelProps } from "./Tabs";
 export { Menu } from "./Menu";
 export { Modal, ConfirmDialog } from "./Modal";
+export { PixelScape } from "./PixelScape";
