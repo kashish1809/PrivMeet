@@ -9,6 +9,7 @@ import {
   Card,
   CardHeader,
   ConfirmDialog,
+  FONTS,
   Input,
   Select,
   StatusDot,
@@ -18,6 +19,7 @@ import {
   cx,
   focusRing,
   tabPanelProps,
+  useFont,
   useTheme,
 } from "../ui";
 
@@ -506,8 +508,39 @@ function ThemeCard({ theme, selected, onPick }) {
   );
 }
 
+/** Font choice: each card previews its font with the same sample. */
+function FontCard({ font, selected, onPick }) {
+  const family =
+    font.id === "pixel" ? '"Monocraft", monospace' : '"Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif';
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onPick}
+      className={cx(
+        "flex flex-col gap-2 rounded-2xl border p-4 text-left",
+        selected
+          ? "border-primary-500 ring-2 ring-primary-500 dark:border-primary-400 dark:ring-primary-400"
+          : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700",
+        focusRing,
+      )}
+    >
+      <span className="text-2xl text-zinc-900 dark:text-zinc-100" style={{ fontFamily: family }} aria-hidden="true">
+        Aa · Project Sync 10:42
+      </span>
+      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        {font.name}
+        {font.id === "pixel" && <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">(default)</span>}
+      </span>
+      <span className="text-xs text-zinc-500 dark:text-zinc-400">{font.caption}</span>
+    </button>
+  );
+}
+
 function Appearance() {
   const [theme, setTheme] = useTheme();
+  const [font, setFont] = useFont();
   return (
     <Card>
       <CardHeader title="Appearance" icon={Palette} />
@@ -520,6 +553,12 @@ function Appearance() {
         <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
           Each theme has its own landscape at the bottom of the page. Look closely: every one hides a few surprises.
         </p>
+        <h3 className="mt-6 mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Font</h3>
+        <div role="radiogroup" aria-label="Font" className="grid gap-4 sm:grid-cols-2">
+          {FONTS.map((f) => (
+            <FontCard key={f.id} font={f} selected={f.id === font} onPick={() => setFont(f.id)} />
+          ))}
+        </div>
       </div>
     </Card>
   );
