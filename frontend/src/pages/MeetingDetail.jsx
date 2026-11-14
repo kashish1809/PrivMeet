@@ -101,7 +101,7 @@ export default function MeetingDetail({ id }) {
 
   return (
     <section className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-      <MeetingHeader meeting={meeting} />
+      <MeetingHeader meeting={meeting} onRename={(title) => onSave({ title })} />
 
       <ProcessingStatus
         meeting={meeting}

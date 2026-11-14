@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Download, Share2 } from "lucide-react";
 
 import { meetingExportUrl } from "../api";
@@ -40,11 +40,60 @@ const outline =
  *
  * Share copies the page URL (R2.6 turns this into a menu with "Copy summary"), Download
  * is the Markdown export (R2.5 turns it into a format menu).
+ *
+ * The title is a button: click it (or press Enter on it) to rename the meeting in place.
+ * Enter or leaving the field saves, Escape throws the edit away.
+ *
  * TODO(R1.3): swap the hand-drawn tile for <Logo variant="gradient" />.
  */
-export default function MeetingHeader({ meeting }) {
+export default function MeetingHeader({ meeting, onRename }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+
+  const titleId = useId();
+  const titleButton = useRef(null);
+  const restoreTitleFocus = useRef(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  function startEditing() {
+    if (!onRename) return; // no handler (older server page): the title stays a heading
+    setDraft(meeting.title);
+    setError("");
+    setEditing(true);
+  }
+
+  // The title button only exists once editing is over, so focus has to be restored after
+  // the re-render. Clicking somewhere else (blur) must not pull focus back to the title.
+  useEffect(() => {
+    if (editing || !restoreTitleFocus.current) return;
+    restoreTitleFocus.current = false;
+    titleButton.current?.focus();
+  }, [editing]);
+
+  function stopEditing({ keepFocus = true } = {}) {
+    restoreTitleFocus.current = keepFocus;
+    setEditing(false);
+    setSaving(false);
+  }
+
+  async function saveTitle({ fromBlur = false } = {}) {
+    if (saving) return; // Enter and the blur that follows it must not send two PATCHes
+    const next = draft.trim();
+    if (!next || next === meeting.title) {
+      stopEditing({ keepFocus: !fromBlur });
+      return;
+    }
+    setSaving(true);
+    try {
+      await onRename(next);
+      stopEditing({ keepFocus: !fromBlur });
+    } catch (err) {
+      setSaving(false);
+      setError(err.message || "Could not rename this meeting.");
+    }
+  }
 
   async function share() {
     setError("");
@@ -127,12 +176,64 @@ export default function MeetingHeader({ meeting }) {
         >
           P
         </span>
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
-            {meeting.title}
+        <div className="min-w-0 flex-1">
+          <h1 className="min-w-0">
+            {editing ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  saveTitle();
+                }}
+                className="flex items-center gap-2"
+              >
+                <label htmlFor={titleId} className="sr-only">
+                  Meeting title
+                </label>
+                <input
+                  id={titleId}
+                  ref={(el) => el?.focus()}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      stopEditing();
+                    }
+                  }}
+                  onBlur={() => saveTitle({ fromBlur: true })}
+                  disabled={saving}
+                  maxLength={200}
+                  autoComplete="off"
+                  className={cx(
+                    "w-full rounded-lg border border-zinc-300 bg-white px-2 py-1 text-2xl font-semibold tracking-tight text-zinc-900",
+                    "dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100",
+                    focusRing,
+                  )}
+                />
+              </form>
+            ) : (
+              <button
+                ref={titleButton}
+                type="button"
+                onClick={startEditing}
+                disabled={!onRename}
+                title={onRename ? "Rename meeting" : undefined}
+                className={cx(
+                  "-mx-1 block max-w-full truncate rounded-lg px-1 text-left text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100",
+                  onRename && "hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                  focusRing,
+                )}
+              >
+                {meeting.title}
+              </button>
+            )}
           </h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            {[shortDate(meeting.created), minutes(meeting.duration), people ? `${people} participants` : ""]
+            {[
+              shortDate(meeting.created),
+              minutes(meeting.duration),
+              people ? `${people} ${people === 1 ? "participant" : "participants"}` : "",
+            ]
               .filter(Boolean)
               .join(" · ")}
           </p>
