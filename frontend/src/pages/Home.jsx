@@ -55,11 +55,10 @@ function Hero({ name }) {
     <Card className="relative isolate overflow-hidden border-primary-200 bg-primary-50 dark:border-primary-900/60 dark:bg-zinc-950">
       {/* The landscape fills the card and fades out under the text on the left. */}
       <PixelScape
-        lake={false}
+        scene="clouds"
         seed={4}
-        moonX={0.82}
-        moonY={0.32}
-        className="absolute inset-0 [mask-image:linear-gradient(to_right,transparent_0%,rgb(0_0_0/0.4)_35%,black_65%)]"
+        orbX={0.84}
+        className="absolute inset-0 [mask-image:linear-gradient(to_right,transparent_0%,rgb(0_0_0/0.45)_35%,black_65%)]"
       />
       <div className="relative flex min-h-60 flex-col justify-center gap-3 p-7 sm:p-9">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl dark:text-white">
