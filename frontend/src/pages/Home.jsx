@@ -201,8 +201,7 @@ export default function Home() {
   }
 
   return (
-    // min-h fills the viewport (minus main's padding) so the landscape sits at the bottom.
-    <section className="mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-6xl flex-col gap-6 max-sm:min-h-[calc(100dvh-6.5rem)]">
+    <section className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <Hero name={name} />
         <QuickActions />
@@ -248,9 +247,6 @@ export default function Home() {
           )}
         </Card>
       </div>
-
-      {/* The night lake fills the space under the list, edge to edge like a footer. */}
-      <PixelScape className="relative -mx-4 -mb-6 mt-auto h-64 shrink-0 [mask-image:linear-gradient(to_bottom,transparent_0%,black_40%)] sm:-mx-6 sm:h-80 lg:-mx-8" />
 
       <ConfirmDialog
         open={!!pendingDelete}

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Menu, X } from "lucide-react";
 
-import { IconButton } from "../ui";
+import { IconButton, PixelScape, PixelStars } from "../ui";
 import Sidebar, { Logo } from "./Sidebar";
 
 const BORDER = "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900";
@@ -24,12 +24,16 @@ export default function AppShell({ page, system, error, children }) {
         <Sidebar page={page} system={system} error={error} rail />
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative isolate flex min-w-0 flex-1 flex-col">
+        {/* Dark themes: a starfield behind the whole page, down to the landscape's sky. */}
+        <PixelStars className="absolute inset-0 -z-10" />
         <header className={`sticky top-0 z-10 flex h-14 items-center gap-2 border-b px-3 sm:hidden ${BORDER}`}>
           <IconButton icon={Menu} label="Open menu" onClick={() => drawer.current?.showModal()} />
           <Logo />
         </header>
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        {/* The lake landscape closes every page, its sky fading into the page above. */}
+        <PixelScape className="relative h-56 shrink-0 [mask-image:linear-gradient(to_bottom,transparent_0%,black_40%)] sm:h-72" />
       </div>
 
       {/* Native modal <dialog>: focus trap, Esc to close and an inert page behind it for free. */}
