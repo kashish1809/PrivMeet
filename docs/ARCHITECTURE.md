@@ -178,3 +178,25 @@ erDiagram
   - Settings values: each key is type- and range-checked.
 - **What leaves the machine:** nothing with the default Ollama provider, apart from downloading images and models. With a cloud provider chosen in Settings (after a warning), the transcript text of each summary and question goes to it. Audio never does.
 - **Desktop app:** the Tauri shell grants microphone and camera only to the page on `127.0.0.1:8000`, and the app page gets no Tauri API.
+
+## Deployment modes
+
+| Mode | Command | What differs |
+|---|---|---|
+| Docker, CPU | `docker compose up -d`, or `scripts/privmeet.sh up` | The normal install. `web` and `worker` pull `ghcr.io/kashish1809/privmeet:${PRIVMEET_VERSION:-latest}` |
+| Docker, GPU | `docker compose -f compose.yml -f compose.gpu.yml up -d` | Adds the NVIDIA device reservations for `worker` and `ollama`; the GPU image carries the CUDA runtime. The launchers add it on their own when `nvidia-smi` answers |
+| Local development | `runserver` + Vite | `CELERY_EAGER=1` runs the pipeline in the web process, SQLite instead of Postgres, no Redis and no worker |
+| Desktop app | Tauri 2 shell | Bundles `compose.yml` and `compose.gpu.yml`, starts the stack, then opens `127.0.0.1:8000` in the system webview |
+
+Sources are built into the image when there is no published tag: `docker compose up --build`. The desktop app does not bundle a second copy of the UI; it is the same Django app in another window, which is why it grants the webview microphone and camera access instead of recording natively.
+
+## Known limits
+
+Deliberate choices, each with a comment in the code or a task that lifts it:
+
+- Retrieval for long transcripts is keyword full-text search, not embeddings, so a question phrased with words the meeting never used can miss. Upgrade path: pgvector with an embedding model, only if recall proves poor.
+- One job at a time is the point of the design, so a second meeting waits in `queued`, with no estimate of when it starts.
+- A meeting that fails is reprocessed from the start with Retry; the pipeline has no resume-from-stage.
+- No transcription while recording: the transcript appears once the recording stops and has been processed.
+- SQLite is a development fallback. Search degrades to `LIKE` and is not ranked.
+- An upload is a single multipart request capped at `MAX_UPLOAD_MB` (2 GB by default), so very long recordings are better compressed before upload.
