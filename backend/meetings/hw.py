@@ -20,12 +20,32 @@ TIERS = {
 
 
 def total_ram_gb(path="/proc/meminfo"):
+    """Total RAM in GB. /proc/meminfo in the Linux containers; the OS API on a local Windows or
+    macOS run, where it used to report 0 and always picked the low tier."""
     try:
         with open(path) as f:
             for line in f:
                 if line.startswith("MemTotal:"):
                     return int(line.split()[1]) / 1024**2
     except OSError:
+        pass
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class MemoryStatus(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong)] + [
+                    (n, ctypes.c_ulonglong)
+                    for n in ("total", "avail", "page_total", "page_avail", "virt_total", "virt_avail", "ext")
+                ]
+
+            status = MemoryStatus()
+            status.dwLength = ctypes.sizeof(status)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return status.total / 1024**3
+        else:
+            return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1024**3
+    except (AttributeError, OSError, ValueError):
         pass
     return 0.0
 
