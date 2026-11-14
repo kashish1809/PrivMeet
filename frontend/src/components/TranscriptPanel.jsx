@@ -17,7 +17,13 @@ export function highlighted(text, query) {
     const i = lower.indexOf(needle, at);
     if (i === -1) break;
     if (i > at) parts.push(text.slice(at, i));
-    parts.push(<mark key={i} className="rounded bg-amber-200/70 text-inherit dark:bg-amber-500/30">{text.slice(i, i + needle.length)}</mark>);
+    // primary-*, never amber-*: the theme remap (R1.1) only knows zinc, primary and the
+    // Badge tones, so a fixed amber highlight would be the one thing that ignores the theme.
+    parts.push(
+      <mark key={i} className="rounded bg-primary-200/70 text-inherit dark:bg-primary-500/30">
+        {text.slice(i, i + needle.length)}
+      </mark>,
+    );
     at = i + needle.length;
   }
   if (!parts.length) return text;
@@ -142,7 +148,7 @@ export default function TranscriptPanel({ meeting, startAt = 0 }) {
       </audio>
 
       <ol
-        className="max-h-[32rem] space-y-0.5 overflow-y-auto rounded-xl border border-zinc-200 p-1 dark:border-zinc-800"
+        className="max-h-[min(32rem,70vh)] space-y-0.5 overflow-y-auto rounded-xl border border-zinc-200 p-1 dark:border-zinc-800"
         aria-label="Transcript"
       >
         {shown.map((s) => {
