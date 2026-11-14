@@ -17,7 +17,13 @@ export function highlighted(text, query) {
     const i = lower.indexOf(needle, at);
     if (i === -1) break;
     if (i > at) parts.push(text.slice(at, i));
-    parts.push(<mark key={i} className="rounded bg-amber-200/70 text-inherit dark:bg-amber-500/30">{text.slice(i, i + needle.length)}</mark>);
+    // primary-*, never amber-*: the theme remap (R1.1) only knows zinc, primary and the
+    // Badge tones, so a fixed amber highlight would be the one thing that ignores the theme.
+    parts.push(
+      <mark key={i} className="rounded bg-primary-200/70 text-inherit dark:bg-primary-500/30">
+        {text.slice(i, i + needle.length)}
+      </mark>,
+    );
     at = i + needle.length;
   }
   if (!parts.length) return text;
@@ -40,7 +46,8 @@ export function segmentAt(segments, time) {
  *
  * - The segment being played is highlighted and scrolled into view; "Follow playback"
  *   turns the scrolling off for someone reading further down.
- * - Clicking a line (or its timestamp) seeks there and starts playing.
+ * - Clicking a line (or its timestamp) seeks there and starts playing. Space plays and
+ *   pauses, unless the focus is somewhere that needs the key itself (a field, a button).
  * - The search box filters the list and highlights the matches in place; it does not
  *   hit the server, because the whole transcript is already in the meeting JSON.
  * - QABox sits under the list, and its [mm:ss] citations seek this same player.
@@ -75,6 +82,27 @@ export default function TranscriptPanel({ meeting, startAt = 0 }) {
     if (el.readyState >= 1) jump();
     else el.addEventListener("loadedmetadata", jump, { once: true });
   }, [startAt]);
+
+  // Space plays and pauses, the way every media page does. It has to stay out of the way of
+  // typing and of the native controls: a focused <input>, <button>, link, select or the
+  // <audio> element itself keeps the key.
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.code !== "Space" && e.key !== " ") return;
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target;
+      if (target instanceof Element && target.closest("input, textarea, select, button, a, audio, [contenteditable]")) {
+        return;
+      }
+      const el = audio.current;
+      if (!el) return;
+      e.preventDefault(); // otherwise the page scrolls as well
+      if (el.paused) el.play().catch(() => {});
+      else el.pause();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Keep the playing line in view, but never yank the list while the user scrolls it.
   useEffect(() => {
@@ -117,6 +145,9 @@ export default function TranscriptPanel({ meeting, startAt = 0 }) {
           className="min-w-48 flex-1"
         />
         <Toggle checked={follow} onChange={setFollow} label="Follow playback" />
+        <span className="hidden text-xs text-zinc-400 sm:inline dark:text-zinc-500">
+          Space plays and pauses
+        </span>
         {matches && (
           <p aria-live="polite" className="text-xs text-zinc-500 dark:text-zinc-400">
             {matches.length === segments.length
@@ -131,6 +162,8 @@ export default function TranscriptPanel({ meeting, startAt = 0 }) {
         controls
         preload="metadata"
         src={meetingAudioUrl(meeting.id)}
+        aria-label={`Recording of ${meeting.title}`}
+        aria-keyshortcuts="Space"
         className="w-full"
         onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
         onSeeked={(e) => setTime(e.currentTarget.currentTime)}
@@ -142,7 +175,7 @@ export default function TranscriptPanel({ meeting, startAt = 0 }) {
       </audio>
 
       <ol
-        className="max-h-[32rem] space-y-0.5 overflow-y-auto rounded-xl border border-zinc-200 p-1 dark:border-zinc-800"
+        className="max-h-[min(32rem,70vh)] space-y-0.5 overflow-y-auto rounded-xl border border-zinc-200 p-1 dark:border-zinc-800"
         aria-label="Transcript"
       >
         {shown.map((s) => {
