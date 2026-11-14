@@ -10,12 +10,16 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from . import hw, tasks
+from . import hw, settings_store, tasks
 from .models import Meeting, Question, Segment, mmss
 from .pipeline import audio
 from .search import search_segments
 
 ALLOWED_EXT = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac", ".mkv", ".mov"}
+
+# What this server supports beyond the v1 API; GET /api/system/ returns it so the frontend
+# shows a control only when its endpoint exists (docs/TASKS.md "Feature flags").
+FEATURES = ["settings"]
 
 
 def bad(msg, status=400):
@@ -212,8 +216,10 @@ def system(request):
     try:
         prof = json.loads(tasks.WORKER_PROFILE.read_text())
     except (OSError, ValueError):
-        prof = hw.profile()
-    return JsonResponse({k: prof[k] for k in ("tier", "whisper_model", "llm_model", "device", "diarize")})
+        prof = hw.base_profile()
+    prof = hw.apply_overrides(prof, settings_store.load())
+    data = {k: prof[k] for k in ("tier", "whisper_model", "llm_model", "device", "diarize")}
+    return JsonResponse({**data, "features": FEATURES})
 
 
 @ensure_csrf_cookie
