@@ -86,12 +86,17 @@ QA_PROMPT = ChatPromptTemplate.from_messages(
 )
 
 
+def ollama_url(prof):
+    """The server set in Settings, else OLLAMA_URL from the environment."""
+    return prof.get("ollama_url") or settings.OLLAMA_URL
+
+
 def chat(prof, json_mode=False, num_predict=None):
     from langchain_ollama import ChatOllama
 
     return ChatOllama(
         model=prof["llm_model"],
-        base_url=settings.OLLAMA_URL,
+        base_url=ollama_url(prof),
         num_ctx=prof["num_ctx"],
         num_predict=num_predict,
         keep_alive=prof["keep_alive"],
@@ -105,7 +110,7 @@ def ensure_model(prof):
     """Pull the tier's model on first use; a no-op when it is already present."""
     import ollama
 
-    ollama.Client(host=settings.OLLAMA_URL).pull(prof["llm_model"])
+    ollama.Client(host=ollama_url(prof)).pull(prof["llm_model"])
 
 
 def input_chars(prof, reply_tokens):
