@@ -5,6 +5,7 @@
 //! in [`backend`], then navigates to the app served on 127.0.0.1:8000.
 
 mod backend;
+mod media;
 
 use tauri::Manager;
 
@@ -27,6 +28,12 @@ pub fn run() {
             backend::set_settings,
             backend::open_link,
         ])
+        // The Record / Live screen needs the mic (and the camera, when it is on)
+        // inside the window; media.rs grants that to 127.0.0.1:8000 only.
+        .setup(|app| {
+            media::install(app.handle());
+            Ok(())
+        })
         // Quitting stops the containers unless "keep running in background" is on.
         // `prevent_close` keeps the window up while `docker compose down` runs, so the
         // user sees the app still working instead of a window that vanishes mid-stop.
