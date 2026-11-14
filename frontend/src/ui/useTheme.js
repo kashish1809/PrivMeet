@@ -49,3 +49,38 @@ export function useTheme() {
 
   return [theme, (next) => setTheme(normalizeTheme(next))];
 }
+
+const FONT_KEY = "font";
+/** The two app fonts. "pixel" (Monocraft) is the default; "normal" is the regular sans font. */
+export const FONTS = [
+  { id: "pixel", name: "Pixel", caption: "Retro pixel letters, the PrivMeet look." },
+  { id: "normal", name: "Normal", caption: "A regular sans font, easier for long transcripts." },
+];
+
+function storedFont() {
+  try {
+    return localStorage.getItem(FONT_KEY) === "normal" ? "normal" : "pixel";
+  } catch {
+    return "pixel";
+  }
+}
+
+/** Set <html data-font>; theme.css swaps the font variables for "normal". Call before rendering. */
+export function applyFont(font = storedFont()) {
+  const id = font === "normal" ? "normal" : "pixel";
+  document.documentElement.dataset.font = id;
+  return id;
+}
+
+export function useFont() {
+  const [font, setFont] = useState(storedFont);
+  useEffect(() => {
+    try {
+      localStorage.setItem(FONT_KEY, font);
+    } catch {
+      // private window: applies for this visit only
+    }
+    applyFont(font);
+  }, [font]);
+  return [font, (next) => setFont(next === "normal" ? "normal" : "pixel")];
+}
