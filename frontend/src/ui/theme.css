@@ -182,10 +182,19 @@ html[data-theme="slate"] {
     letter-spacing: 0.02em;
     color: var(--ink);
     background-color: var(--face);
-    /* pixel grain on the face, like the logo's texture: a 4x4 tile with two light and one
-       dark pixel, drawn over whatever colour the variant and theme give the face */
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4' shape-rendering='crispEdges'%3E%3Crect x='0' y='0' width='1' height='1' fill='%23fff' fill-opacity='.14'/%3E%3Crect x='2' y='2' width='1' height='1' fill='%23fff' fill-opacity='.09'/%3E%3Crect x='3' y='1' width='1' height='1' fill='%23000' fill-opacity='.10'/%3E%3C/svg%3E");
-    background-size: 4px 4px;
+    /* Textured like the logo: flat colour bands stepping from light at the top to deep at the
+       bottom, and two glint pixels in the top-right corner. All derived from the face colour,
+       so every variant and theme follows. */
+    --band-top: color-mix(in srgb, var(--face) 62%, var(--light));
+    --band-low: color-mix(in srgb, var(--face) 58%, var(--shade));
+    --glint: color-mix(in srgb, white 75%, var(--light));
+    background-image:
+      linear-gradient(var(--glint), var(--glint)),
+      linear-gradient(var(--glint), var(--glint)),
+      linear-gradient(to bottom, var(--band-top) 0 34%, var(--face) 34% 68%, var(--band-low) 68% 100%);
+    background-size: 2px 2px, 2px 2px, 100% 100%;
+    background-position: right 6px top 4px, right 8px top 6px, 0 0;
+    background-repeat: no-repeat;
     image-rendering: pixelated;
     text-shadow: 1px 1px 0 var(--ink-shadow);
     /* notched corners: the 2px corner pixels are cut, like the logo tile */
@@ -202,8 +211,9 @@ html[data-theme="slate"] {
     cursor: pointer;
     user-select: none;
   }
-  .pm-btn:hover:not(:disabled) { background-color: var(--face-hover); }
+  .pm-btn:hover:not(:disabled) { --face: var(--face-hover); }
   .pm-btn:active:not(:disabled) {
+    --glint: transparent;
     transform: translateY(2px);
     box-shadow:
       inset 0 0 0 2px var(--edge),
