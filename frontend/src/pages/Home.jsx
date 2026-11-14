@@ -15,7 +15,7 @@ import {
 import { api, deleteMeeting, listMeetings, meetingExportUrl } from "../api";
 import { navigate } from "../App";
 import { isProcessing } from "../format";
-import { Badge, Button, Card, ConfirmDialog, EmptyState, Menu, cx, focusRing } from "../ui";
+import { Badge, Button, Card, ConfirmDialog, EmptyState, Menu, PixelScape, cx, focusRing } from "../ui";
 
 const POLL_MS = 2000;
 const RECENT = 5;
@@ -50,46 +50,21 @@ function StatusPill({ m }) {
   return <Badge status={m.status} />;
 }
 
-/** Decorative waves in the accent color, drawn behind the hero text. */
-function Waves() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 600 240"
-      preserveAspectRatio="none"
-      className="pointer-events-none absolute inset-y-0 right-0 h-full w-[75%] text-primary-500"
-    >
-      <defs>
-        <linearGradient id="home-wave" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="currentColor" stopOpacity="0" />
-          <stop offset="0.55" stopColor="currentColor" stopOpacity="0.55" />
-          <stop offset="1" stopColor="currentColor" stopOpacity="0.9" />
-        </linearGradient>
-      </defs>
-      {[0, 1, 2, 3, 4, 5].map((i) => (
-        <path
-          key={i}
-          d={`M0 ${200 - i * 6} C 150 ${210 - i * 14}, 260 ${120 + i * 10}, 380 ${110 - i * 8} S 560 ${10 + i * 12}, 600 ${20 + i * 8}`}
-          fill="none"
-          stroke="url(#home-wave)"
-          strokeWidth={i === 2 ? 3 : 1.25}
-          opacity={1 - i * 0.12}
-        />
-      ))}
-      <path d="M0 240 C 160 230, 260 150, 390 140 S 560 40, 600 50 L600 240 Z" fill="url(#home-wave)" opacity="0.18" />
-    </svg>
-  );
-}
-
 function Hero({ name }) {
   return (
-    <Card className="relative isolate overflow-hidden border-primary-200 bg-gradient-to-br from-primary-50 to-white dark:border-primary-900/60 dark:from-primary-950 dark:to-zinc-900">
-      <Waves />
-      <div className="relative flex min-h-56 flex-col justify-center gap-3 p-7 sm:p-9">
+    <Card className="relative isolate overflow-hidden border-primary-200 bg-primary-50 dark:border-primary-900/60 dark:bg-zinc-950">
+      {/* The landscape fills the card and fades out under the text on the left. */}
+      <PixelScape
+        scene="clouds"
+        seed={4}
+        orbX={0.84}
+        className="absolute inset-0 [mask-image:linear-gradient(to_right,transparent_0%,rgb(0_0_0/0.45)_35%,black_65%)]"
+      />
+      <div className="relative flex min-h-60 flex-col justify-center gap-3 p-7 sm:p-9">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl dark:text-white">
           {name ? `Welcome back, ${name}` : "Welcome back"}
         </h1>
-        <p className="max-w-md text-sm text-zinc-600 sm:text-base dark:text-zinc-300">
+        <p className="max-w-sm text-sm text-zinc-600 sm:text-base dark:text-zinc-300">
           Turn your meetings into structured, actionable insights.
         </p>
         <div className="mt-3">
