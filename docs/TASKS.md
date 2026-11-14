@@ -174,6 +174,9 @@ Read this with `docs/ui/mockup.webp` open. Hex values are sampled from the mocku
 | `templates` | R1.9 | `GET` and `POST /api/templates/`; `GET`, `PATCH` and `DELETE /api/templates/<id>/` → `{id, name, description, instructions, builtin, is_default}`. Meeting `template` (id). Upload accepts `template`. |
 | `models` | R1.11 | `GET /api/models/`, `POST /api/models/pull`, `DELETE /api/models/<name>` |
 | `exports`, `share-page` | R1.13 | `GET /api/meetings/<id>/export.<fmt>`, `fmt` = `md`, `txt`, `json`, `srt`, `vtt`; `html` is the share page |
+| `exports-office` | R1.13 | `GET /api/meetings/<id>/export.docx` and `export.odt` (the notes as a Word / OpenDocument file) |
+| `exports-ics` | R1.13 | `GET /api/meetings/<id>/export.ics`: action items with a resolvable due date as calendar to-dos; 404 when there are none |
+| `audio-exports` | R1.13 | `GET /api/meetings/<id>/audio.mp3` and `audio.opus` (the recording converted for sharing) |
 | `summarize` | R1.14 | `POST /api/meetings/<id>/summarize` with optional `{template}` |
 | `transcript-edit`, `speaker-merge` | R1.15 | Segments carry `id`. `PATCH /api/segments/<id>/` with `{text?, speaker?}`. `POST /api/meetings/<id>/speakers/merge` with `{from, to}`. |
 | `cancel` | R1.16 | `POST /api/meetings/<id>/cancel`. List rows add `queue_position` (int or null). |
@@ -650,11 +653,29 @@ Look and shell first, then backend features. None of these needs a Kashish task.
 - **Branch:** `v2/vinayak/R1.13-exports`
 - **Needs:** R1.7
 - **Files:** `backend/meetings/export.py` (new), `backend/meetings/views.py`, `backend/meetings/urls.py`, `docs/API.md`
-- **Do:** (flags `exports`, `share-page`)
+- **Do:** (flags `exports`, `share-page`, `exports-office`, `exports-ics`, `audio-exports`)
   - `GET /api/meetings/<id>/export.<fmt>`: `md` (as today), `txt`, `json` (the full meeting), `srt` and `vtt` (one cue per segment, with the speaker name).
   - `html`: one self-contained page with the title, date, summary, key points, action items, notes and transcript. Inline CSS only, no script, no outside request. Escape every value.
   - Move the Markdown builder into `export.py` and keep its output the same.
-- **Done when:** the SRT loads in VLC next to the audio, and the HTML page opens from disk with no network.
+  - **`docx` and `odt`**: the same content as the HTML page (title, date, participants, summary, key points, an action-items table, notes, transcript with `[mm:ss]` and speakers) as a Word and an OpenDocument Text file.
+    - Both formats are a zip of XML, so build them with `zipfile` and escaped XML strings. **No new dependency** (no python-docx, no odfpy).
+    - Keep the files minimal but valid: `[Content_Types].xml`, `word/document.xml`, `_rels` for docx; `mimetype` (stored first, uncompressed), `META-INF/manifest.xml`, `content.xml` for odt.
+  - **`ics`**: the action items as calendar to-dos (`VTODO`, RFC 5545), so they land in Google, Outlook or Apple Calendar.
+    - Only items whose `due` resolves to a date go in: a weekday ("Friday" is the next Friday after the meeting), "today", "tomorrow", "next week" (the Monday after) or a month and day ("Oct 30", "30 October", "the 14th"). The meeting's date is the anchor.
+    - Write `SUMMARY` (the task), `DUE` (date only), `DESCRIPTION` (owner, meeting title, the original due text) and a stable `UID` per item.
+    - Items that cannot be resolved ("end of quarter") are left out. The response header `X-Skipped-Items` gives their count.
+    - 404 with `{"error": "No action item has a date."}` when none can be resolved.
+  - **`audio.mp3` and `audio.opus`**: the original recording converted with ffmpeg (list args), mono.
+    - MP3 at 64 kb/s. Opus in Ogg at 32 kb/s: speech stays clear and the file is small to share.
+    - Cache the result next to the upload (removed with the meeting). Run the conversion with the same timeout rule as the pipeline.
+    - 404 when the audio was deleted (R1.19).
+  - Every download is named after the meeting title (`Content-Disposition`, same cleaning as `export.md`).
+- **Done when:**
+  - the SRT loads in VLC next to the audio;
+  - the HTML page opens from disk with no network;
+  - the `.docx` opens in Word and LibreOffice, and the `.odt` in LibreOffice and Google Docs, with no repair prompt;
+  - the `.ics` imports into Google Calendar with the right due dates;
+  - the MP3 and Opus play in the browser and in VLC.
 
 #### R1.14 · Regenerate summary
 - **Branch:** `v2/vinayak/R1.14-resummarize`
@@ -783,13 +804,31 @@ Meeting pages first, then the desktop app. None of these needs a Vinayak task. W
 #### R2.5 · Download menu
 - **Branch:** `v2/kashish/R2.5-download-menu`
 - **Needs:** T2.4, R2.1
-- **Files:** `frontend/src/components/DownloadMenu.jsx` (new), `frontend/src/pages/MeetingDetail.jsx`, `frontend/src/components/MeetingRow.jsx`
+- **Files:** `frontend/src/components/DownloadMenu.jsx` (new), `frontend/src/components/exportCsv.js` (new), `frontend/src/pages/MeetingDetail.jsx`, `frontend/src/components/MeetingRow.jsx`
 - **Do:**
-  - The "Download" button opens a Menu: Markdown (always) and Audio file (the original upload).
-  - With the `exports` flag also: Plain text, Subtitles (SRT), Subtitles (VTT), JSON.
+  - **The menu.** The "Download" button opens a Menu: Markdown (always) and Audio file (the original upload).
+  - **Server formats.** With the `exports` flag also: Plain text, Subtitles (SRT), Subtitles (VTT) and JSON.
+  - **PDF:** "PDF (print / save)" opens the print view from R2.15 (`printMeeting.js`), where the browser's "Save as PDF" makes the file. Hide the entry until R2.15 is on `main`.
+  - **Action items (CSV):** columns Task, Owner, Due, Done, Meeting, Date. One row per action item, for spreadsheets or a Jira/Trello import.
+  - **Transcript (CSV):** columns Start (`mm:ss`), End, Speaker (the saved name, else "Speaker N") and Text.
+  - **How the CSVs are built** (in `exportCsv.js`):
+    - In the browser from the meeting JSON: no request, no flag, no new dependency. They work against today's backend.
+    - RFC 4180 quoting (commas, quotes and newlines inside a field).
+    - A UTF-8 BOM, so Excel shows accents and other scripts correctly.
+    - Any cell that starts with `=`, `+`, `-` or `@` gets a leading `'`, so a spreadsheet never runs meeting text as a formula.
+  - **Grouping:** Notes (PDF, Word, OpenDocument, Markdown, Plain text, JSON), Transcript (SRT, VTT, CSV), Action items (CSV, Calendar), Audio (original, MP3, Opus). Empty groups are hidden: a meeting with no action items has no Action items group.
   - Hide "Audio file" when `has_audio === false`.
   - The list row's kebab uses the same component in place of its own export code.
-- **Done when:** every shown entry downloads a file with the meeting's title as its name.
+  - **Server formats added by R1.13** (each shown only with its flag):
+    - With `exports-office`: "Word (.docx)" and "OpenDocument (.odt)" in Notes.
+    - With `exports-ics`: "Calendar (.ics)" in Action items. Disable it with the hint "No action item has a date" when none of the items' due texts looks like a date. If the server answers 404, show its message.
+    - With `audio-exports`: "Audio (MP3)" and "Audio (Opus, smallest)" next to the original audio file. The conversion can take a few seconds: show a spinner on the entry.
+- **Done when:**
+  - every shown entry downloads a file with the meeting's title as its name;
+  - both CSVs open correctly in Excel and LibreOffice, including commas, quotes, line breaks and non-English text;
+  - a cell starting with `=` stays plain text;
+  - "PDF" opens the print dialog;
+  - without the R1.13 flags only the browser-made formats and the original audio show, and nothing errors.
 
 #### R2.6 · Share menu
 - **Branch:** `v2/kashish/R2.6-share-menu`
