@@ -2,9 +2,11 @@ import json
 import mimetypes
 import os
 import re
+from datetime import date
 from pathlib import Path
 
 from django.conf import settings
+from django.db.models import Count, Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -19,21 +21,75 @@ ALLOWED_EXT = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac"
 
 # What this server supports beyond the v1 API; GET /api/system/ returns it so the frontend
 # shows a control only when its endpoint exists (docs/TASKS.md "Feature flags").
-FEATURES = ["settings"]
+FEATURES = ["settings", "notes", "tags", "filters"]
+
+MAX_TAGS, MAX_TAG_LEN, MAX_NOTES = 10, 30, 20000
+PROCESSING = [
+    Meeting.Status.QUEUED, Meeting.Status.CONVERTING, Meeting.Status.TRANSCRIBING,
+    Meeting.Status.DIARIZING, Meeting.Status.SUMMARIZING,
+]
+# ?status= also takes the list page's filter names, so the UI does not have to know the stages.
+STATUS_GROUPS = {"processing": PROCESSING, "ready": [Meeting.Status.DONE]}
 
 
 def bad(msg, status=400):
     return JsonResponse({"error": msg}, status=status)
 
 
+class Invalid(ValueError):
+    """A request field failed validation; the message goes back as the 400 error."""
+
+
+def clean_tags(value):
+    """Tags from a JSON list, a JSON string of a list (multipart upload) or "a, b".
+    Trimmed, empty ones dropped, duplicates (ignoring case) dropped, max 10 x 30 chars."""
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("["):
+            try:
+                value = json.loads(text)
+            except json.JSONDecodeError:
+                raise Invalid("tags must be a list of strings.") from None
+        else:
+            value = text.split(",") if text else []
+    if not isinstance(value, list) or not all(isinstance(t, str) for t in value):
+        raise Invalid("tags must be a list of strings.")
+    tags, seen = [], set()
+    for t in (t.strip() for t in value):
+        if not t or t.lower() in seen:
+            continue
+        if len(t) > MAX_TAG_LEN:
+            raise Invalid(f"A tag can be at most {MAX_TAG_LEN} characters.")
+        seen.add(t.lower())
+        tags.append(t)
+    if len(tags) > MAX_TAGS:
+        raise Invalid(f"A meeting can have at most {MAX_TAGS} tags.")
+    return tags
+
+
+def clean_notes(value):
+    if not isinstance(value, str):
+        raise Invalid("notes must be a string.")
+    if len(value) > MAX_NOTES:
+        raise Invalid(f"Notes can be at most {MAX_NOTES} characters.")
+    return value
+
+
+def speaker_count(m):
+    """Distinct speakers; uses the list query's annotation when there is one."""
+    n = getattr(m, "speaker_count", None)
+    return n if n is not None else m.segments.exclude(speaker=None).values("speaker").distinct().count()
+
+
 def meeting_json(m, full=False):
     d = {
         "id": str(m.id), "title": m.title, "status": m.status, "progress": m.progress,
         "duration": m.duration, "created": m.created.isoformat(), "error": m.error,
+        "speakers": speaker_count(m), "has_summary": bool(m.summary.strip()), "tags": m.tags,
     }
     if full:
         d.update(
-            language=m.language, summary=m.summary, decisions=m.decisions,
+            notes=m.notes, language=m.language, summary=m.summary, decisions=m.decisions,
             action_items=m.action_items, speaker_names=m.speaker_names, tier_used=m.tier_used,
             segments=[
                 {"start": s.start, "end": s.end, "speaker": s.speaker, "text": s.text}
@@ -47,16 +103,55 @@ def meeting_json(m, full=False):
 def meetings(request):
     if request.method == "POST":
         return create_meeting(request)
+    try:
+        qs = filtered(Meeting.objects.all(), request.GET)
+    except Invalid as e:
+        return bad(str(e))
+    qs = qs.annotate(speaker_count=Count("segments__speaker", distinct=True))
+    tag = request.GET.get("tag", "").strip().lower()
     q = request.GET.get("q", "").strip()
     if not q:
-        return JsonResponse({"meetings": [meeting_json(m) for m in Meeting.objects.all()[:200]]})
+        rows = [m for m in qs[:200] if not tag or tag in (t.lower() for t in m.tags)]
+        return JsonResponse({"meetings": [meeting_json(m) for m in rows]})
     results = {}
-    for m in Meeting.objects.filter(title__icontains=q)[:50]:
+    text_match = Q(title__icontains=q) | Q(notes__icontains=q) | Q(summary__icontains=q)
+    for m in qs.filter(text_match)[:50]:
         results[m.id] = {**meeting_json(m), "hits": []}
-    for s in search_segments(Segment.objects.select_related("meeting"), q)[:100]:
+    ids = qs.values("id")
+    for s in search_segments(Segment.objects.filter(meeting__in=ids).select_related("meeting"), q)[:100]:
         r = results.setdefault(s.meeting_id, {**meeting_json(s.meeting), "hits": []})
         r["hits"].append({"start": s.start, "text": s.text})
-    return JsonResponse({"meetings": list(results.values())})
+    rows = [r for r in results.values() if not tag or tag in (t.lower() for t in r["tags"])]
+    return JsonResponse({"meetings": rows})
+
+
+def _day(value, name):
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise Invalid(f"{name} must be a date like 2026-10-28.") from None
+
+
+def filtered(qs, params):
+    """?status= (a Meeting status, "processing" or "ready"; comma list allowed) and
+    ?from= / ?to= (inclusive dates). ?tag= is applied by the caller: SQLite has no JSON
+    "contains" lookup and the list is capped at 200 rows anyway."""
+    status = [x.strip().lower() for x in params.get("status", "").split(",") if x.strip()]
+    if status:
+        wanted = set()
+        for x in status:
+            if x in STATUS_GROUPS:
+                wanted.update(STATUS_GROUPS[x])
+            elif x in Meeting.Status.values:
+                wanted.add(x)
+            else:
+                raise Invalid(f"Unknown status {x!r}.")
+        qs = qs.filter(status__in=wanted)
+    if params.get("from"):
+        qs = qs.filter(created__date__gte=_day(params["from"], "from"))
+    if params.get("to"):
+        qs = qs.filter(created__date__lte=_day(params["to"], "to"))
+    return qs
 
 
 def create_meeting(request):
@@ -80,7 +175,12 @@ def create_meeting(request):
     if f.size > limit:
         return bad(too_big, 413)
     title = (request.POST.get("title") or Path(f.name).stem)[:200]
-    m = Meeting.objects.create(title=title, file=f)
+    try:
+        notes = clean_notes(request.POST.get("notes", ""))
+        tags = clean_tags(request.POST.get("tags", ""))
+    except Invalid as e:
+        return bad(str(e))
+    m = Meeting.objects.create(title=title, file=f, notes=notes, tags=tags)
     duration = audio.probe(m.file.path)
     if duration is None:
         m.file.delete(save=False)
@@ -108,6 +208,13 @@ def meeting_detail(request, pk):
             return bad("Expected a JSON object.")
         if isinstance(data.get("title"), str) and data["title"].strip():
             m.title = data["title"].strip()[:200]
+        try:
+            if "notes" in data:
+                m.notes = clean_notes(data["notes"])
+            if "tags" in data:
+                m.tags = clean_tags(data["tags"])
+        except Invalid as e:
+            return bad(str(e))
         names = data.get("speaker_names")
         if isinstance(names, dict):
             m.speaker_names = {str(k): str(v)[:60] for k, v in names.items() if str(k).isdigit()}
@@ -235,6 +342,37 @@ def user_settings(request):
         return JsonResponse(settings_store.save(data))
     except settings_store.SettingsError as e:
         return bad(str(e))
+
+
+@require_GET
+def tags(request):
+    """Every tag in use with its meeting count, most used first."""
+    counts = {}
+    for tag_list in Meeting.objects.exclude(tags=[]).values_list("tags", flat=True):
+        for t in tag_list:
+            key = t.lower()
+            name, n = counts.get(key, (t, 0))
+            counts[key] = (name, n + 1)
+    rows = sorted(counts.values(), key=lambda x: (-x[1], x[0].lower()))
+    return JsonResponse({"tags": [{"name": n, "count": c} for n, c in rows]})
+
+
+@require_GET
+def action_items(request):
+    """Action items of every meeting, newest meeting first. ?open=1 leaves out done ones.
+    index is the item's position in its meeting, for a PATCH of that meeting's list."""
+    only_open = request.GET.get("open") == "1"
+    rows = []
+    for m in Meeting.objects.exclude(action_items=[]).only("id", "title", "created", "action_items"):
+        for i, item in enumerate(m.action_items):
+            if only_open and item.get("done"):
+                continue
+            rows.append({
+                "meeting": str(m.id), "meeting_title": m.title, "meeting_created": m.created.isoformat(),
+                "index": i, "task": item.get("task", ""), "owner": item.get("owner", ""),
+                "due": item.get("due", ""), "done": bool(item.get("done")),
+            })
+    return JsonResponse({"action_items": rows})
 
 
 @ensure_csrf_cookie
