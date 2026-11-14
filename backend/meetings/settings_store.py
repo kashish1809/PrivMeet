@@ -57,6 +57,14 @@ def _int(lo, hi):
     return check
 
 
+def _choice(*options):
+    def check(key, v):
+        if v not in options:
+            raise SettingsError(f"{key} must be one of: {', '.join(options)}.")
+        return v
+    return check
+
+
 def _bool(key, v):
     if not isinstance(v, bool):
         raise SettingsError(f"{key} must be true or false.")
@@ -72,7 +80,14 @@ SCHEMA = {
     "num_ctx": _int(512, 131072),
     "diarize": _bool,
     "cpu_threads": _int(1, 256),
+    # Cloud LLM providers (opt-in; Ollama is the default and the only fully local one).
+    "llm_provider": _choice("ollama", "openai", "openrouter", "anthropic", "custom"),
+    "api_base_url": _url,  # only for "custom"
+    "api_key": _text(300),
+    "api_model": _model,
 }
+# Never sent back to the browser: GET /api/settings/ says only whether one is saved.
+SECRET = ("api_key",)
 
 
 def path():
@@ -96,6 +111,14 @@ def load():
             except SettingsError:
                 pass  # hand-edited file with a bad value: ignore that key only
     return clean
+
+
+def public(data):
+    """Settings as the browser may see them: secrets replaced by <key>_set booleans."""
+    out = {k: v for k, v in data.items() if k not in SECRET}
+    for k in SECRET:
+        out[f"{k}_set"] = bool(data.get(k))
+    return out
 
 
 def validate(patch):
