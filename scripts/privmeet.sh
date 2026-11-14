@@ -19,11 +19,13 @@ usage: scripts/privmeet.sh <command> [service]
                     works, then open http://127.0.0.1:8000
   down              stop the stack; the data volumes are kept
   logs [service]    follow the logs
+  update            pull newer images, then restart what is running
+  status            show the containers and whether the app answers
 EOF
   exit "${1:-0}"
 }
 
-# compose.gpu.yml arrives with T1.5. Until it is on main this is CPU only.
+# Use the GPU override only when the file is there and an NVIDIA GPU answers.
 gpu_ok() {
   [[ -f compose.gpu.yml ]] && have nvidia-smi && nvidia-smi -L >/dev/null 2>&1
 }
@@ -106,10 +108,36 @@ cmd_logs() {
   compose logs -f --tail=100 "$@"
 }
 
+cmd_update() {
+  need_docker
+  ensure_env
+  compose pull
+  # Recreate only the containers whose image changed; a stopped stack stays stopped.
+  if [[ -n "$(compose ps -q)" ]]; then
+    compose up -d
+    echo "Updated and restarted."
+  else
+    echo "Images updated. Start with: scripts/privmeet.sh up"
+  fi
+}
+
+cmd_status() {
+  need_docker
+  ensure_env
+  compose ps
+  if have curl && curl -fsS "$URL/api/system/" >/dev/null 2>&1; then
+    echo "PrivMeet answers at $URL"
+  else
+    echo "PrivMeet does not answer at $URL"
+  fi
+}
+
 case "${1:-}" in
   up) shift; cmd_up "$@" ;;
   down) shift; cmd_down "$@" ;;
   logs) shift; cmd_logs "$@" ;;
+  update) shift; cmd_update "$@" ;;
+  status) shift; cmd_status "$@" ;;
   help | -h | --help) usage 0 ;;
   *) usage 1 ;;
 esac
