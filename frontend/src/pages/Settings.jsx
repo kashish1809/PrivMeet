@@ -309,6 +309,17 @@ function AiModel({ settings, system, onSaved }) {
     <Card>
       <CardHeader title="AI Model" icon={Cpu} />
       <div className="flex flex-col gap-5 px-5 pt-3 pb-5">
+        {system?.cuda_error && (
+          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>
+              <strong className="font-semibold">Transcribing on the CPU.</strong> A GPU is present but
+              could not be used: {system.cuda_error}. Runs fall back to the CPU, which is far slower, and
+              the hardware tier has dropped with it. Install the CUDA 12 cuBLAS and cuDNN 9 libraries,
+              then delete <code>data/cuda_broken.json</code> to try the GPU again.
+            </span>
+          </div>
+        )}
         <Select
           label="Model provider"
           value={form.llm_provider}
