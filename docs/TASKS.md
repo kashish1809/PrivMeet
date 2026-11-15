@@ -27,15 +27,31 @@ Days 1–5 are done and merged into `main` for all three people. Days 1 and 2 ta
 | Day 4 | T1.4 benchmarks (#32), U1.4 UI backend + Home (#33, #34) | T2.4 meeting detail (#27), A2.4 media permissions (#26) | T3.4 notes panels (#21), W3.4 packaging (#22) |
 | Day 5 | T1.5 GPU + CPU fallback (#36), U1.5 Settings (#37, #38) | T2.5 polish (#28), A2.5 branding (#29) | T3.5 README + architecture (#40), W3.5 launchers + release docs (#23, #39) |
 
-**v2 track:**
-- Done: **R1.7** (settings store, feature flags, API reference). It was merged with U1.4 (#33) because U1.4 needs it.
-- Done: **R2.8** (audio player). Built by Vinayak on `feat/link-llm-accounts`, not on the R2.8
-  branch, because the default `<audio>` controls looked wrong in the themed UI and the fix was
-  wanted at once. **Kashish: do not start R2.8.** `frontend/src/components/Player.jsx` exists and
-  `TranscriptPanel.jsx` uses it.
-- Partly done in other branches: R1.1 (the four theme presets, `useTheme` and `THEMES`) and R1.3 (`docs/ui/logo.svg`, `Logo.jsx` with `TAGLINE` and `SUBLINE`, the favicon; the four logo variants are still missing). The rest of R1.x and all of R2.x are open.
+### Finished tasks — do not start these again
 
-**Day 6:** not started. It starts only after every R task is merged or marked `(cut)` here.
+**This table is the one place to check before starting anything.** A task listed here is built
+and merged, whoever it was assigned to. Some were finished out of turn, on another person's
+branch, because something visible was broken; the reason is in the Where column. The task text
+further down is kept only as the specification each was built to, and its heading says DONE.
+
+| Task | Owner on paper | Where it was actually built | What exists now |
+|---|---|---|---|
+| Days 1–5, every A and B task | all three | the day branches above | merged into `main` |
+| **R1.4** sidebar v2 + routes | Vinayak | `feat/link-llm-accounts` | five sidebar items; `History.jsx` and `Tools.jsx` deleted; `#/history` and `#/tools/*` go to Home |
+| **R1.7** settings store, flags, API reference | Vinayak | merged with U1.4 (#33), which needs it | `settings_store.py`, `FEATURES`, `docs/API.md` |
+| **R2.8** audio player | Kashish | `feat/link-llm-accounts` | `frontend/src/components/Player.jsx`, used by `TranscriptPanel.jsx` |
+
+**Partly done, still open:** R1.1 (the four theme presets, `useTheme` and `THEMES` exist) and
+R1.3 (`docs/ui/logo.svg`, `Logo.jsx` with `TAGLINE` and `SUBLINE`, the favicon; the four logo
+variants are still missing). Everything else in R1.x and R2.x that is not in the table above is
+open.
+
+**When you finish a task, add a row here in the same commit**, and put `— **DONE**` on its
+heading below. A task that is dropped instead gets `(cut)` on its heading and a row here saying
+so. Doing this is what stops the next person rebuilding something that already exists.
+
+**Day 6:** not started. It starts only after every R task is merged, listed above, or marked
+`(cut)` here.
 
 **Added beyond the task list** (Vinayak, approved during review; all merged):
 - **Themes:** the four theme presets (Indigo, Teal, Amber, Slate) with a picker in Settings → Appearance.
@@ -84,6 +100,9 @@ still telling users "Coming in U1.5" after U1.5 had shipped.
 
 ## Rules for every task
 - Start a task only when its owner says "start <id>". AGENTS.md has the full protocol.
+- **First check "Finished tasks" above.** If the task is listed there, or its heading says
+  `— **DONE**`, it is built: do not start it, and say so instead. Tasks have been finished
+  early, by another person, or on a branch that is not the one named in the task.
 - Task A and task B of the same day are **separate branches and separate commits**. Every R task is its own branch too.
 - One task = one new branch, named exactly as below. Commit only: no push, no PR, no co-author or AI trailers.
 - **At least 4 commits per task**, one per logical step. Each message has a subject plus a body saying what changed, why and how it was checked (format in AGENTS.md step 7).
@@ -544,9 +563,8 @@ Look and shell first, then backend features. None of these needs a Kashish task.
   - Export `TAGLINE` ("Your meetings. Your data. Your control.") and `SUBLINE` ("Self-hosted AI meeting notes").
 - **Done when:** the four variations match the mockup side by side, and the favicon shows in the browser tab.
 
-#### R1.4 · Sidebar v2 + routes — **DONE**
-Finished on `feat/link-llm-accounts`; the stub pages are gone and the sidebar matches the
-mockup. The text below is kept as the specification it was built to.
+#### R1.4 · Sidebar v2 + routes — **DONE** (see "Finished tasks")
+Built; the text below is the specification it was built to.
 - **Branch:** `v2/vinayak/R1.4-sidebar-routes` (unused)
 - **Needs:** R1.3
 - **Files:** `frontend/src/layout/Sidebar.jsx`, `frontend/src/App.jsx`, `frontend/src/pages/{Templates,Models}.jsx` (stubs), delete `frontend/src/pages/{History,Tools}.jsx`
@@ -585,8 +603,9 @@ mockup. The text below is kept as the specification it was built to.
   - Other people keep plain Tailwind until this is on `main`, then swap in their next task.
 - **Done when:** each component renders in all four themes, is keyboard reachable and has a visible focus ring.
 
-#### R1.7 · Settings store, feature flags and API reference
-- **Branch:** `v2/vinayak/R1.7-settings-flags-api`
+#### R1.7 · Settings store, feature flags and API reference — **DONE** (see "Finished tasks")
+Built; the text below is the specification it was built to.
+- **Branch:** `v2/vinayak/R1.7-settings-flags-api` (merged with U1.4)
 - **Needs:** none
 - **Files:** `backend/meetings/settings_store.py` (new), `backend/meetings/hw.py`, `backend/meetings/views.py`, `backend/meetings/urls.py`, `docs/API.md` (new)
 - **Do:**
@@ -863,11 +882,8 @@ Meeting pages first, then the desktop app. None of these needs a Vinayak task. W
   - With the `transcript-edit` flag: edit a line's text in place and move a line to another speaker (PATCH `/api/segments/<id>/`). Show the server's error and restore the old text when the save fails.
 - **Done when:** filter and search work together on a 10-min meeting without lag.
 
-#### R2.8 · Audio player — **DONE** (do not start)
-Built by Vinayak on `feat/link-llm-accounts`, out of its own branch and out of turn: the
-browser's default controls cannot be themed, so they clashed with every theme, and the player
-was wanted straight away. `frontend/src/components/Player.jsx` is the component and
-`TranscriptPanel.jsx` renders it. What is below is kept as the specification it was built to.
+#### R2.8 · Audio player — **DONE** (see "Finished tasks")
+Built; the text below is the specification it was built to.
 - **Branch:** `v2/kashish/R2.8-player` (unused)
 - **Needs:** T2.4
 - **Files:** `frontend/src/components/Player.jsx` (new), `frontend/src/pages/MeetingDetail.jsx`
