@@ -27,6 +27,10 @@ BASE_URLS = {
 }
 PROVIDERS = ("ollama", "openai", "openrouter", "anthropic", "groq", "gemini", "custom")
 ANTHROPIC_VERSION = "2023-06-01"
+# Groq sits behind Cloudflare, which answers "403, error code: 1010" to urllib's default
+# Python-urllib/3.x agent before the request ever reaches the API. Naming the app fixes it and
+# is what providers expect. It says only what this program is: no user or machine details.
+USER_AGENT = "PrivMeet/1.0"
 TIMEOUT = 300  # seconds: a long map step on a slow provider
 
 
@@ -44,8 +48,11 @@ def base_url(prof):
 def _headers(prof):
     key = prof.get("api_key") or ""
     if prof.get("llm_provider") == "anthropic":
-        return {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION, "content-type": "application/json"}
-    h = {"content-type": "application/json"}
+        return {
+            "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION,
+            "content-type": "application/json", "user-agent": USER_AGENT,
+        }
+    h = {"content-type": "application/json", "user-agent": USER_AGENT}
     if key:
         h["authorization"] = f"Bearer {key}"
     if prof.get("llm_provider") == "openrouter":
