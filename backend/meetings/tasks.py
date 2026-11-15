@@ -52,7 +52,10 @@ def process_meeting(meeting_id):
         m.set_status(Meeting.Status.TRANSCRIBING, 2)
         segments, info = transcribe(wav, prof)
         # transcribe() switches prof to the CPU when CUDA failed, so this is the real device.
-        m.duration, m.language, m.device_used = info.duration, info.language, prof["device"]
+        from .pipeline.transcribe import uses_cloud
+
+        device = prof["llm_provider"][:8] if uses_cloud(prof) else prof["device"]
+        m.duration, m.language, m.device_used = info.duration, info.language, device
         m.save(update_fields=["duration", "language", "device_used"])
         batch, flushed = [], time.monotonic()
         for s in segments:

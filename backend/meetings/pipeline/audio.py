@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import subprocess
 
@@ -47,6 +48,41 @@ def probe(path):
         return decoded_duration(path)
     except (OSError, ValueError, subprocess.SubprocessError):
         return 0.0  # the file has an audio stream; the pipeline fixes the duration later
+
+
+def flac_chunks(wav, seconds, limit_bytes):
+    """Yield (offset_seconds, flac_bytes) for `wav`, cut into pieces of `seconds`.
+
+    FLAC is lossless and about half the size of the 16 kHz mono WAV the pipeline already
+    made, which is what a provider's upload limit needs; the provider downsamples to 16 kHz
+    anyway. Cutting on time keeps the arithmetic simple: a piece's segment timestamps are its
+    own plus the offset.
+    """
+    import tempfile
+
+    total = probe(wav) or 0.0
+    offset = 0.0
+    while offset < max(total, 0.1):
+        fd, piece = tempfile.mkstemp(suffix=".flac")
+        os.close(fd)
+        try:
+            subprocess.run(
+                ["ffmpeg", "-nostdin", "-y", "-v", "error", "-ss", f"{offset:.3f}", "-t", str(seconds),
+                 "-i", str(wav), "-ac", "1", "-ar", "16000", "-c:a", "flac", piece],
+                check=True, capture_output=True, timeout=3600,
+            )
+            blob = open(piece, "rb").read()
+        finally:
+            os.unlink(piece)
+        if not blob:
+            break
+        if len(blob) > limit_bytes:
+            raise ValueError(
+                f"A {int(seconds)} s piece of this recording is {len(blob) // 1024 // 1024} MB, "
+                "over what the provider accepts. Transcribe on this machine instead."
+            )
+        yield offset, blob
+        offset += seconds
 
 
 def to_wav(src, dst):

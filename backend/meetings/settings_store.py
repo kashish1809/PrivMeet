@@ -98,6 +98,10 @@ SCHEMA = {
     "groq_model": _model,
     "gemini_api_key": _text(300),
     "gemini_model": _model,
+    # Opt-in: send the audio to the provider instead of running Whisper here. Off by default,
+    # because it is the one setting that takes audio off this machine.
+    "cloud_transcribe": _bool,
+    "cloud_transcribe_model": _model,
 }
 # Never sent back to the browser: GET /api/settings/ says only whether one is saved.
 SECRET = (

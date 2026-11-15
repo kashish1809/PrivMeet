@@ -68,6 +68,11 @@ const CLOUD_NAME = {
 // Each provider keeps its own key (settings_store: <provider>_api_key), so linking one does
 // not unlink another. "custom" keeps using the single api_key.
 const LINKED = ["openai", "anthropic", "gemini", "groq", "openrouter"];
+// Only these expose /audio/transcriptions, so only they can take transcription off this
+// machine. Anthropic, Gemini and OpenRouter have no such endpoint.
+const AUDIO_PROVIDERS = ["groq", "openai", "custom"];
+const ASR_DEFAULT = { groq: "whisper-large-v3-turbo", openai: "whisper-1" };
+const IS_ASR = /whisper|transcrib|speech|stt/i;
 // Where the account's API key is created. An account is linked by pasting a key: no provider
 // lets another app spend a ChatGPT Plus, Claude Pro or Gemini Advanced subscription.
 // What to pick for someone who does not know model ids: the first match in order, against the
@@ -345,6 +350,8 @@ function AiModel({ settings, system, onSaved }) {
     api_base_url: settings.api_base_url || "",
     api_key: "",
     api_model: providerModel(settings, settings.llm_provider || "ollama"),
+    cloud_transcribe: settings.cloud_transcribe ?? false,
+    cloud_transcribe_model: settings.cloud_transcribe_model || "",
     num_ctx: settings.num_ctx ?? "",
     cpu_threads: settings.cpu_threads ?? "",
     diarize: settings.diarize ?? null,
@@ -375,6 +382,8 @@ function AiModel({ settings, system, onSaved }) {
       const keyField = linked ? `${form.llm_provider}_api_key` : "api_key";
       const modelField = linked ? `${form.llm_provider}_model` : "api_model";
       body[modelField] = blank(form.api_model.trim());
+      body.cloud_transcribe = canCloudAsr ? form.cloud_transcribe : false;
+      body.cloud_transcribe_model = canCloudAsr ? blank(form.cloud_transcribe_model.trim()) : null;
       body.api_base_url = form.llm_provider === "custom" ? blank(form.api_base_url.trim()) : null;
       if (form.api_key.trim()) body[keyField] = form.api_key.trim(); // empty keeps the saved key
     }
@@ -412,6 +421,8 @@ function AiModel({ settings, system, onSaved }) {
   const tierDefault = system?.llm_provider === "ollama" || !system ? system?.llm_model : "";
   const linkedNow = isLinked(settings, form.llm_provider);
   const keyPage = KEY_PAGE[form.llm_provider];
+  const canCloudAsr = AUDIO_PROVIDERS.includes(form.llm_provider);
+  const asrOffered = (test?.models || []).filter((m) => IS_ASR.test(m));
   const offered = (test?.models || []).filter((m) => !NOT_CHAT.test(m));
   const recommended = pickModel(test?.models, form.llm_provider);
   const modelOptions = offered.length
@@ -599,6 +610,56 @@ function AiModel({ settings, system, onSaved }) {
               </Button>
             </div>
             <Connection result={test} />
+
+            {canCloudAsr && (
+              <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                <Toggle
+                  checked={form.cloud_transcribe}
+                  onChange={(on) =>
+                    set({
+                      cloud_transcribe: on,
+                      cloud_transcribe_model:
+                        form.cloud_transcribe_model ||
+                        (on ? asrOffered[0] || ASR_DEFAULT[form.llm_provider] || "" : ""),
+                    })
+                  }
+                  label="Transcribe with this provider instead of on this machine"
+                />
+                <p className="pl-12 text-xs text-zinc-500 dark:text-zinc-400">
+                  Minutes of waiting become seconds, and a slow machine or one without a GPU can
+                  keep up. {CLOUD_NAME[form.llm_provider]} charges for it.
+                </p>
+                {form.cloud_transcribe && (
+                  <>
+                    <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                      <span>
+                        <strong className="font-semibold">The recording itself is uploaded.</strong> With
+                        this off, audio never leaves this machine. With it on, every meeting&apos;s audio
+                        is sent to {CLOUD_NAME[form.llm_provider]}. Speaker detection still runs here.
+                      </span>
+                    </div>
+                    {asrOffered.length ? (
+                      <Select
+                        label="Transcription model"
+                        value={form.cloud_transcribe_model}
+                        onChange={(e) => set({ cloud_transcribe_model: e.target.value })}
+                        options={asrOffered.map((m) => ({ value: m, label: m }))}
+                        hint="A speech model from this account."
+                      />
+                    ) : (
+                      <Input
+                        label="Transcription model"
+                        value={form.cloud_transcribe_model}
+                        placeholder={ASR_DEFAULT[form.llm_provider] || "the provider's speech model"}
+                        hint="Test Connection to list this account's speech models."
+                        onChange={(e) => set({ cloud_transcribe_model: e.target.value })}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
 

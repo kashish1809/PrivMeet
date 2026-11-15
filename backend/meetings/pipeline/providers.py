@@ -82,6 +82,61 @@ def _request(prof, path, body=None, timeout=TIMEOUT):
         raise ProviderError(f"Could not reach the provider: {getattr(e, 'reason', e)}") from None
 
 
+# Providers that transcribe audio over the OpenAI /audio/transcriptions route. Anthropic,
+# Gemini and OpenRouter have no such endpoint, so cloud transcription is not offered there.
+AUDIO_PROVIDERS = ("groq", "openai", "custom")
+# Free Groq and OpenAI accounts refuse an upload over 25 MB. 16 kHz mono FLAC runs about
+# 90 MB an hour, so long audio is sent in chunks and the timestamps are shifted back together.
+MAX_UPLOAD_BYTES = 24 * 1024 * 1024
+CHUNK_SECONDS = 600
+
+
+def _multipart(fields, filename, blob):
+    """An RFC 7578 body: text fields plus one file. urllib cannot build one, and an HTTP
+    library is not worth adding for a single request."""
+    import uuid
+
+    boundary = "----PrivMeet" + uuid.uuid4().hex
+    out = bytearray()
+    for name, value in fields.items():
+        if value is None or value == "":
+            continue
+        head = f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n"
+        out += (head + str(value) + "\r\n").encode()
+    head = (
+        f"--{boundary}\r\n"
+        f"Content-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n"
+        f"Content-Type: application/octet-stream\r\n\r\n"
+    )
+    out += head.encode() + blob + f"\r\n--{boundary}--\r\n".encode()
+    return bytes(out), "multipart/form-data; boundary=" + boundary
+
+
+def transcribe_chunk(prof, blob, filename, model, language=None, timeout=TIMEOUT):
+    """One /audio/transcriptions call. Returns the provider's verbose_json dict."""
+    body, content_type = _multipart(
+        {"model": model, "response_format": "verbose_json", "language": language or "",
+          "temperature": "0"},
+        filename, blob,
+    )
+    headers = {k: v for k, v in _headers(prof).items() if k != "content-type"}
+    headers["content-type"] = content_type
+    req = urllib.request.Request(base_url(prof) + "/audio/transcriptions", data=body, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:300]
+        try:
+            err = json.loads(detail).get("error")
+            detail = err.get("message") if isinstance(err, dict) else err or detail
+        except (ValueError, AttributeError):
+            pass
+        raise ProviderError(f"{e.code} from the provider: {detail}") from None
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise ProviderError(f"Could not reach the provider: {getattr(e, 'reason', e)}") from None
+
+
 def _split(messages):
     """LangChain messages -> (system text, [{"role", "content"}])."""
     system, chat = [], []
