@@ -377,7 +377,8 @@ def user_settings(request):
 def settings_test(request):
     """Try an LLM server before saving it. Body: any of the provider settings (unsaved values
     win over saved ones; an empty api_key keeps the saved key). Returns
-    {connected, provider, models, error}. Ollama is asked for /api/tags, others for /models."""
+    {connected, provider, models, expires_at, error}. Ollama is asked for /api/tags, others for
+    /models. expires_at is when the key stops working, when anything says so, else null."""
     import urllib.error
     import urllib.request
 
@@ -397,14 +398,22 @@ def settings_test(request):
             with urllib.request.urlopen(f"{url}/api/tags", timeout=5) as r:
                 tags = json.load(r)
             names = sorted(m.get("name") for m in tags.get("models", []) if m.get("name"))
-            return JsonResponse({"connected": True, "provider": provider, "models": names, "error": ""})
+            return JsonResponse(
+                {"connected": True, "provider": provider, "models": names, "expires_at": None, "error": ""}
+            )
         except (urllib.error.URLError, OSError, ValueError) as e:
             reason = getattr(e, "reason", e)
-            return JsonResponse({"connected": False, "provider": provider, "models": [], "error": f"Could not reach Ollama at {url}: {reason}"})
+            return JsonResponse({"connected": False, "provider": provider, "models": [], "expires_at": None,
+                                 "error": f"Could not reach Ollama at {url}: {reason}"})
     try:
-        return JsonResponse({"connected": True, "provider": provider, "models": providers.list_models(cfg), "error": ""})
+        models = providers.list_models(cfg)
     except providers.ProviderError as e:
-        return JsonResponse({"connected": False, "provider": provider, "models": [], "error": str(e)})
+        return JsonResponse({"connected": False, "provider": provider, "models": [], "expires_at": None, "error": str(e)})
+    # Only asked once the key is known to work, and never allowed to fail the test.
+    return JsonResponse(
+        {"connected": True, "provider": provider, "models": models,
+         "expires_at": providers.key_expiry(cfg), "error": ""}
+    )
 
 
 @require_GET
