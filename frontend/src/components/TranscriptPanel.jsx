@@ -4,6 +4,7 @@ import { FileText, SearchX } from "lucide-react";
 import { meetingAudioUrl } from "../api";
 import { duration, isProcessing } from "../format";
 import { Avatar, cx, EmptyState, SearchInput, Toggle, focusRing } from "../ui";
+import Player from "./Player";
 import QABox from "./QABox";
 
 /** Split text around the query so matches can be wrapped in <mark> without innerHTML. */
@@ -84,7 +85,7 @@ export default function TranscriptPanel({ meeting, startAt = 0 }) {
   }, [startAt]);
 
   // Space plays and pauses, the way every media page does. It has to stay out of the way of
-  // typing and of the native controls: a focused <input>, <button>, link, select or the
+  // typing and of the player's own controls: a focused <input>, <button>, link, select or the
   // <audio> element itself keeps the key.
   useEffect(() => {
     function onKeyDown(e) {
@@ -157,22 +158,14 @@ export default function TranscriptPanel({ meeting, startAt = 0 }) {
         )}
       </div>
 
-      <audio
-        ref={audio}
-        controls
-        preload="metadata"
+      <Player
+        audioRef={audio}
         src={meetingAudioUrl(meeting.id)}
-        aria-label={`Recording of ${meeting.title}`}
-        aria-keyshortcuts="Space"
-        className="w-full"
-        onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-        onSeeked={(e) => setTime(e.currentTarget.currentTime)}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
-      >
-        Your browser cannot play this recording.
-      </audio>
+        label={`Recording of ${meeting.title}`}
+        missing={meeting.has_audio === false}
+        onTime={setTime}
+        onPlayingChange={setPlaying}
+      />
 
       <ol
         className="max-h-[min(32rem,70vh)] space-y-0.5 overflow-y-auto rounded-xl border border-zinc-200 p-1 dark:border-zinc-800"

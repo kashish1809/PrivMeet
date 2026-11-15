@@ -29,6 +29,10 @@ Days 1–5 are done and merged into `main` for all three people. Days 1 and 2 ta
 
 **v2 track:**
 - Done: **R1.7** (settings store, feature flags, API reference). It was merged with U1.4 (#33) because U1.4 needs it.
+- Done: **R2.8** (audio player). Built by Vinayak on `feat/link-llm-accounts`, not on the R2.8
+  branch, because the default `<audio>` controls looked wrong in the themed UI and the fix was
+  wanted at once. **Kashish: do not start R2.8.** `frontend/src/components/Player.jsx` exists and
+  `TranscriptPanel.jsx` uses it.
 - Partly done in other branches: R1.1 (the four theme presets, `useTheme` and `THEMES`) and R1.3 (`docs/ui/logo.svg`, `Logo.jsx` with `TAGLINE` and `SUBLINE`, the favicon; the four logo variants are still missing). The rest of R1.x and all of R2.x are open.
 
 **Day 6:** not started. It starts only after every R task is merged or marked `(cut)` here.
@@ -853,8 +857,12 @@ Meeting pages first, then the desktop app. None of these needs a Vinayak task. W
   - With the `transcript-edit` flag: edit a line's text in place and move a line to another speaker (PATCH `/api/segments/<id>/`). Show the server's error and restore the old text when the save fails.
 - **Done when:** filter and search work together on a 10-min meeting without lag.
 
-#### R2.8 · Audio player
-- **Branch:** `v2/kashish/R2.8-player`
+#### R2.8 · Audio player — **DONE** (do not start)
+Built by Vinayak on `feat/link-llm-accounts`, out of its own branch and out of turn: the
+browser's default controls cannot be themed, so they clashed with every theme, and the player
+was wanted straight away. `frontend/src/components/Player.jsx` is the component and
+`TranscriptPanel.jsx` renders it. What is below is kept as the specification it was built to.
+- **Branch:** `v2/kashish/R2.8-player` (unused)
 - **Needs:** T2.4
 - **Files:** `frontend/src/components/Player.jsx` (new), `frontend/src/pages/MeetingDetail.jsx`
 - **Do:**
