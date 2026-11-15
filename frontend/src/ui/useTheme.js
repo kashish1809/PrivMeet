@@ -13,10 +13,11 @@ export const THEMES = [
   { id: "forest", name: "Pine", caption: "Deep evergreen, easy on the eyes after dark.", dark: true },
   { id: "dawn", name: "Dawn (Light)", caption: "Warm cream and coral, like the first hour of light.", dark: false },
   { id: "glacier", name: "Glacier (Light)", caption: "Icy blue and crisp white, cool and clear.", dark: false },
+  // The special one: its own renderer, not a recolour of the lake.
+  { id: "neon", name: "Neon Drive", caption: "A synthwave night: a striped sun and a glowing grid.", dark: true },
+  // Always last: the user's own theme closes the list, after every preset.
   // `dark` here is only a default: the custom theme's own mode decides (see applyTheme()).
   { id: "custom", name: "Custom", caption: "Your colours, your world. Tap the pencil to edit.", dark: true },
-  // The special one: its own renderer, not a recolour of the lake.
-  { id: "neon", name: "Neon Drive", caption: "A synthwave night: a striped sun, a glowing grid, palms.", dark: true },
 ];
 const IDS = new Set(THEMES.map((t) => t.id));
 
