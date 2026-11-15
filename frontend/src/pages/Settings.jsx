@@ -70,6 +70,30 @@ const CLOUD_NAME = {
 const LINKED = ["openai", "anthropic", "gemini", "groq", "openrouter"];
 // Where the account's API key is created. An account is linked by pasting a key: no provider
 // lets another app spend a ChatGPT Plus, Claude Pro or Gemini Advanced subscription.
+// What to pick for someone who does not know model ids: the first match in order, against the
+// list the account itself returned, so nothing is ever chosen that the account cannot use.
+// Chat models good at summarising, cheapest first where quality allows.
+const PREFERRED = {
+  openai: ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o", "gpt-4.1"],
+  anthropic: ["haiku", "sonnet"],
+  gemini: ["flash", "pro"],
+  groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "llama"],
+  openrouter: ["gpt-4o-mini", "llama-3.3-70b", "haiku", "flash"],
+};
+// Names that are not chat models, so never offer them as the one that writes the notes.
+const NOT_CHAT = /embed|whisper|tts|audio|image|vision-only|moderation|rerank|guard|dall-e|sora/i;
+
+/** The model to use when the user has not chosen one: a preferred id the account offers,
+ *  else its first chat model. Returns "" when the list has nothing usable. */
+function pickModel(models, provider) {
+  const chat = (models || []).filter((m) => !NOT_CHAT.test(m));
+  for (const want of PREFERRED[provider] || []) {
+    const hit = chat.find((m) => m.toLowerCase().includes(want.toLowerCase()));
+    if (hit) return hit;
+  }
+  return chat[0] || "";
+}
+
 const KEY_PAGE = {
   openai: ["platform.openai.com/api-keys", "https://platform.openai.com/api-keys"],
   anthropic: ["console.anthropic.com/settings/keys", "https://console.anthropic.com/settings/keys"],
@@ -361,7 +385,14 @@ function AiModel({ settings, system, onSaved }) {
     setTesting(true);
     try {
       const body = payload();
-      setTest(await api("/api/settings/test", { method: "POST", body: { ...body, llm_provider: form.llm_provider } }));
+      const result = await api("/api/settings/test", { method: "POST", body: { ...body, llm_provider: form.llm_provider } });
+      setTest(result);
+      // Most people do not know provider model ids, so choose one from what this account
+      // offers. Only when they have not picked one themselves.
+      if (result.connected && !form.api_model.trim()) {
+        const choice = pickModel(result.models, form.llm_provider);
+        if (choice) set({ api_model: choice });
+      }
     } catch (e) {
       setTest({ connected: false, models: [], error: e.message });
     } finally {
@@ -371,7 +402,9 @@ function AiModel({ settings, system, onSaved }) {
 
   // Ask Ollama for its models once, so the model list is there without a click.
   useEffect(() => {
-    if (!cloud) runTest();
+    // Ollama needs no key; a cloud provider is asked only when its account is already linked,
+    // so the model list is there without anyone pressing a button.
+    if (!cloud || isLinked(settings, form.llm_provider)) runTest();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.llm_provider]);
 
@@ -379,6 +412,17 @@ function AiModel({ settings, system, onSaved }) {
   const tierDefault = system?.llm_provider === "ollama" || !system ? system?.llm_model : "";
   const linkedNow = isLinked(settings, form.llm_provider);
   const keyPage = KEY_PAGE[form.llm_provider];
+  const offered = (test?.models || []).filter((m) => !NOT_CHAT.test(m));
+  const recommended = pickModel(test?.models, form.llm_provider);
+  const modelOptions = offered.length
+    ? [
+        ...offered.map((m) => ({ value: m, label: m === recommended ? `${m} (recommended)` : m })),
+        // A model saved earlier, or typed by hand, stays selectable even if it is not listed.
+        ...(form.api_model && !offered.includes(form.api_model)
+          ? [{ value: form.api_model, label: `${form.api_model} (not in this account's list)` }]
+          : []),
+      ]
+    : [];
 
   return (
     <Card>
@@ -522,18 +566,28 @@ function AiModel({ settings, system, onSaved }) {
             </div>
             <div className="flex flex-wrap items-end gap-3">
               <div className="min-w-64 flex-1">
-                <Input
-                  label="Model"
-                  value={form.api_model}
-                  list={listId}
-                  placeholder={test?.models?.length ? "Click to pick one, or type an id" : "The model id from your provider"}
-                  hint={
-                    test?.models?.length
-                      ? `Required. ${test.models.length} available: ${test.models.slice(0, 3).join(", ")}…`
-                      : "Required. Test Connection first to list this account's models."
-                  }
-                  onChange={(e) => set({ api_model: e.target.value })}
-                />
+                {modelOptions.length ? (
+                  <Select
+                    label="Model"
+                    value={form.api_model}
+                    onChange={(e) => set({ api_model: e.target.value })}
+                    options={modelOptions}
+                    hint={
+                      form.api_model === recommended
+                        ? "Chosen for you from this account. Change it if you prefer another."
+                        : "The model that writes summaries and answers questions."
+                    }
+                  />
+                ) : (
+                  <Input
+                    label="Model"
+                    value={form.api_model}
+                    list={listId}
+                    placeholder="The model id from your provider"
+                    hint="Paste your key and press Test Connection: the models of your account are then listed here."
+                    onChange={(e) => set({ api_model: e.target.value })}
+                  />
+                )}
                 <datalist id={listId}>
                   {(test?.models || []).map((m) => (
                     <option key={m} value={m} />
