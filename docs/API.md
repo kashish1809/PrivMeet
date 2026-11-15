@@ -43,10 +43,19 @@ Merges the keys you send into the saved settings and returns them all. Sending `
 | `num_ctx` | int | 512 to 131072 |
 | `diarize` | bool | |
 | `cpu_threads` | int | 1 to 256 |
-| `llm_provider` | string | `ollama` (default), `openai`, `openrouter`, `anthropic`, `custom` (flag `providers`) |
+| `llm_provider` | string | `ollama` (default), `openai`, `anthropic`, `gemini`, `groq`, `openrouter`, `custom` (flag `providers`) |
 | `api_base_url` | string | `http(s)://` URL of an OpenAI-compatible API, for `custom` |
 | `api_key` | string | at most 300 chars; **never returned**: GET and PATCH show `api_key_set: true/false` instead |
 | `api_model` | string | the provider's model id, `^[\w.\-/:]+$` |
+| `<provider>_api_key` | string | one linked account per provider: `openai_api_key`, `anthropic_api_key`, `gemini_api_key`, `groq_api_key`, `openrouter_api_key`. Same 300-char rule, and each is **never returned**: GET shows `<provider>_api_key_set` |
+| `<provider>_model` | string | that provider's own model id: `openai_model`, `anthropic_model`, `gemini_model`, `groq_model`, `openrouter_model` |
+
+The key and model of the provider in `llm_provider` win over the plain `api_key` / `api_model`,
+which stay for `custom` and for settings saved before per-provider accounts existed. So linking
+a Claude account and then a ChatGPT one keeps both, and switching provider loses neither.
+
+Set a key to `null` to unlink that account. A consumer subscription (ChatGPT Plus, Claude Pro,
+Gemini Advanced) cannot be used: every provider needs an API key of its own.
 
 With a cloud provider, the transcript text is sent to that provider for the summary and Q&A. Audio, Whisper and diarization always stay on this machine.
 
@@ -58,9 +67,17 @@ Tries an LLM server before you save it. The body takes any provider settings. Va
 - Cloud providers are asked for `/models`.
 
 ```json
-{"connected": true, "provider": "ollama", "models": ["qwen2.5:1.5b", "qwen2.5:3b"], "error": ""}
+{"connected": true, "provider": "ollama", "models": ["qwen2.5:1.5b", "qwen2.5:3b"],
+ "expires_at": null, "error": ""}
 ```
 When it fails, `connected` is false and `error` says why (e.g. `Could not reach Ollama at http://...`, or `401 from the provider: ...`).
+
+`expires_at` is when the key stops working, as an ISO timestamp, or `null` when nothing reports
+one, which is the usual answer. It is read only after the key has proved it works, and never
+fails the test:
+- a key that is a JWT is decoded locally for its `exp` claim, so nothing is sent anywhere;
+- otherwise the provider's key endpoint is asked, which only OpenRouter has (`GET /key` →
+  `expires_at`). OpenAI, Anthropic, Gemini and Groq publish nothing about their own keys.
 
 ## Meetings
 
