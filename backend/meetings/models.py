@@ -8,9 +8,14 @@ def upload_path(instance, filename):
     return f"uploads/{uuid.uuid4().hex}{Path(filename).suffix.lower()}"
 
 
-# A processing row untouched for this long has lost its worker (bug B4). Whisper flushes
-# progress every few seconds, so minutes of silence can only mean the process is gone.
-STALE_AFTER = 300
+# A processing row untouched for this long has lost its worker (bug B4).
+# Generous on purpose. Progress is written every few seconds *once segments flow*, but the
+# stretch before the first one is unbounded: the model is loaded (large-v3 is 2.9 GB), VAD
+# runs over the whole file, and the first segment is decoded. large-v3 on this CPU took 308 s
+# to get that far and a 300 s limit declared the healthy run dead, wiping its row. The check
+# exists to recover a worker that is gone, which nothing else will ever do, so waiting longer
+# costs nothing; a false positive destroys a run that was working.
+STALE_AFTER = 1200
 
 
 def mmss(seconds):
@@ -60,11 +65,14 @@ class Meeting(models.Model):
         # heartbeat is auto_now, so it only moves when it is in update_fields.
         self.save(update_fields=["status", "progress", "heartbeat"])
 
-    def is_stale(self, after=STALE_AFTER):
-        """A processing meeting whose worker has not reported for `after` seconds. The worker
-        was killed or crashed; nothing will ever move this row again."""
+    def is_stale(self, after=None):
+        """A processing meeting whose worker has not reported for long enough that it can only
+        be gone. The allowance is at least STALE_AFTER and never less than the recording's own
+        length, since a CPU run slower than real time is normal on a low-end machine."""
         from django.utils import timezone
 
+        if after is None:
+            after = max(STALE_AFTER, self.duration or 0)
         return self.status in PROCESSING and (timezone.now() - self.heartbeat).total_seconds() > after
 
     def speaker_label(self, speaker):
