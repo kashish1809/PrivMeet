@@ -1,28 +1,25 @@
-import { Calendar, ChevronRight, CircleDot, History, House, Settings } from "lucide-react";
+import { Calendar, ChevronRight, Cpu, House, LayoutTemplate, Settings } from "lucide-react";
 
-import { TOOLS } from "../pages/Tools";
 import { LogoMark, StatusDot, cx, focusRing } from "../ui";
 import { useRecording } from "./recording";
 
-// `page` is the route without "#/" and slashes: "", "meetings", "m/<id>", "tools/summarization".
+// `page` is the route without "#/" and slashes: "", "meetings", "m/<id>", "record".
+// Exactly the five items of the v2 mockup, with no group headings. Record / Live is reached
+// from Home and from New Meeting; History and the Tools pages are gone (docs/TASKS.md).
 const MAIN = [
   { href: "#/", label: "Home", icon: House, active: (p) => p === "" },
   {
     href: "#/meetings",
     label: "Meetings",
     icon: Calendar,
-    active: (p) => p === "meetings" || p === "new" || p.startsWith("m/"),
+    // Recording and every meeting screen belong to Meetings, so the pill never goes dark.
+    active: (p) => p === "meetings" || p === "new" || p === "record" || p.startsWith("m/"),
+    record: true,
   },
-  { href: "#/record", label: "Record / Live", icon: CircleDot, active: (p) => p === "record", record: true },
-  { href: "#/history", label: "History", icon: History, active: (p) => p === "history" },
+  { href: "#/templates", label: "Templates", icon: LayoutTemplate, active: (p) => p === "templates" },
+  { href: "#/models", label: "Models", icon: Cpu, active: (p) => p === "models" },
   { href: "#/settings", label: "Settings", icon: Settings, active: (p) => p === "settings" },
 ];
-const TOOL_ITEMS = Object.entries(TOOLS).map(([key, t]) => ({
-  href: `#/tools/${key}`,
-  label: t.title,
-  icon: t.icon,
-  active: (p) => p === `tools/${key}`,
-}));
 
 // In the desktop column (`rail`), text hides below 900 px and only icons stay; the phone drawer always shows text.
 const railText = (rail) => (rail ? "sr-only min-[900px]:not-sr-only" : "");
@@ -55,26 +52,6 @@ function NavItem({ item, page, rail, recording }) {
         <span className={railText(rail)}>{item.label}</span>
       </a>
     </li>
-  );
-}
-
-function NavGroup({ title, items, rail, ...rest }) {
-  return (
-    <div>
-      <h2
-        className={cx(
-          "mb-1 px-3 text-[11px] font-semibold tracking-wider text-zinc-400 uppercase dark:text-zinc-500",
-          railText(rail),
-        )}
-      >
-        {title}
-      </h2>
-      <ul className="flex flex-col gap-0.5">
-        {items.map((item) => (
-          <NavItem key={item.href} item={item} rail={rail} {...rest} />
-        ))}
-      </ul>
-    </div>
   );
 }
 
@@ -125,8 +102,11 @@ export default function Sidebar({ page, system, error, rail = false }) {
         <Logo rail={rail} />
       </div>
       <nav aria-label="Main" className="flex flex-1 flex-col gap-6 overflow-y-auto">
-        <NavGroup title="Main" items={MAIN} page={page} rail={rail} recording={recording} />
-        <NavGroup title="Tools" items={TOOL_ITEMS} page={page} rail={rail} recording={recording} />
+        <ul className="flex flex-col gap-0.5">
+          {MAIN.map((item) => (
+            <NavItem key={item.href} item={item} page={page} rail={rail} recording={recording} />
+          ))}
+        </ul>
       </nav>
       <LocalAI system={system} error={error} rail={rail} />
     </div>

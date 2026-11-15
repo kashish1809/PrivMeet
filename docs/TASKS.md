@@ -53,7 +53,11 @@ Days 1–5 are done and merged into `main` for all three people. Days 1 and 2 ta
 | Karthik | `docker.yml` published only `<version>-gpu`, so `compose.gpu.yml` with the default version had no image. | A second metadata step adds `latest-gpu` for real releases. |
 | Vinayak | Home's "View Templates" opened "Page not found". | `#/templates` and `#/models` stub pages (part of R1.4). |
 
-**Still open:** the rest of R1.4. The sidebar still shows History and Tools until it gets the five v2 items.
+**Done since:** the rest of **R1.4**. The sidebar is the five v2 items (Home, Meetings,
+Templates, Models, Settings) with no group headings, `History.jsx` and `Tools.jsx` are deleted,
+and `#/history` and `#/tools/*` send an old bookmark to Home. Built by Vinayak on
+`feat/link-llm-accounts` rather than on the R1.4 branch, because the two leftover tabs were
+still telling users "Coming in U1.5" after U1.5 had shipped.
 
 ### Checked on `main` (2026-11-14)
 - `npm run build` passes. Django `check` passes with no missing migrations. `bash -n scripts/privmeet.sh` passes, and the PowerShell parser accepts `privmeet.ps1`.
@@ -540,8 +544,10 @@ Look and shell first, then backend features. None of these needs a Kashish task.
   - Export `TAGLINE` ("Your meetings. Your data. Your control.") and `SUBLINE` ("Self-hosted AI meeting notes").
 - **Done when:** the four variations match the mockup side by side, and the favicon shows in the browser tab.
 
-#### R1.4 · Sidebar v2 + routes
-- **Branch:** `v2/vinayak/R1.4-sidebar-routes`
+#### R1.4 · Sidebar v2 + routes — **DONE**
+Finished on `feat/link-llm-accounts`; the stub pages are gone and the sidebar matches the
+mockup. The text below is kept as the specification it was built to.
+- **Branch:** `v2/vinayak/R1.4-sidebar-routes` (unused)
 - **Needs:** R1.3
 - **Files:** `frontend/src/layout/Sidebar.jsx`, `frontend/src/App.jsx`, `frontend/src/pages/{Templates,Models}.jsx` (stubs), delete `frontend/src/pages/{History,Tools}.jsx`
 - **Do:**
