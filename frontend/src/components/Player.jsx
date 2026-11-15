@@ -39,7 +39,16 @@ function remember(key, value) {
  * `audioRef` is the real <audio> element, so a caller keeps seeking with
  * `audioRef.current.currentTime = seconds`, as the transcript does.
  */
-export default function Player({ audioRef, src, label, missing, onTime, onPlayingChange, className }) {
+export default function Player({
+  audioRef,
+  src,
+  label,
+  missing,
+  durationHint = 0,
+  onTime,
+  onPlayingChange,
+  className,
+}) {
   const own = useRef(null);
   const el = audioRef || own;
   const bar = useRef(null);
@@ -84,14 +93,20 @@ export default function Player({ audioRef, src, label, missing, onTime, onPlayin
   const skip = (by) => {
     const node = el.current;
     if (!node) return;
-    node.currentTime = Math.min(Math.max(0, node.currentTime + by), node.duration || Infinity);
+    const cap = Number.isFinite(node.duration) ? node.duration : length || Infinity;
+    node.currentTime = Math.min(Math.max(0, node.currentTime + by), cap);
     sync(node);
   };
 
+  // A browser recording carries no duration in its header, so the element reports Infinity
+  // until the whole file has been fetched. The server already knows the real length, so it is
+  // used for the bar and for seeking; without it the bar sat at zero and never moved.
+  const length = total > 0 ? total : durationHint > 0 ? durationHint : 0;
+
   const seekTo = (fraction) => {
     const node = el.current;
-    if (!node || !Number.isFinite(node.duration)) return;
-    node.currentTime = Math.min(Math.max(0, fraction), 1) * node.duration;
+    if (!node || length <= 0) return;
+    node.currentTime = Math.min(Math.max(0, fraction), 1) * length;
     sync(node);
   };
 
@@ -108,8 +123,8 @@ export default function Player({ audioRef, src, label, missing, onTime, onPlayin
     );
   }
 
-  const pct = total ? (time / total) * 100 : 0;
-  const bufferedPct = total ? Math.min(100, (buffered / total) * 100) : 0;
+  const pct = length ? Math.min(100, (time / length) * 100) : 0;
+  const bufferedPct = length ? Math.min(100, (buffered / length) * 100) : 0;
 
   return (
     <div
@@ -160,7 +175,7 @@ export default function Player({ audioRef, src, label, missing, onTime, onPlayin
       </button>
 
       <span className="tabular-nums text-xs text-zinc-600 dark:text-zinc-300">
-        {clock(time)} <span className="text-zinc-400 dark:text-zinc-500">/ {clock(total)}</span>
+        {clock(time)} <span className="text-zinc-400 dark:text-zinc-500">/ {clock(length)}</span>
       </span>
 
       {/* The bar is the slider: it carries the value, the keys and the label. */}
@@ -170,9 +185,9 @@ export default function Player({ audioRef, src, label, missing, onTime, onPlayin
         tabIndex={0}
         aria-label="Seek"
         aria-valuemin={0}
-        aria-valuemax={Math.round(total) || 0}
+        aria-valuemax={Math.round(length) || 0}
         aria-valuenow={Math.round(time)}
-        aria-valuetext={`${clock(time)} of ${clock(total)}`}
+        aria-valuetext={`${clock(time)} of ${clock(length)}`}
         onPointerDown={onBarPointer}
         onKeyDown={(e) => {
           const step = { ArrowLeft: -5, ArrowRight: 5, ArrowDown: -5, ArrowUp: 5, PageDown: -60, PageUp: 60 }[e.key];

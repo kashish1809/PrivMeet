@@ -163,6 +163,7 @@ export default function TranscriptPanel({ meeting, startAt = 0 }) {
         src={meetingAudioUrl(meeting.id)}
         label={`Recording of ${meeting.title}`}
         missing={meeting.has_audio === false}
+        durationHint={meeting.duration}
         onTime={setTime}
         onPlayingChange={setPlaying}
       />
