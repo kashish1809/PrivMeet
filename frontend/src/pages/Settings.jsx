@@ -29,17 +29,19 @@ import {
   Button,
   Card,
   CardHeader,
-  FONTS,
-  Modal,
-  Input,
-  Select,
-  StatusDot,
-  THEMES,
-  Tabs,
-  Toggle,
+  customScales,
   cx,
   focusRing,
+  FONTS,
+  Input,
+  Modal,
+  Select,
+  StatusDot,
   tabPanelProps,
+  Tabs,
+  THEMES,
+  Toggle,
+  useCustomTheme,
   useFont,
   useTheme,
 } from "../ui";
@@ -119,6 +121,10 @@ const PREVIEW = {
   teal: ["#0E1D25", "#0D1D26", "#16303b", "#14B8A6"],
   amber: ["#1E1A1D", "#1D191D", "#2a2428", "#F59E0B"],
   slate: ["#EAECFC", "#E6E9FB", "#ffffff", "#6966E8"],
+  rose: ["#130c13", "#1e151d", "#2c202a", "#F43F78"],
+  forest: ["#0a140f", "#121f19", "#1c2d24", "#10B981"],
+  dawn: ["#fdf5ee", "#f8eadf", "#ffffff", "#F05A33"],
+  glacier: ["#edf5fa", "#e1edf5", "#ffffff", "#0EA5E9"],
 };
 
 function useSaver() {
@@ -812,8 +818,14 @@ function Recording() {
 
 // ---------------------------------------------------------------- Appearance
 
-function ThemeCard({ theme, selected, onPick }) {
-  const [page, side, card, accent] = PREVIEW[theme.id];
+/** The custom theme's swatches come from its own generated scales. */
+function customPreview(cfg) {
+  const { primary, zinc, mode } = customScales(cfg);
+  return mode === "dark" ? [zinc[950], zinc[900], zinc[800], primary[500]] : [zinc[50], zinc[100], "#ffffff", primary[500]];
+}
+
+function ThemeCard({ theme, selected, onPick, preview }) {
+  const [page, side, card, accent] = preview || PREVIEW[theme.id];
   return (
     <button
       type="button"
@@ -889,13 +901,20 @@ function FontCard({ font, selected, onPick }) {
 function Appearance() {
   const [theme, setTheme] = useTheme();
   const [font, setFont] = useFont();
+  const [custom] = useCustomTheme();
   return (
     <Card>
       <CardHeader title="Appearance" icon={Palette} />
       <div className="px-5 pt-3 pb-5">
         <div role="radiogroup" aria-label="Theme" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {THEMES.map((t) => (
-            <ThemeCard key={t.id} theme={t} selected={t.id === theme} onPick={() => setTheme(t.id)} />
+            <ThemeCard
+              key={t.id}
+              theme={t.id === "custom" ? { ...t, name: custom.name } : t}
+              preview={t.id === "custom" ? customPreview(custom) : undefined}
+              selected={t.id === theme}
+              onPick={() => setTheme(t.id)}
+            />
           ))}
         </div>
         <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">

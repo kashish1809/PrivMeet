@@ -1,6 +1,22 @@
 // Shared PrivMeet UI kit. Import from "../ui" (or "@/ui") instead of writing raw Tailwind controls.
 export { cx, focusRing } from "./cx";
-export { applyFont, applyTheme, FONTS, normalizeTheme, THEMES, useFont, useTheme } from "./useTheme";
+export {
+  applyFont,
+  applyTheme,
+  contrast,
+  CUSTOM_DEFAULT,
+  customScales,
+  FONTS,
+  normalizeTheme,
+  readShareCode,
+  SCENES,
+  shareCode,
+  surprise,
+  THEMES,
+  useCustomTheme,
+  useFont,
+  useTheme,
+} from "./useTheme";
 export { Button, IconButton } from "./Button";
 export { Card, CardHeader } from "./Card";
 export { Badge, StatusDot } from "./Badge";
