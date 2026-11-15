@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 
 import { api } from "../api";
+import CustomTheme from "./CustomTheme";
 import { KEYS, TITLE_FORMATS, readPrefs, writePref } from "../record/prefs";
 import {
   Badge,
@@ -917,6 +918,7 @@ function Appearance() {
             />
           ))}
         </div>
+        {theme === "custom" && <CustomTheme />}
         <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
           Each theme has its own landscape at the bottom of the page. Look closely: every one hides a few surprises.
         </p>

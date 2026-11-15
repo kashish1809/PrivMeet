@@ -82,7 +82,9 @@ export function hslToHex(h, s, l) {
 }
 
 // Lightness per step, shaped like Tailwind's own scales: airy at 50, deep at 950.
-const ACCENT_L = [97, 93.5, 86, 76, 65, 56, 48, 40, 33, 26, 16];
+// 300 and 400 sit a little high on purpose: they are the accent's text colours on a dark page,
+// and at 65 the default violet's links measured 4.3:1, just under WCAG AA.
+const ACCENT_L = [97, 93.5, 86, 78, 69, 56, 48, 40, 33, 26, 16];
 const NEUTRAL_L = [96.5, 92.5, 86.5, 76, 61, 46, 33, 24, 16.5, 10.5, 6];
 
 /** The two scales a theme is made of, from the custom settings. */
