@@ -131,6 +131,7 @@ const PREVIEW = {
   dawn: ["#fdf5ee", "#f8eadf", "#ffffff", "#F05A33"],
   glacier: ["#edf5fa", "#e1edf5", "#ffffff", "#0EA5E9"],
   neon: ["#0d0619", "#180f2b", "#261b40", "#FF2BC2"],
+  meadow: ["#f6f9f2", "#edf3e6", "#ffffff", "#26A947"],
 };
 
 function useSaver() {

@@ -183,6 +183,18 @@ html[data-theme="neon"] {
   --color-zinc-900: #180f2b; --color-zinc-950: #0d0619;
 }
 
+/* ---- Meadow, the special light theme: leaf green on a warm summer cream. Light. */
+html[data-theme="meadow"] {
+  --color-primary-50: #effcf1; --color-primary-100: #d9f7de; --color-primary-200: #b4eebf;
+  --color-primary-300: #7fdf92; --color-primary-400: #49c766; --color-primary-500: #26a947;
+  --color-primary-600: #198b37; --color-primary-700: #176d2f; --color-primary-800: #17562a;
+  --color-primary-900: #144725; --color-primary-950: #072812;
+  --color-zinc-50: #f6f9f2; --color-zinc-100: #edf3e6; --color-zinc-200: #dde8d2;
+  --color-zinc-300: #c2d3b3; --color-zinc-400: #9db18b; --color-zinc-500: #788c67;
+  --color-zinc-600: #58694b; --color-zinc-700: #435039; --color-zinc-800: #2d3727;
+  --color-zinc-900: #1c2318; --color-zinc-950: #0e130c;
+}
+
 /* Scene easter-egg motion: a lighthouse beam, a campfire, a paper plane. Off for reduced motion. */
 @keyframes pm-sweep {
   0%, 100% { transform: rotate(-18deg); opacity: 0.25; }

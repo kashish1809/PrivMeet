@@ -15,6 +15,7 @@ export const THEMES = [
   { id: "glacier", name: "Glacier (Light)", caption: "Icy blue and crisp white, cool and clear.", dark: false },
   // The special one: its own renderer, not a recolour of the lake.
   { id: "neon", name: "Neon Drive", caption: "A synthwave night: a striped sun and a glowing grid.", dark: true },
+  { id: "meadow", name: "Meadow (Light)", caption: "A summer afternoon: big clouds, green hills, wildflowers.", dark: false },
   // Always last: the user's own theme closes the list, after every preset.
   // `dark` here is only a default: the custom theme's own mode decides (see applyTheme()).
   { id: "custom", name: "Custom", caption: "Your colours, your world. Tap the pencil to edit.", dark: true },
@@ -35,6 +36,7 @@ export const SCENES = [
   { id: "dawn", name: "Balloon sunrise" },
   { id: "glacier", name: "Icebergs" },
   { id: "neon", name: "Neon Drive" },
+  { id: "meadow", name: "Summer meadow" },
 ];
 /** Home's hero text. The presets always use this; the custom theme can change it. */
 export const HERO_DEFAULT = {

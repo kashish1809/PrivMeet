@@ -439,6 +439,118 @@ function render(ctx, w, h, seed, opts, pal) {
 
   const lake = opts.scene === "lake";
 
+  // ---- Meadow, the special day world and Neon Drive's counterpart: a summer afternoon with
+  // towering cumulus over rolling green hills, a lone round tree, wildflowers in the grass and a
+  // few birds. Built only from shapes this renderer already draws well: puffs and smooth curves.
+  if (pal.biome === "meadow") {
+    const ov = { lanterns: [], blinks: [], sparks: [], beams: [], fires: [], kites: [], planes: [] };
+    const hex = (v) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    const SKY = [0x3d9be0, 0x5fb2ea, 0x8acbf2, 0xb6e0f8, 0xdff2fc].map(hex);
+    const CLOUD = [0x9db9d6, 0xc3d8ea, 0xe2edf7, 0xf3f8fd, 0xffffff].map(hex);
+    const LEAF = [0x24561d, 0x2f6e25, 0x438f31, 0x62ad45, 0x8dcb62].map(hex);
+    const FLOWERS = [0xff5d73, 0xffd23f, 0xffffff, 0xc084fc, 0xff8fb1].map(hex);
+    const horizon = Math.round(h * (lake ? 0.58 : 0.7));
+    const sunX = Math.round(w * (lake ? 0.82 : opts.orbX));
+    const sunY = Math.round(horizon * 0.22);
+    const sunR = Math.max(4, Math.round(h * 0.07));
+
+    // sky, deep blue at the top to pale at the horizon, dithered
+    for (let y = 0; y < h; y += 1) {
+      const f = Math.min(1, y / horizon) * (SKY.length - 1);
+      const k = Math.floor(f);
+      for (let x = 0; x < w; x += 1) put(x, y, f - k > dither(x, y) ? SKY[Math.min(SKY.length - 1, k + 1)] : SKY[k]);
+    }
+    // the sun: a bright disc in a wide soft glow
+    for (let y = Math.max(0, sunY - sunR * 4); y < sunY + sunR * 4; y += 1) {
+      for (let x = Math.max(0, sunX - sunR * 4); x < Math.min(w, sunX + sunR * 4); x += 1) {
+        const d = Math.hypot(x - sunX, y - sunY);
+        if (d <= sunR) put(x, y, d < sunR - 1 ? hex(0xfffbe6) : hex(0xffefb0));
+        else if (d < sunR * 4 && (1 - d / (sunR * 4)) * 0.6 > dither(x, y)) blend(x, y, hex(0xfff6d2), 0.35);
+      }
+    }
+    // towering cumulus: each a column of puffs, broad at the base, lit from the sun
+    const cloud = (cx, base, size) => {
+      const puffs = [];
+      for (let k = -2; k <= 2; k += 1) {
+        const r = size * (0.55 - Math.abs(k) * 0.08) * (0.9 + rand() * 0.25);
+        puffs.push({ c: cx + k * size * 0.42, cy: base - r * 0.3, r });
+      }
+      for (let k = 0; k < 3; k += 1) {
+        const r = size * (0.45 - k * 0.08);
+        puffs.push({ c: cx + (rand() - 0.5) * size * 0.5, cy: base - size * (0.45 + k * 0.38), r });
+      }
+      paintPuffs(puffs, CLOUD, sunX, null, Math.round(base));
+    };
+    const cloudY = Math.round(horizon * (lake ? 0.62 : 0.78));
+    const clouds = lake ? [[0.16, 0.2], [0.42, 0.26], [0.66, 0.17]] : [[0.62, 0.32], [0.98, 0.26]];
+    clouds.forEach(([fx, fs]) => cloud(Math.round(w * fx), cloudY + Math.round((rand() - 0.5) * 4), h * fs));
+
+    // rolling hills, far to near: hazy blue-green far away, saturated near
+    const hills = [
+      { base: 0.0, amp: 0.1, f: 0.021, tone: hex(0x9ccab6), haze: 0.5 },
+      { base: 0.08, amp: 0.09, f: 0.029, tone: hex(0x77b56f), haze: 0.25 },
+      { base: 0.18, amp: 0.08, f: 0.037, tone: hex(0x58a043), haze: 0.08 },
+      { base: 0.3, amp: 0.07, f: 0.045, tone: hex(0x438f31), haze: 0 },
+    ];
+    let treeAt = null;
+    hills.forEach((H, hi) => {
+      const ph = rand() * 6.28;
+      const ph2 = rand() * 6.28;
+      const lit = mix(H.tone, hex(0xe8f7b0), 0.35);
+      const shade = mix(H.tone, hex(0x1e3d1a), 0.3);
+      for (let x = 0; x < w; x += 1) {
+        // on the hero the heading sits on the left, so the land stays low there
+        const lean = lake ? 1 : 0.45 + 0.55 * Math.min(1, x / (w * 0.55));
+        const wave = Math.sin(x * H.f + ph) * 0.6 + Math.sin(x * H.f * 2.3 + ph2) * 0.4;
+        const top = Math.round(horizon + h * H.base - (h * H.amp * (1 + wave) * 0.5 + h * 0.03) * lean);
+        // the next hill forward hides the lower part of this one
+        for (let y = Math.max(0, top); y < h; y += 1) {
+          const d = y - top;
+          let c = d < 2 ? lit : d > 6 + hi * 2 && (d - 6) * 0.08 > dither(x, y) ? shade : H.tone;
+          if (H.haze) c = mix(c, SKY[4], H.haze);
+          put(x, y, c);
+        }
+        // the lone tree stands on the second-nearest hill, right of the middle
+        if (hi === 2 && x > w * (lake ? 0.58 : 0.7) && x < w * (lake ? 0.66 : 0.78) && (!treeAt || top < treeAt.y)) {
+          treeAt = { x, y: top };
+        }
+        // grass tufts and wildflowers on the nearest hill
+        if (hi === hills.length - 1) {
+          if (hash(x, 5, seed) > 0.55) put(x, top - 1, lit);
+          if (hash(x, 9, seed) > 0.86) {
+            const fy = top + 2 + Math.floor(hash(x, 11, seed) * (h - top - 3));
+            put(x, fy, FLOWERS[Math.floor(hash(x, 13, seed) * FLOWERS.length)]);
+          }
+        }
+      }
+    });
+    // the lone tree: a short trunk and a round crown of leafy puffs
+    if (treeAt) {
+      const tr = Math.max(4, Math.round(h * (lake ? 0.07 : 0.1)));
+      for (let y = treeAt.y - tr; y <= treeAt.y; y += 1) {
+        put(treeAt.x, y, hex(0x5b3a22));
+        put(treeAt.x + 1, y, hex(0x4a2e1a));
+      }
+      const crown = [];
+      for (let k = 0; k < 5; k += 1) {
+        crown.push({ c: treeAt.x + (k - 2) * tr * 0.42, cy: treeAt.y - tr - tr * 0.2 * (2 - Math.abs(k - 2)), r: tr * (0.55 + 0.1 * (2 - Math.abs(k - 2))) });
+      }
+      crown.push({ c: treeAt.x, cy: treeAt.y - tr * 1.75, r: tr * 0.6 });
+      paintPuffs(crown, LEAF, sunX, null);
+      // its shadow on the grass
+      for (let dx = -tr; dx <= tr; dx += 1) blend(treeAt.x + dx + 2, treeAt.y + 1, hex(0x1e3d1a), 0.35);
+    }
+    // birds: small dark V shapes high in the sky
+    const birds = lake ? [[0.3, 0.16], [0.34, 0.2], [0.55, 0.12]] : [[0.66, 0.14], [0.71, 0.2]];
+    birds.forEach(([fx, fy]) => {
+      const bx = Math.round(w * fx);
+      const by = Math.round(horizon * fy);
+      [[-2, -1], [-1, 0], [0, 1], [1, 0], [2, -1]].forEach(([dx, dy]) => put(bx + dx, by + dy, hex(0x3a4a5a)));
+    });
+    ctx.putImageData(img, 0, 0);
+    return ov;
+  }
+
   // ---- Neon Drive, the special world. Its own scene, not a recolour of the lake: a synthwave
   // night with a striped sun sinking behind neon mountains, a glowing grid running to the
   // horizon and faint CRT scanlines over everything. (Palms were tried and read as burnt
