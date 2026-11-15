@@ -8,6 +8,11 @@ def upload_path(instance, filename):
     return f"uploads/{uuid.uuid4().hex}{Path(filename).suffix.lower()}"
 
 
+# A processing row untouched for this long has lost its worker (bug B4). Whisper flushes
+# progress every few seconds, so minutes of silence can only mean the process is gone.
+STALE_AFTER = 300
+
+
 def mmss(seconds):
     s = int(seconds)
     return f"{s // 3600}:{s // 60 % 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60:02d}:{s % 60:02d}"
@@ -38,7 +43,12 @@ class Meeting(models.Model):
     notes = models.TextField(blank=True, default="")  # the user's own notes, not the AI summary
     tags = models.JSONField(default=list, blank=True)  # ["Development", "API"]: max 10, 30 chars each
     tier_used = models.CharField(max_length=8, blank=True)
+    # The device transcription really ran on ("cuda" or "cpu"), which is not always the one
+    # hw.profile() planned: a CUDA run can fall back to the CPU mid-job (bug B1).
+    device_used = models.CharField(max_length=8, blank=True)
     created = models.DateTimeField(auto_now_add=True)
+    # Touched by every set_status(), so a run whose worker died can be told from a live one.
+    heartbeat = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created"]
@@ -47,7 +57,15 @@ class Meeting(models.Model):
         self.status = status
         if progress is not None:
             self.progress = progress
-        self.save(update_fields=["status", "progress"])
+        # heartbeat is auto_now, so it only moves when it is in update_fields.
+        self.save(update_fields=["status", "progress", "heartbeat"])
+
+    def is_stale(self, after=STALE_AFTER):
+        """A processing meeting whose worker has not reported for `after` seconds. The worker
+        was killed or crashed; nothing will ever move this row again."""
+        from django.utils import timezone
+
+        return self.status in PROCESSING and (timezone.now() - self.heartbeat).total_seconds() > after
 
     def speaker_label(self, speaker):
         if speaker is None:
@@ -61,6 +79,13 @@ class Meeting(models.Model):
             who = self.speaker_label(s.speaker)
             lines.append(f"{prefix}{who + ': ' if who else ''}{s.text}")
         return "\n".join(lines)
+
+
+# The statuses that mean "a worker is working on it".
+PROCESSING = [
+    Meeting.Status.QUEUED, Meeting.Status.CONVERTING, Meeting.Status.TRANSCRIBING,
+    Meeting.Status.DIARIZING, Meeting.Status.SUMMARIZING,
+]
 
 
 class Segment(models.Model):
