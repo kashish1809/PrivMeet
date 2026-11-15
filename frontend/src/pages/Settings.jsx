@@ -40,6 +40,7 @@ import {
   Input,
   Modal,
   Select,
+  shown,
   StatusDot,
   tabPanelProps,
   Tabs,
@@ -918,7 +919,7 @@ function Appearance() {
               // button, and a button inside a button is invalid and breaks keyboard focus.
               <div key={t.id} className="relative">
                 <ThemeCard
-                  theme={{ ...t, name: custom.name }}
+                  theme={{ ...t, name: shown(custom.name, "Custom") }}
                   preview={customPreview(custom)}
                   selected={t.id === theme}
                   onPick={() => setTheme(t.id)}

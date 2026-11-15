@@ -11,6 +11,7 @@ export {
   readShareCode,
   SCENES,
   shareCode,
+  shown,
   surprise,
   THEMES,
   useCustomTheme,
@@ -29,4 +30,5 @@ export { Tabs, tabPanelProps } from "./Tabs";
 export { Menu } from "./Menu";
 export { Modal, ConfirmDialog } from "./Modal";
 export { PixelScape, PixelStars } from "./PixelScape";
+export { HERO_DEFAULT, HERO_LIMITS, heroTitle, useHeroText } from "./heroText";
 export { Logo, LogoMark, TAGLINE, SUBLINE } from "./Logo";

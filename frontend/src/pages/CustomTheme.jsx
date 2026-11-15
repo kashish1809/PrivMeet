@@ -9,11 +9,15 @@ import {
   customScales,
   cx,
   focusRing,
+  HERO_DEFAULT,
+  HERO_LIMITS,
+  heroTitle,
   Input,
   PixelScape,
   readShareCode,
   SCENES,
   shareCode,
+  shown,
   surprise,
   useCustomTheme,
 } from "../ui";
@@ -70,10 +74,10 @@ function Preview({ cfg }) {
       />
       <div className="relative flex h-full flex-col justify-center gap-2 p-5">
         <p className="text-[11px] font-semibold tracking-wider text-primary-700 uppercase dark:text-primary-300">
-          {cfg.name}
+          {shown(cfg.name, "Custom")}
         </p>
-        <p className="text-lg font-semibold text-zinc-900 dark:text-white">Welcome back</p>
-        <p className="max-w-[14rem] text-xs text-zinc-600 dark:text-zinc-300">Every colour here is yours.</p>
+        <p className="text-lg font-semibold text-zinc-900 dark:text-white">{heroTitle(shown(cfg.heroTitle, HERO_DEFAULT.title), "")}</p>
+        <p className="line-clamp-2 max-w-[15rem] text-xs text-zinc-600 dark:text-zinc-300">{shown(cfg.heroLine, HERO_DEFAULT.line)}</p>
         <span className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white">
           <Sparkles className="size-3.5" aria-hidden="true" /> New Meeting
         </span>
@@ -157,6 +161,31 @@ export default function CustomTheme({ onClose }) {
             onChange={(e) => update({ name: e.target.value })}
             hint="Shown on the theme card."
           />
+
+          <Section title="Home greeting" hint="The words on the big card on Home">
+            <Input
+              label="Title"
+              value={cfg.heroTitle}
+              maxLength={HERO_LIMITS.title}
+              onChange={(e) => update({ heroTitle: e.target.value })}
+              hint="{name} becomes your display name; with none set it drops out."
+            />
+            <Input
+              label="Line under it"
+              value={cfg.heroLine}
+              maxLength={HERO_LIMITS.line}
+              onChange={(e) => update({ heroLine: e.target.value })}
+            />
+            {(cfg.heroTitle !== HERO_DEFAULT.title || cfg.heroLine !== HERO_DEFAULT.line) && (
+              <button
+                type="button"
+                onClick={() => update({ heroTitle: HERO_DEFAULT.title, heroLine: HERO_DEFAULT.line })}
+                className={cx("w-fit text-xs text-primary-700 underline dark:text-primary-300", focusRing)}
+              >
+                Use the default words
+              </button>
+            )}
+          </Section>
 
           <Section title="Accent" hint={cfg.accent.toUpperCase()}>
             <div className="flex flex-wrap items-center gap-2">

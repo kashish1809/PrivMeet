@@ -32,7 +32,22 @@ export const SCENES = [
   { id: "dawn", name: "Balloon sunrise" },
   { id: "glacier", name: "Icebergs" },
 ];
-export const CUSTOM_DEFAULT = { name: "My theme", accent: "#8b5cf6", mode: "dark", neutralHue: null, tint: 45, scene: "indigo" };
+/** Home's hero text. The presets always use this; the custom theme can change it. */
+export const HERO_DEFAULT = {
+  title: "Welcome back, {name}",
+  line: "Turn your meetings into structured, actionable insights.",
+};
+export const HERO_LIMITS = { title: 60, line: 140 };
+export const CUSTOM_DEFAULT = {
+  name: "My theme",
+  accent: "#8b5cf6",
+  mode: "dark",
+  neutralHue: null,
+  tint: 45,
+  scene: "indigo",
+  heroTitle: HERO_DEFAULT.title,
+  heroLine: HERO_DEFAULT.line,
+};
 const STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -42,14 +57,26 @@ export function cleanCustom(raw) {
   const c = raw && typeof raw === "object" ? raw : {};
   const num = (v, lo, hi, d) => (v !== null && v !== "" && Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : d);
   return {
-    name: typeof c.name === "string" && c.name.trim() ? c.name.trim().slice(0, 30) : CUSTOM_DEFAULT.name,
+    name: text(c.name, 30, CUSTOM_DEFAULT.name),
     accent: HEX.test(c.accent) ? c.accent.toLowerCase() : CUSTOM_DEFAULT.accent,
     mode: c.mode === "light" ? "light" : "dark",
     neutralHue: num(c.neutralHue, 0, 360, null),
     tint: num(c.tint, 0, 100, CUSTOM_DEFAULT.tint),
     scene: SCENES.some((x) => x.id === c.scene) ? c.scene : CUSTOM_DEFAULT.scene,
+    heroTitle: text(c.heroTitle, HERO_LIMITS.title, HERO_DEFAULT.title),
+    heroLine: text(c.heroLine, HERO_LIMITS.line, HERO_DEFAULT.line),
   };
 }
+
+/** A text field, kept exactly as typed and only capped. Trimming or swapping in a default
+ *  here ran on every keystroke: a trailing space vanished, so "My theme" could not be typed,
+ *  and clearing a field snapped the default back in. Empty is handled where it is shown. */
+function text(v, limit, fallback) {
+  return typeof v === "string" ? v.slice(0, limit) : fallback;
+}
+
+/** What to show for a text field that may be empty or only spaces. */
+export const shown = (v, fallback) => (typeof v === "string" && v.trim() ? v.trim() : fallback);
 
 export function loadCustom() {
   try {
