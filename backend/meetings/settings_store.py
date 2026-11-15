@@ -85,9 +85,18 @@ SCHEMA = {
     "api_base_url": _url,  # only for "custom"
     "api_key": _text(300),
     "api_model": _model,
+    # One account per cloud provider, so linking Claude and then ChatGPT does not throw the
+    # first key away. The active provider's key and model win over the plain api_key/api_model
+    # above, which stay for "custom" and for settings saved before this existed.
+    "anthropic_api_key": _text(300),
+    "anthropic_model": _model,
+    "openai_api_key": _text(300),
+    "openai_model": _model,
+    "openrouter_api_key": _text(300),
+    "openrouter_model": _model,
 }
 # Never sent back to the browser: GET /api/settings/ says only whether one is saved.
-SECRET = ("api_key",)
+SECRET = ("api_key", "anthropic_api_key", "openai_api_key", "openrouter_api_key")
 
 
 def path():
