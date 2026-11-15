@@ -103,7 +103,7 @@ function useSaver() {
   return [state, run];
 }
 
-function SaveRow({ state, onSave, disabled }) {
+function SaveRow({ state, onSave, disabled, why }) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
       {state.error && (
@@ -111,10 +111,19 @@ function SaveRow({ state, onSave, disabled }) {
           {state.error}
         </p>
       )}
+      {/* A greyed-out button with no reason on screen is a dead end, so say what is missing. */}
+      {!state.error && disabled && why && (
+        <p className="mr-auto text-sm text-zinc-500 dark:text-zinc-400">{why}</p>
+      )}
       <span aria-live="polite" className="text-sm text-zinc-500 dark:text-zinc-400">
         {state.saved ? "Saved" : ""}
       </span>
-      <Button icon={state.saved ? Check : Save} onClick={onSave} disabled={disabled || state.busy}>
+      <Button
+        icon={state.saved ? Check : Save}
+        onClick={onSave}
+        disabled={disabled || state.busy}
+        title={disabled && why ? why : undefined}
+      >
         {state.busy ? "Saving…" : "Save Settings"}
       </Button>
     </div>
@@ -517,7 +526,12 @@ function AiModel({ settings, system, onSaved }) {
                   label="Model"
                   value={form.api_model}
                   list={listId}
-                  placeholder="The model id from your provider"
+                  placeholder={test?.models?.length ? "Click to pick one, or type an id" : "The model id from your provider"}
+                  hint={
+                    test?.models?.length
+                      ? `Required. ${test.models.length} available: ${test.models.slice(0, 3).join(", ")}…`
+                      : "Required. Test Connection first to list this account's models."
+                  }
                   onChange={(e) => set({ api_model: e.target.value })}
                 />
                 <datalist id={listId}>
@@ -601,6 +615,7 @@ function AiModel({ settings, system, onSaved }) {
         <SaveRow
           state={state}
           disabled={cloud && !form.api_model.trim()}
+          why={`Choose a model first${test?.models?.length ? ` — ${test.models.length} offered by this account` : ""}.`}
           onSave={() => save(async () => onSaved(await api("/api/settings/", { method: "PATCH", body: payload() })))}
         />
       </div>
