@@ -4,6 +4,7 @@ import { SearchX } from "lucide-react";
 
 import { getSystem } from "./api";
 import AppShell from "./layout/AppShell";
+import History from "./pages/History";
 import Home from "./pages/Home";
 import MeetingDetail from "./pages/MeetingDetail";
 import MeetingList from "./pages/MeetingList";
@@ -12,6 +13,7 @@ import NewMeeting from "./pages/NewMeeting";
 import RecordLive from "./pages/RecordLive";
 import Settings from "./pages/Settings";
 import Templates from "./pages/Templates";
+import Tools, { TOOLS } from "./pages/Tools";
 import { EmptyState } from "./ui";
 
 /** Go to a route. Hash routing only, so there is no server rewrite to worry about. */
@@ -45,13 +47,11 @@ function Page({ page }) {
   if (page === "settings") return <Settings />;
   if (page === "templates") return <Templates />;
   if (page === "models") return <Models />;
-  // v2 dropped History and the Tools pages; what they did now lives on the Meetings list, the
-  // meeting itself and Home (docs/TASKS.md, "Not in the sidebar any more"). An old bookmark
-  // goes to Home rather than to "Page not found".
-  if (page === "history" || page.startsWith("tools/")) {
-    window.location.hash = "#/";
-    return null;
-  }
+  // v2 moves History and the Tools screens onto the pages where the work happens, but the
+  // tasks that do it are not built yet, so each keeps a stub naming the task that delivers it.
+  if (page === "history") return <History />;
+  const tool = page.startsWith("tools/") && page.slice(6);
+  if (tool && TOOLS[tool]) return <Tools tool={tool} />;
   return (
     <EmptyState icon={SearchX} title="Page not found">
       <code className="font-mono">#/{page}</code> is not a PrivMeet page.{" "}

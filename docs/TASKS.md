@@ -37,7 +37,7 @@ further down is kept only as the specification each was built to, and its headin
 | Task | Owner on paper | Where it was actually built | What exists now |
 |---|---|---|---|
 | Days 1–5, every A and B task | all three | the day branches above | merged into `main` |
-| **R1.4** sidebar v2 + routes | Vinayak | `feat/link-llm-accounts` | five sidebar items; `History.jsx` and `Tools.jsx` deleted; `#/history` and `#/tools/*` go to Home |
+| **R1.4** sidebar v2 + routes | Vinayak | `feat/link-llm-accounts` | the five v2 items, no group heading on them, Meetings active for `record` and `m/<id>`. **Deviation:** History and the four Tools entries are kept under a "Planned" heading instead of being deleted, each a stub naming the task that replaces it (R2.11, R2.10, R2.12, U1.4, R2.5). Remove them when those tasks land. |
 | **R1.7** settings store, flags, API reference | Vinayak | merged with U1.4 (#33), which needs it | `settings_store.py`, `FEATURES`, `docs/API.md` |
 | **R2.8** audio player | Kashish | `feat/link-llm-accounts` | `frontend/src/components/Player.jsx`, used by `TranscriptPanel.jsx` |
 
@@ -572,7 +572,12 @@ Built; the text below is the specification it was built to.
   - Nav items, exactly: Home, Meetings, Templates, Models, Settings. No group headings.
   - The active item is a filled accent pill with white text. Meetings is active on `meetings`, `new`, `m/<id>` and `record`.
   - Bottom card: green dot, "Self-hosted", "Your data. Your server."
+    **As built:** that is what it says while everything is local. With a cloud provider or
+    cloud transcription turned on it shows an amber dot and names the provider, so the one line
+    in the window that talks about privacy is never the one telling a lie.
   - Routes: add `#/templates` and `#/models`. Remove `#/history` and `#/tools/*`; old links go to `#/`.
+    **As built:** those routes still answer, with a stub naming the task that replaces the
+    screen, because none of those tasks is built yet. Delete them as each one lands.
   - Keep the `navigate` and `useRoute` exports as they are.
   - Keep the icon rail below 900 px and the phone drawer.
 - **Done when:** every v2 route opens inside the shell, the sidebar matches the mockup, and Kashish's three pages still work.
