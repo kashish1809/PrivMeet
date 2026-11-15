@@ -32,7 +32,9 @@ def transcribe(wav, prof):
 
     On a CUDA profile, any error while loading the model or decoding the first segment (no
     driver, missing cuBLAS/cuDNN, out of GPU memory) is logged and the job retries once on the
-    CPU with int8. `prof` is switched to the CPU in place, so the LLM stage that follows sees it.
+    CPU with int8. `prof` is switched to the CPU in place, so the LLM stage that follows sees it,
+    and the failure is recorded so later runs stop planning for the GPU (bug B1). Read the
+    device the run really used from `prof["device"]` after this returns.
     """
     import soundfile as sf
 
@@ -47,6 +49,7 @@ def transcribe(wav, prof):
         if prof["device"] != "cuda":
             raise
         log.warning("CUDA transcription failed (%s); retrying on the CPU with int8", e)
+        hw.mark_cuda_broken(e)
         first, rest, info = _start(hw.cpu_fallback(prof), samples)
 
     def segments():

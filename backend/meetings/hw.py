@@ -81,6 +81,44 @@ def has_cuda():
         return False
 
 
+# Written once a CUDA run has actually failed, so later runs stop planning for a GPU that
+# ctranslate2 cannot use (bug B1: a GTX 1650 with no cublas64_12.dll reported device "cuda"
+# and then ground through large-v3-turbo on the CPU for 11 minutes).
+CUDA_BROKEN = "cuda_broken.json"
+
+
+def _marker():
+    from django.conf import settings
+
+    return settings.DATA_DIR / CUDA_BROKEN
+
+
+def cuda_error():
+    """The error of the last CUDA failure, or "" when the GPU has never failed."""
+    import json
+
+    try:
+        return str(json.loads(_marker().read_text()).get("error", ""))[:500]
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def mark_cuda_broken(error):
+    """Remember that CUDA does not work on this machine. Cleared by clear_cuda_broken()."""
+    import json
+
+    path = _marker()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"error": str(error)[:500]}))
+    detected.cache_clear()
+
+
+def clear_cuda_broken():
+    """Forget the failure, so a machine whose CUDA libraries were installed since tries again."""
+    _marker().unlink(missing_ok=True)
+    detected.cache_clear()
+
+
 def detect_tier(ram_gb, cuda):
     if cuda:
         return "high"
@@ -135,8 +173,12 @@ def apply_overrides(p, saved):
 
 @cache
 def detected():
-    """The hardware: read once per process, it does not change while the app runs."""
-    cuda = has_cuda()
+    """The hardware: read once per process, it does not change while the app runs.
+
+    A GPU that failed a real transcription counts as absent, so the tier drops to one whose
+    Whisper size is usable on the CPU instead of keeping a GPU-sized model there.
+    """
+    cuda = has_cuda() and not cuda_error()
     return total_ram_gb(), cuda, os.cpu_count() or 2, gpu_vram_gb() if cuda else None
 
 

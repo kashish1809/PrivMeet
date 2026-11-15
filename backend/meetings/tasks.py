@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 
 from celery import shared_task
 from celery.signals import worker_ready
@@ -17,6 +18,12 @@ from .pipeline.transcribe import transcribe
 from .search import excerpts
 
 log = logging.getLogger(__name__)
+
+# Progress is written after this many segments or this many seconds, whichever comes first.
+# Count alone left the meeting at 2 % for the first 20 segments, over 10 minutes on a slow
+# CPU run, which looks exactly like a hung worker (bug B2).
+PROGRESS_SEGMENTS = 20
+PROGRESS_SECONDS = 5
 
 WORKER_PROFILE = settings.DATA_DIR / "worker_profile.json"
 
@@ -44,14 +51,15 @@ def process_meeting(meeting_id):
 
         m.set_status(Meeting.Status.TRANSCRIBING, 2)
         segments, info = transcribe(wav, prof)
-        m.duration, m.language = info.duration, info.language
-        m.save(update_fields=["duration", "language"])
-        batch = []
+        # transcribe() switches prof to the CPU when CUDA failed, so this is the real device.
+        m.duration, m.language, m.device_used = info.duration, info.language, prof["device"]
+        m.save(update_fields=["duration", "language", "device_used"])
+        batch, flushed = [], time.monotonic()
         for s in segments:
             batch.append(Segment(meeting=m, start=s.start, end=s.end, text=s.text.strip()))
-            if len(batch) >= 20:
+            if len(batch) >= PROGRESS_SEGMENTS or time.monotonic() - flushed >= PROGRESS_SECONDS:
                 Segment.objects.bulk_create(batch)
-                batch = []
+                batch, flushed = [], time.monotonic()
                 m.set_status(Meeting.Status.TRANSCRIBING, 2 + int(68 * s.end / max(info.duration, 1)))
         Segment.objects.bulk_create(batch)
         del segments  # the model was freed when the generator finished; drop the last ref anyway
@@ -69,6 +77,7 @@ def process_meeting(meeting_id):
         notes = llm.summarize(
             m.transcript(), prof,
             on_progress=lambda f: m.set_status(Meeting.Status.SUMMARIZING, 80 + int(15 * f)),
+            language=m.language,
         )
         for k, v in notes.items():
             setattr(m, k, v)

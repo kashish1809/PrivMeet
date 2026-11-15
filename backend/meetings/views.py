@@ -1,4 +1,5 @@
 import json
+import logging
 import mimetypes
 import os
 import re
@@ -13,9 +14,11 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from . import hw, settings_store, tasks
-from .models import Meeting, Question, Segment, mmss
+from .models import PROCESSING, Meeting, Question, Segment, mmss
 from .pipeline import audio
 from .search import search_segments
+
+log = logging.getLogger(__name__)
 
 ALLOWED_EXT = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac", ".mkv", ".mov"}
 
@@ -24,10 +27,6 @@ ALLOWED_EXT = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac"
 FEATURES = ["settings", "notes", "tags", "filters", "providers"]
 
 MAX_TAGS, MAX_TAG_LEN, MAX_NOTES = 10, 30, 20000
-PROCESSING = [
-    Meeting.Status.QUEUED, Meeting.Status.CONVERTING, Meeting.Status.TRANSCRIBING,
-    Meeting.Status.DIARIZING, Meeting.Status.SUMMARIZING,
-]
 # ?status= also takes the list page's filter names, so the UI does not have to know the stages.
 STATUS_GROUPS = {"processing": PROCESSING, "ready": [Meeting.Status.DONE]}
 
@@ -75,6 +74,22 @@ def clean_notes(value):
     return value
 
 
+STALE_ERROR = (
+    "Processing stopped before it finished: the worker was killed or crashed. "
+    "Press Retry to run it again."
+)
+
+
+def reap(m):
+    """Turn a processing meeting whose worker is gone into a failed one, so the page offers
+    Retry instead of showing "transcribing" and a 409 forever (bug B4)."""
+    if m.is_stale():
+        log.warning("meeting %s stale in %s since %s, marking failed", m.pk, m.status, m.heartbeat)
+        m.error, m.status, m.progress = STALE_ERROR, Meeting.Status.FAILED, 0
+        m.save(update_fields=["error", "status", "progress", "heartbeat"])
+    return m
+
+
 def speaker_count(m):
     """Distinct speakers; uses the list query's annotation when there is one."""
     n = getattr(m, "speaker_count", None)
@@ -91,6 +106,7 @@ def meeting_json(m, full=False):
         d.update(
             notes=m.notes, language=m.language, summary=m.summary, decisions=m.decisions,
             action_items=m.action_items, speaker_names=m.speaker_names, tier_used=m.tier_used,
+            device_used=m.device_used,
             segments=[
                 {"start": s.start, "end": s.end, "speaker": s.speaker, "text": s.text}
                 for s in m.segments.all()
@@ -111,7 +127,7 @@ def meetings(request):
     tag = request.GET.get("tag", "").strip().lower()
     q = request.GET.get("q", "").strip()
     if not q:
-        rows = [m for m in qs[:200] if not tag or tag in (t.lower() for t in m.tags)]
+        rows = [reap(m) for m in qs[:200] if not tag or tag in (t.lower() for t in m.tags)]
         return JsonResponse({"meetings": [meeting_json(m) for m in rows]})
     results = {}
     text_match = Q(title__icontains=q) | Q(notes__icontains=q) | Q(summary__icontains=q)
@@ -194,7 +210,7 @@ def create_meeting(request):
 
 @require_http_methods(["GET", "PATCH", "DELETE"])
 def meeting_detail(request, pk):
-    m = get_object_or_404(Meeting, pk=pk)
+    m = reap(get_object_or_404(Meeting, pk=pk))
     if request.method == "DELETE":
         m.file.delete(save=False)
         m.delete()
@@ -231,9 +247,14 @@ def meeting_detail(request, pk):
 
 @require_POST
 def meeting_retry(request, pk):
+    """Run the pipeline again. A meeting whose worker died mid-run (no heartbeat for
+    STALE_AFTER seconds) is taken over instead of refused: before this, such a row stayed
+    "transcribing" forever and could only be cleared in the database (bug B4)."""
     m = get_object_or_404(Meeting, pk=pk)
-    if m.status not in (Meeting.Status.FAILED, Meeting.Status.DONE):
+    if m.status not in (Meeting.Status.FAILED, Meeting.Status.DONE) and not m.is_stale():
         return bad("Meeting is still processing.", 409)
+    if m.is_stale():
+        log.warning("retry takes over meeting %s, stale in %s since %s", m.pk, m.status, m.heartbeat)
     m.set_status(Meeting.Status.QUEUED, 0)
     tasks.process_meeting.delay(str(m.id))
     return JsonResponse(meeting_json(m))
@@ -328,6 +349,12 @@ def system(request):
     data = {k: prof[k] for k in ("tier", "whisper_model", "llm_model", "device", "diarize", "llm_provider")}
     if prof["llm_provider"] != "ollama":
         data["llm_model"] = prof.get("api_model") or ""  # the model that will write the notes
+    # A GPU that failed a real run: the device above is already "cpu", and cuda_error says why,
+    # so "GPU present but unusable" is visible instead of silent (bug B1).
+    error = hw.cuda_error()
+    if error:
+        data["device"] = "cpu"
+        data["cuda_error"] = error
     return JsonResponse({**data, "features": FEATURES})
 
 
