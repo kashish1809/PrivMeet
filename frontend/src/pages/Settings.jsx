@@ -54,12 +54,64 @@ const TABS = [
 // Where the notes are written. Ollama is the only one that keeps everything on this machine.
 const PROVIDERS = [
   { value: "ollama", label: "Ollama (on this machine)" },
-  { value: "openai", label: "OpenAI" },
+  { value: "openai", label: "ChatGPT (OpenAI)" },
+  { value: "anthropic", label: "Claude (Anthropic)" },
+  { value: "gemini", label: "Gemini (Google)" },
+  { value: "groq", label: "Groq" },
   { value: "openrouter", label: "OpenRouter" },
-  { value: "anthropic", label: "Anthropic" },
   { value: "custom", label: "Other OpenAI-compatible server" },
 ];
-const CLOUD_NAME = { openai: "OpenAI", openrouter: "OpenRouter", anthropic: "Anthropic", custom: "that server" };
+const CLOUD_NAME = {
+  openai: "OpenAI", openrouter: "OpenRouter", anthropic: "Anthropic", groq: "Groq",
+  gemini: "Google", custom: "that server",
+};
+// Each provider keeps its own key (settings_store: <provider>_api_key), so linking one does
+// not unlink another. "custom" keeps using the single api_key.
+const LINKED = ["openai", "anthropic", "gemini", "groq", "openrouter"];
+// Only these expose /audio/transcriptions, so only they can take transcription off this
+// machine. Anthropic, Gemini and OpenRouter have no such endpoint.
+const AUDIO_PROVIDERS = ["groq", "openai", "custom"];
+const ASR_DEFAULT = { groq: "whisper-large-v3-turbo", openai: "whisper-1" };
+const IS_ASR = /whisper|transcrib|speech|stt/i;
+// Where the account's API key is created. An account is linked by pasting a key: no provider
+// lets another app spend a ChatGPT Plus, Claude Pro or Gemini Advanced subscription.
+// What to pick for someone who does not know model ids: the first match in order, against the
+// list the account itself returned, so nothing is ever chosen that the account cannot use.
+// Chat models good at summarising, cheapest first where quality allows.
+const PREFERRED = {
+  openai: ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o", "gpt-4.1"],
+  anthropic: ["haiku", "sonnet"],
+  gemini: ["flash", "pro"],
+  groq: ["llama-3.3-70b-versatile", "gpt-oss-120b", "gpt-oss-20b", "llama-3.1-8b-instant", "qwen", "llama"],
+  openrouter: ["gpt-4o-mini", "llama-3.3-70b", "haiku", "flash"],
+};
+// Last resort when an account carries none of the names above: families known to follow
+// instructions in English. Without this the fallback was "whatever sorts first", which on a
+// Groq account with no Llama models chose allam-2-7b, an Arabic model, to write English notes.
+const FAMILIES = ["gpt-oss", "gpt-4", "gpt-5", "qwen", "llama", "mistral", "mixtral", "gemma", "instruct", "chat"];
+// Names that are not chat models, so never offer them as the one that writes the notes.
+// orpheus and playai are speech, prompt-guard and safeguard are classifiers.
+const NOT_CHAT =
+  /embed|whisper|tts|audio|image|vision-only|moderation|rerank|guard|dall-e|sora|orpheus|playai|speech/i;
+
+/** The model to use when the user has not chosen one: a preferred id the account offers,
+ *  else its first chat model. Returns "" when the list has nothing usable. */
+function pickModel(models, provider) {
+  const chat = (models || []).filter((m) => !NOT_CHAT.test(m));
+  for (const want of [...(PREFERRED[provider] || []), ...FAMILIES]) {
+    const hit = chat.find((m) => m.toLowerCase().includes(want.toLowerCase()));
+    if (hit) return hit;
+  }
+  return chat[0] || "";
+}
+
+const KEY_PAGE = {
+  openai: ["platform.openai.com/api-keys", "https://platform.openai.com/api-keys"],
+  anthropic: ["console.anthropic.com/settings/keys", "https://console.anthropic.com/settings/keys"],
+  gemini: ["aistudio.google.com/apikey", "https://aistudio.google.com/apikey"],
+  groq: ["console.groq.com/keys", "https://console.groq.com/keys"],
+  openrouter: ["openrouter.ai/keys", "https://openrouter.ai/keys"],
+};
 
 /** The swatches of each theme card: page, sidebar, card and accent, from the UI v2 spec. */
 const PREVIEW = {
@@ -86,7 +138,7 @@ function useSaver() {
   return [state, run];
 }
 
-function SaveRow({ state, onSave, disabled }) {
+function SaveRow({ state, onSave, disabled, why }) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
       {state.error && (
@@ -94,10 +146,19 @@ function SaveRow({ state, onSave, disabled }) {
           {state.error}
         </p>
       )}
+      {/* A greyed-out button with no reason on screen is a dead end, so say what is missing. */}
+      {!state.error && disabled && why && (
+        <p className="mr-auto text-sm text-zinc-500 dark:text-zinc-400">{why}</p>
+      )}
       <span aria-live="polite" className="text-sm text-zinc-500 dark:text-zinc-400">
         {state.saved ? "Saved" : ""}
       </span>
-      <Button icon={state.saved ? Check : Save} onClick={onSave} disabled={disabled || state.busy}>
+      <Button
+        icon={state.saved ? Check : Save}
+        onClick={onSave}
+        disabled={disabled || state.busy}
+        title={disabled && why ? why : undefined}
+      >
         {state.busy ? "Saving…" : "Save Settings"}
       </Button>
     </div>
@@ -230,13 +291,56 @@ function PrivacyDialog({ provider, onCancel, onConfirm }) {
   );
 }
 
+/** The model saved for one provider: its own key, else the single api_model. */
+function providerModel(settings, provider) {
+  return (LINKED.includes(provider) ? settings[`${provider}_model`] : settings.api_model) || "";
+}
+
+/** Whether a key is already stored for this provider (GET /api/settings/ sends only booleans). */
+function isLinked(settings, provider) {
+  return !!(LINKED.includes(provider) ? settings[`${provider}_api_key_set`] : settings.api_key_set);
+}
+
+const DAY = 86400000;
+
+/** A key's expiry as {tone, text, title}, or null when nothing reported one. */
+function expiryInfo(iso) {
+  const at = iso ? new Date(iso) : null;
+  if (!at || Number.isNaN(at.getTime())) return null;
+  const date = at.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  const days = Math.ceil((at.getTime() - Date.now()) / DAY);
+  const title = `Key expiry reported by the provider: ${at.toLocaleString()}`;
+  if (days < 0) return { tone: "red", text: `Key expired ${date}`, title, days };
+  if (days === 0) return { tone: "red", text: `Key expires today, ${date}`, title, days };
+  if (days <= 7) return { tone: "red", text: `Key expires in ${days} day${days === 1 ? "" : "s"} · ${date}`, title, days };
+  if (days <= 30) return { tone: "amber", text: `Key expires in ${days} days · ${date}`, title, days };
+  return { tone: "green", text: `Key valid until ${date}`, title, days };
+}
+
+/** The expiry pill. Nothing is drawn when the provider reports no expiry, which is the
+ *  normal case: only OpenRouter has a key endpoint, and plain keys never expire. */
+function KeyExpiry({ expiresAt, className }) {
+  const info = expiryInfo(expiresAt);
+  if (!info) return null;
+  return (
+    <span className={className} title={info.title}>
+      <Badge tone={info.tone} dot>
+        {info.text}
+      </Badge>
+    </span>
+  );
+}
+
 function Connection({ result }) {
   if (!result) return null;
   return result.connected ? (
-    <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
-      <StatusDot tone="green" label="Connected" /> Connected
-      {result.models.length ? ` · ${result.models.length} model${result.models.length === 1 ? "" : "s"}` : ""}
-    </p>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+        <StatusDot tone="green" label="Connected" /> Connected
+        {result.models.length ? ` · ${result.models.length} model${result.models.length === 1 ? "" : "s"}` : ""}
+      </p>
+      <KeyExpiry expiresAt={result.expires_at} />
+    </div>
   ) : (
     <p role="alert" className="flex items-start gap-2 text-sm text-red-600 dark:text-red-400">
       <StatusDot tone="red" label="Not connected" className="mt-1" /> {result.error}
@@ -251,7 +355,9 @@ function AiModel({ settings, system, onSaved }) {
     llm_model: settings.llm_model || "",
     api_base_url: settings.api_base_url || "",
     api_key: "",
-    api_model: settings.api_model || "",
+    api_model: providerModel(settings, settings.llm_provider || "ollama"),
+    cloud_transcribe: settings.cloud_transcribe ?? false,
+    cloud_transcribe_model: settings.cloud_transcribe_model || "",
     num_ctx: settings.num_ctx ?? "",
     cpu_threads: settings.cpu_threads ?? "",
     diarize: settings.diarize ?? null,
@@ -277,9 +383,15 @@ function AiModel({ settings, system, onSaved }) {
       diarize: form.diarize,
     };
     if (cloud) {
-      body.api_model = blank(form.api_model.trim());
+      const linked = LINKED.includes(form.llm_provider);
+      // A linked provider stores its own key and model, so switching provider keeps both.
+      const keyField = linked ? `${form.llm_provider}_api_key` : "api_key";
+      const modelField = linked ? `${form.llm_provider}_model` : "api_model";
+      body[modelField] = blank(form.api_model.trim());
+      body.cloud_transcribe = canCloudAsr ? form.cloud_transcribe : false;
+      body.cloud_transcribe_model = canCloudAsr ? blank(form.cloud_transcribe_model.trim()) : null;
       body.api_base_url = form.llm_provider === "custom" ? blank(form.api_base_url.trim()) : null;
-      if (form.api_key.trim()) body.api_key = form.api_key.trim(); // empty keeps the saved key
+      if (form.api_key.trim()) body[keyField] = form.api_key.trim(); // empty keeps the saved key
     }
     return body;
   };
@@ -288,7 +400,14 @@ function AiModel({ settings, system, onSaved }) {
     setTesting(true);
     try {
       const body = payload();
-      setTest(await api("/api/settings/test", { method: "POST", body: { ...body, llm_provider: form.llm_provider } }));
+      const result = await api("/api/settings/test", { method: "POST", body: { ...body, llm_provider: form.llm_provider } });
+      setTest(result);
+      // Most people do not know provider model ids, so choose one from what this account
+      // offers. Only when they have not picked one themselves.
+      if (result.connected && !form.api_model.trim()) {
+        const choice = pickModel(result.models, form.llm_provider);
+        if (choice) set({ api_model: choice });
+      }
     } catch (e) {
       setTest({ connected: false, models: [], error: e.message });
     } finally {
@@ -298,12 +417,29 @@ function AiModel({ settings, system, onSaved }) {
 
   // Ask Ollama for its models once, so the model list is there without a click.
   useEffect(() => {
-    if (!cloud) runTest();
+    // Ollama needs no key; a cloud provider is asked only when its account is already linked,
+    // so the model list is there without anyone pressing a button.
+    if (!cloud || isLinked(settings, form.llm_provider)) runTest();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.llm_provider]);
 
   const ollamaModels = !cloud && test?.connected ? test.models : [];
   const tierDefault = system?.llm_provider === "ollama" || !system ? system?.llm_model : "";
+  const linkedNow = isLinked(settings, form.llm_provider);
+  const keyPage = KEY_PAGE[form.llm_provider];
+  const canCloudAsr = AUDIO_PROVIDERS.includes(form.llm_provider);
+  const asrOffered = (test?.models || []).filter((m) => IS_ASR.test(m));
+  const offered = (test?.models || []).filter((m) => !NOT_CHAT.test(m));
+  const recommended = pickModel(test?.models, form.llm_provider);
+  const modelOptions = offered.length
+    ? [
+        ...offered.map((m) => ({ value: m, label: m === recommended ? `${m} (recommended)` : m })),
+        // A model saved earlier, or typed by hand, stays selectable even if it is not listed.
+        ...(form.api_model && !offered.includes(form.api_model)
+          ? [{ value: form.api_model, label: `${form.api_model} (not in this account's list)` }]
+          : []),
+      ]
+    : [];
 
   return (
     <Card>
@@ -393,24 +529,82 @@ function AiModel({ settings, system, onSaved }) {
                 onChange={(e) => set({ api_base_url: e.target.value })}
               />
             )}
-            <Input
-              label="API key"
-              type="password"
-              autoComplete="off"
-              value={form.api_key}
-              placeholder={settings.api_key_set ? "Saved. Type a new key to replace it." : "Paste your API key"}
-              hint="Stored only in this PrivMeet server's settings file; never shown again."
-              onChange={(e) => set({ api_key: e.target.value })}
-            />
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-zinc-800 dark:text-zinc-100">Account</span>
+                {linkedNow ? <Badge tone="green" dot>Linked</Badge> : <Badge tone="gray">Not linked</Badge>}
+                <KeyExpiry expiresAt={test?.expires_at} />
+                {linkedNow && (
+                  <Button
+                    variant="ghost"
+                    className="ml-auto"
+                    onClick={() =>
+                      save(async () => {
+                        const field = LINKED.includes(form.llm_provider)
+                          ? `${form.llm_provider}_api_key`
+                          : "api_key";
+                        await api("/api/settings/", { method: "PATCH", body: { [field]: null } });
+                        set({ api_key: "" });
+                        setTest(null);
+                        onSaved(await api("/api/settings/"));
+                      })
+                    }
+                  >
+                    Unlink
+                  </Button>
+                )}
+              </div>
+              <Input
+                label="API key"
+                type="password"
+                autoComplete="off"
+                value={form.api_key}
+                placeholder={linkedNow ? "Saved. Type a new key to replace it." : "Paste your API key"}
+                hint={
+                  keyPage ? (
+                    <>
+                      Create one at{" "}
+                      <a
+                        href={keyPage[1]}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={cx("text-primary-600 underline dark:text-primary-400", focusRing)}
+                      >
+                        {keyPage[0]}
+                      </a>
+                      . Kept in this server&apos;s settings file only, and never shown again.
+                    </>
+                  ) : (
+                    "Stored only in this PrivMeet server's settings file; never shown again."
+                  )
+                }
+                onChange={(e) => set({ api_key: e.target.value })}
+              />
+            </div>
             <div className="flex flex-wrap items-end gap-3">
               <div className="min-w-64 flex-1">
-                <Input
-                  label="Model"
-                  value={form.api_model}
-                  list={listId}
-                  placeholder="The model id from your provider"
-                  onChange={(e) => set({ api_model: e.target.value })}
-                />
+                {modelOptions.length ? (
+                  <Select
+                    label="Model"
+                    value={form.api_model}
+                    onChange={(e) => set({ api_model: e.target.value })}
+                    options={modelOptions}
+                    hint={
+                      form.api_model === recommended
+                        ? "Chosen for you from this account. Change it if you prefer another."
+                        : "The model that writes summaries and answers questions."
+                    }
+                  />
+                ) : (
+                  <Input
+                    label="Model"
+                    value={form.api_model}
+                    list={listId}
+                    placeholder="The model id from your provider"
+                    hint="Paste your key and press Test Connection: the models of your account are then listed here."
+                    onChange={(e) => set({ api_model: e.target.value })}
+                  />
+                )}
                 <datalist id={listId}>
                   {(test?.models || []).map((m) => (
                     <option key={m} value={m} />
@@ -422,6 +616,56 @@ function AiModel({ settings, system, onSaved }) {
               </Button>
             </div>
             <Connection result={test} />
+
+            {canCloudAsr && (
+              <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+                <Toggle
+                  checked={form.cloud_transcribe}
+                  onChange={(on) =>
+                    set({
+                      cloud_transcribe: on,
+                      cloud_transcribe_model:
+                        form.cloud_transcribe_model ||
+                        (on ? asrOffered[0] || ASR_DEFAULT[form.llm_provider] || "" : ""),
+                    })
+                  }
+                  label="Transcribe with this provider instead of on this machine"
+                />
+                <p className="pl-12 text-xs text-zinc-500 dark:text-zinc-400">
+                  Minutes of waiting become seconds, and a slow machine or one without a GPU can
+                  keep up. {CLOUD_NAME[form.llm_provider]} charges for it.
+                </p>
+                {form.cloud_transcribe && (
+                  <>
+                    <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                      <span>
+                        <strong className="font-semibold">The recording itself is uploaded.</strong> With
+                        this off, audio never leaves this machine. With it on, every meeting&apos;s audio
+                        is sent to {CLOUD_NAME[form.llm_provider]}. Speaker detection still runs here.
+                      </span>
+                    </div>
+                    {asrOffered.length ? (
+                      <Select
+                        label="Transcription model"
+                        value={form.cloud_transcribe_model}
+                        onChange={(e) => set({ cloud_transcribe_model: e.target.value })}
+                        options={asrOffered.map((m) => ({ value: m, label: m }))}
+                        hint="A speech model from this account."
+                      />
+                    ) : (
+                      <Input
+                        label="Transcription model"
+                        value={form.cloud_transcribe_model}
+                        placeholder={ASR_DEFAULT[form.llm_provider] || "the provider's speech model"}
+                        hint="Test Connection to list this account's speech models."
+                        onChange={(e) => set({ cloud_transcribe_model: e.target.value })}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -483,7 +727,7 @@ function AiModel({ settings, system, onSaved }) {
           provider={pending}
           onCancel={() => setPending(null)}
           onConfirm={() => {
-            set({ llm_provider: pending });
+            set({ llm_provider: pending, api_key: "", api_model: providerModel(settings, pending) });
             setTest(null);
             setPending(null);
           }}
@@ -492,6 +736,7 @@ function AiModel({ settings, system, onSaved }) {
         <SaveRow
           state={state}
           disabled={cloud && !form.api_model.trim()}
+          why={`Choose a model first${test?.models?.length ? ` — ${test.models.length} offered by this account` : ""}.`}
           onSave={() => save(async () => onSaved(await api("/api/settings/", { method: "PATCH", body: payload() })))}
         />
       </div>

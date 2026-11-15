@@ -44,10 +44,12 @@ function Page({ page }) {
   if (page === "new") return <NewMeeting />;
   if (page.startsWith("m/")) return <MeetingDetail id={page.slice(2)} />;
   if (page === "record") return <RecordLive />;
-  if (page === "history") return <History />;
   if (page === "settings") return <Settings />;
   if (page === "templates") return <Templates />;
   if (page === "models") return <Models />;
+  // v2 moves History and the Tools screens onto the pages where the work happens, but the
+  // tasks that do it are not built yet, so each keeps a stub naming the task that delivers it.
+  if (page === "history") return <History />;
   const tool = page.startsWith("tools/") && page.slice(6);
   if (tool && TOOLS[tool]) return <Tools tool={tool} />;
   return (

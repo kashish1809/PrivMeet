@@ -157,7 +157,11 @@ def cpu_fallback(prof):
 OVERRIDES = (
     "llm_model", "ollama_url", "whisper_model", "num_ctx", "diarize", "cpu_threads",
     "llm_provider", "api_base_url", "api_key", "api_model",
+    "cloud_transcribe", "cloud_transcribe_model",
 )
+
+# Providers that keep their own linked account (settings_store: <name>_api_key, <name>_model).
+LINKED_PROVIDERS = ("anthropic", "openai", "openrouter", "groq", "gemini")
 
 
 def apply_overrides(p, saved):
@@ -168,6 +172,15 @@ def apply_overrides(p, saved):
             p[key] = saved[key]
     p.setdefault("ollama_url", None)  # None = settings.OLLAMA_URL from the environment
     p.setdefault("llm_provider", "ollama")
+    p.setdefault("cloud_transcribe", False)
+    # The linked account of the provider in use wins over the single api_key/api_model, so
+    # every provider keeps its own credentials and switching between them loses nothing.
+    provider = p["llm_provider"]
+    if provider in LINKED_PROVIDERS:
+        for field in ("api_key", "api_model"):
+            key = f"{provider}_{'api_key' if field == 'api_key' else 'model'}"
+            if saved.get(key):
+                p[field] = saved[key]
     return p
 
 
