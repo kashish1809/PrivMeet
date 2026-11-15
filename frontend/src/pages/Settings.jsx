@@ -82,17 +82,23 @@ const PREFERRED = {
   openai: ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o", "gpt-4.1"],
   anthropic: ["haiku", "sonnet"],
   gemini: ["flash", "pro"],
-  groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "llama"],
+  groq: ["llama-3.3-70b-versatile", "gpt-oss-120b", "gpt-oss-20b", "llama-3.1-8b-instant", "qwen", "llama"],
   openrouter: ["gpt-4o-mini", "llama-3.3-70b", "haiku", "flash"],
 };
+// Last resort when an account carries none of the names above: families known to follow
+// instructions in English. Without this the fallback was "whatever sorts first", which on a
+// Groq account with no Llama models chose allam-2-7b, an Arabic model, to write English notes.
+const FAMILIES = ["gpt-oss", "gpt-4", "gpt-5", "qwen", "llama", "mistral", "mixtral", "gemma", "instruct", "chat"];
 // Names that are not chat models, so never offer them as the one that writes the notes.
-const NOT_CHAT = /embed|whisper|tts|audio|image|vision-only|moderation|rerank|guard|dall-e|sora/i;
+// orpheus and playai are speech, prompt-guard and safeguard are classifiers.
+const NOT_CHAT =
+  /embed|whisper|tts|audio|image|vision-only|moderation|rerank|guard|dall-e|sora|orpheus|playai|speech/i;
 
 /** The model to use when the user has not chosen one: a preferred id the account offers,
  *  else its first chat model. Returns "" when the list has nothing usable. */
 function pickModel(models, provider) {
   const chat = (models || []).filter((m) => !NOT_CHAT.test(m));
-  for (const want of PREFERRED[provider] || []) {
+  for (const want of [...(PREFERRED[provider] || []), ...FAMILIES]) {
     const hit = chat.find((m) => m.toLowerCase().includes(want.toLowerCase()));
     if (hit) return hit;
   }
