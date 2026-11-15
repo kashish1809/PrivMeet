@@ -55,10 +55,14 @@ def diarize(wav, threads, num_speakers=None):
 
 
 # A cluster this small is a fragment of a real speaker, not a person of its own: the news
-# report in bug B7 got a third "speaker" from two mid-sentence pieces of the reporter.
+# report in bug B7 got a third "speaker" from mid-sentence pieces of the reporter.
 # Both tests have to pass, so a genuine short interjection ("Yes, agreed.") survives when it
 # is the only thing that voice ever says and the voice is not wrapped inside another one.
-STRAY_MAX_SECONDS = 20
+# 30 s, not 20: a bigger Whisper model cuts the transcript into shorter segments, so the same
+# torn turn collects more of them. The same recording gave a 12 s fragment on `small` and a
+# 24 s one on `medium`. Every real speaker in the benchmark fixtures holds far more than this
+# (the shortest of the five TTS voices has 45 s), so they are untouched.
+STRAY_MAX_SECONDS = 30
 STRAY_MAX_SHARE = 0.1
 
 
