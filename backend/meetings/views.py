@@ -391,6 +391,10 @@ def settings_test(request):
         cfg = {**settings_store.load(), **settings_store.validate({k: v for k, v in body.items() if v not in ("", None)})}
     except ValueError as e:
         return bad(str(e) or "Expected a JSON object.")
+    # Resolve the linked account the same way a real run does, so a key sent as
+    # <provider>_api_key is the one tested. Without this the test ran with no key at all and
+    # the provider answered "401 Invalid API Key" for a key that was never sent.
+    cfg = hw.apply_overrides(cfg, cfg)
     provider = cfg.get("llm_provider", "ollama")
     if provider == "ollama":
         url = (cfg.get("ollama_url") or settings.OLLAMA_URL).rstrip("/")
