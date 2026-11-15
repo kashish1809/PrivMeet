@@ -81,7 +81,7 @@ SCHEMA = {
     "diarize": _bool,
     "cpu_threads": _int(1, 256),
     # Cloud LLM providers (opt-in; Ollama is the default and the only fully local one).
-    "llm_provider": _choice("ollama", "openai", "openrouter", "anthropic", "custom"),
+    "llm_provider": _choice("ollama", "openai", "openrouter", "anthropic", "groq", "gemini", "custom"),
     "api_base_url": _url,  # only for "custom"
     "api_key": _text(300),
     "api_model": _model,
@@ -94,9 +94,16 @@ SCHEMA = {
     "openai_model": _model,
     "openrouter_api_key": _text(300),
     "openrouter_model": _model,
+    "groq_api_key": _text(300),
+    "groq_model": _model,
+    "gemini_api_key": _text(300),
+    "gemini_model": _model,
 }
 # Never sent back to the browser: GET /api/settings/ says only whether one is saved.
-SECRET = ("api_key", "anthropic_api_key", "openai_api_key", "openrouter_api_key")
+SECRET = (
+    "api_key", "anthropic_api_key", "openai_api_key", "openrouter_api_key", "groq_api_key",
+    "gemini_api_key",
+)
 
 
 def path():

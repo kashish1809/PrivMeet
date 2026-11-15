@@ -1,5 +1,5 @@
-"""Cloud LLM providers, opt-in from Settings: OpenAI, OpenRouter, Anthropic and any server that
-speaks the OpenAI chat API (LM Studio, vLLM, llama.cpp server, Ollama's /v1).
+"""Cloud LLM providers, opt-in from Settings: OpenAI, OpenRouter, Anthropic, Groq, Gemini and
+any server that speaks the OpenAI chat API (LM Studio, vLLM, llama.cpp server, Ollama's /v1).
 
 Ollama stays the default and the only provider that keeps everything on this machine. With a
 cloud provider the transcript text is sent to that provider for the summary and Q&A; the audio
@@ -21,8 +21,11 @@ BASE_URLS = {
     "openai": "https://api.openai.com/v1",
     "openrouter": "https://openrouter.ai/api/v1",
     "anthropic": "https://api.anthropic.com/v1",
+    # Groq and Gemini both speak the OpenAI chat API, so they need no special case below.
+    "groq": "https://api.groq.com/openai/v1",
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
 }
-PROVIDERS = ("ollama", "openai", "openrouter", "anthropic", "custom")
+PROVIDERS = ("ollama", "openai", "openrouter", "anthropic", "groq", "gemini", "custom")
 ANTHROPIC_VERSION = "2023-06-01"
 TIMEOUT = 300  # seconds: a long map step on a slow provider
 
@@ -116,6 +119,62 @@ def chat(prof, json_mode=False, num_predict=None):
     return RunnableLambda(
         lambda prompt: AIMessage(content=complete(prof, prompt.to_messages(), json_mode, num_predict))
     )
+
+
+# Where a provider reports facts about the key in use. Only OpenRouter has such an endpoint:
+# OpenAI, Anthropic and Groq expose nothing about their own keys, so for those the only
+# expiry PrivMeet can know is one encoded in the key itself (see _jwt_expiry).
+KEY_INFO_PATHS = {"openrouter": "/key"}
+# Field names seen for an expiry in key metadata; OpenRouter uses expires_at (ISO 8601 UTC,
+# or null when the key never expires).
+EXPIRY_FIELDS = ("expires_at", "expiration", "expires", "expiry", "expire_at")
+
+
+def _jwt_expiry(key):
+    """The `exp` claim of a key that is a JWT, as an ISO timestamp, else None.
+
+    Nothing is sent anywhere: the expiry is read out of the token the user pasted. Plain
+    provider keys ("sk-...", "gsk_...") are not JWTs and give None.
+    """
+    import base64
+    import datetime
+
+    parts = (key or "").split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        body = parts[1] + "=" * (-len(parts[1]) % 4)
+        exp = json.loads(base64.urlsafe_b64decode(body)).get("exp")
+        if not isinstance(exp, (int, float)):
+            return None
+        return datetime.datetime.fromtimestamp(exp, datetime.timezone.utc).isoformat()
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def key_expiry(prof):
+    """When the key in use stops working: an ISO timestamp, or None when nothing says.
+
+    Tries the key itself first, which costs no request, then the provider's key endpoint
+    where one exists. Any failure answers None: an unknown expiry must never block a
+    working provider.
+    """
+    local = _jwt_expiry(prof.get("api_key"))
+    if local:
+        return local
+    path = KEY_INFO_PATHS.get(prof.get("llm_provider"))
+    if not path:
+        return None
+    try:
+        data = _request(prof, path, timeout=15)
+    except ProviderError:
+        return None
+    info = data.get("data") if isinstance(data.get("data"), dict) else data
+    for field in EXPIRY_FIELDS:
+        value = info.get(field) if isinstance(info, dict) else None
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
 def list_models(prof):

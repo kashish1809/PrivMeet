@@ -160,7 +160,7 @@ OVERRIDES = (
 )
 
 # Providers that keep their own linked account (settings_store: <name>_api_key, <name>_model).
-LINKED_PROVIDERS = ("anthropic", "openai", "openrouter")
+LINKED_PROVIDERS = ("anthropic", "openai", "openrouter", "groq", "gemini")
 
 
 def apply_overrides(p, saved):
