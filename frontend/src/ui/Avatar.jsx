@@ -19,10 +19,18 @@ export function speakerColor(key) {
 }
 
 const SIZES = { sm: "size-6 text-[10px]", md: "size-8 text-xs", lg: "size-16 text-2xl" };
+// "12" in a 24 px circle needs the tighter tracking the pixel font does not give by default.
+const TIGHT = "tracking-tighter";
+
+// An unnamed speaker is labelled "Speaker 3"; its first letter is "S" for every one of them,
+// and in the pixel font that S reads as a 5. The number is what tells them apart.
+const UNNAMED = /^speakers?[\s._-]*(\d+)$/i;
 
 /** Initial in a colored circle. `colorKey` (speaker index) keeps colors stable across renames. */
 export function Avatar({ name, colorKey = name, size = "md", className }) {
-  const initial = (name || "?").trim().charAt(0).toUpperCase();
+  const label = (name || "?").trim();
+  const unnamed = UNNAMED.exec(label);
+  const initial = unnamed ? unnamed[1] : label.charAt(0).toUpperCase();
   return (
     <span
       role="img"
@@ -32,6 +40,7 @@ export function Avatar({ name, colorKey = name, size = "md", className }) {
         "inline-flex shrink-0 items-center justify-center rounded-full font-semibold select-none",
         speakerColor(colorKey),
         SIZES[size],
+        initial.length > 1 && TIGHT,
         className,
       )}
     >
