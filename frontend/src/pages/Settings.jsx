@@ -54,12 +54,29 @@ const TABS = [
 // Where the notes are written. Ollama is the only one that keeps everything on this machine.
 const PROVIDERS = [
   { value: "ollama", label: "Ollama (on this machine)" },
-  { value: "openai", label: "OpenAI" },
+  { value: "openai", label: "ChatGPT (OpenAI)" },
+  { value: "anthropic", label: "Claude (Anthropic)" },
+  { value: "gemini", label: "Gemini (Google)" },
+  { value: "groq", label: "Groq" },
   { value: "openrouter", label: "OpenRouter" },
-  { value: "anthropic", label: "Anthropic" },
   { value: "custom", label: "Other OpenAI-compatible server" },
 ];
-const CLOUD_NAME = { openai: "OpenAI", openrouter: "OpenRouter", anthropic: "Anthropic", custom: "that server" };
+const CLOUD_NAME = {
+  openai: "OpenAI", openrouter: "OpenRouter", anthropic: "Anthropic", groq: "Groq",
+  gemini: "Google", custom: "that server",
+};
+// Each provider keeps its own key (settings_store: <provider>_api_key), so linking one does
+// not unlink another. "custom" keeps using the single api_key.
+const LINKED = ["openai", "anthropic", "gemini", "groq", "openrouter"];
+// Where the account's API key is created. An account is linked by pasting a key: no provider
+// lets another app spend a ChatGPT Plus, Claude Pro or Gemini Advanced subscription.
+const KEY_PAGE = {
+  openai: ["platform.openai.com/api-keys", "https://platform.openai.com/api-keys"],
+  anthropic: ["console.anthropic.com/settings/keys", "https://console.anthropic.com/settings/keys"],
+  gemini: ["aistudio.google.com/apikey", "https://aistudio.google.com/apikey"],
+  groq: ["console.groq.com/keys", "https://console.groq.com/keys"],
+  openrouter: ["openrouter.ai/keys", "https://openrouter.ai/keys"],
+};
 
 /** The swatches of each theme card: page, sidebar, card and accent, from the UI v2 spec. */
 const PREVIEW = {
@@ -230,13 +247,56 @@ function PrivacyDialog({ provider, onCancel, onConfirm }) {
   );
 }
 
+/** The model saved for one provider: its own key, else the single api_model. */
+function providerModel(settings, provider) {
+  return (LINKED.includes(provider) ? settings[`${provider}_model`] : settings.api_model) || "";
+}
+
+/** Whether a key is already stored for this provider (GET /api/settings/ sends only booleans). */
+function isLinked(settings, provider) {
+  return !!(LINKED.includes(provider) ? settings[`${provider}_api_key_set`] : settings.api_key_set);
+}
+
+const DAY = 86400000;
+
+/** A key's expiry as {tone, text, title}, or null when nothing reported one. */
+function expiryInfo(iso) {
+  const at = iso ? new Date(iso) : null;
+  if (!at || Number.isNaN(at.getTime())) return null;
+  const date = at.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  const days = Math.ceil((at.getTime() - Date.now()) / DAY);
+  const title = `Key expiry reported by the provider: ${at.toLocaleString()}`;
+  if (days < 0) return { tone: "red", text: `Key expired ${date}`, title, days };
+  if (days === 0) return { tone: "red", text: `Key expires today, ${date}`, title, days };
+  if (days <= 7) return { tone: "red", text: `Key expires in ${days} day${days === 1 ? "" : "s"} · ${date}`, title, days };
+  if (days <= 30) return { tone: "amber", text: `Key expires in ${days} days · ${date}`, title, days };
+  return { tone: "green", text: `Key valid until ${date}`, title, days };
+}
+
+/** The expiry pill. Nothing is drawn when the provider reports no expiry, which is the
+ *  normal case: only OpenRouter has a key endpoint, and plain keys never expire. */
+function KeyExpiry({ expiresAt, className }) {
+  const info = expiryInfo(expiresAt);
+  if (!info) return null;
+  return (
+    <span className={className} title={info.title}>
+      <Badge tone={info.tone} dot>
+        {info.text}
+      </Badge>
+    </span>
+  );
+}
+
 function Connection({ result }) {
   if (!result) return null;
   return result.connected ? (
-    <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
-      <StatusDot tone="green" label="Connected" /> Connected
-      {result.models.length ? ` · ${result.models.length} model${result.models.length === 1 ? "" : "s"}` : ""}
-    </p>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+        <StatusDot tone="green" label="Connected" /> Connected
+        {result.models.length ? ` · ${result.models.length} model${result.models.length === 1 ? "" : "s"}` : ""}
+      </p>
+      <KeyExpiry expiresAt={result.expires_at} />
+    </div>
   ) : (
     <p role="alert" className="flex items-start gap-2 text-sm text-red-600 dark:text-red-400">
       <StatusDot tone="red" label="Not connected" className="mt-1" /> {result.error}
@@ -251,7 +311,7 @@ function AiModel({ settings, system, onSaved }) {
     llm_model: settings.llm_model || "",
     api_base_url: settings.api_base_url || "",
     api_key: "",
-    api_model: settings.api_model || "",
+    api_model: providerModel(settings, settings.llm_provider || "ollama"),
     num_ctx: settings.num_ctx ?? "",
     cpu_threads: settings.cpu_threads ?? "",
     diarize: settings.diarize ?? null,
@@ -277,9 +337,13 @@ function AiModel({ settings, system, onSaved }) {
       diarize: form.diarize,
     };
     if (cloud) {
-      body.api_model = blank(form.api_model.trim());
+      const linked = LINKED.includes(form.llm_provider);
+      // A linked provider stores its own key and model, so switching provider keeps both.
+      const keyField = linked ? `${form.llm_provider}_api_key` : "api_key";
+      const modelField = linked ? `${form.llm_provider}_model` : "api_model";
+      body[modelField] = blank(form.api_model.trim());
       body.api_base_url = form.llm_provider === "custom" ? blank(form.api_base_url.trim()) : null;
-      if (form.api_key.trim()) body.api_key = form.api_key.trim(); // empty keeps the saved key
+      if (form.api_key.trim()) body[keyField] = form.api_key.trim(); // empty keeps the saved key
     }
     return body;
   };
@@ -304,6 +368,8 @@ function AiModel({ settings, system, onSaved }) {
 
   const ollamaModels = !cloud && test?.connected ? test.models : [];
   const tierDefault = system?.llm_provider === "ollama" || !system ? system?.llm_model : "";
+  const linkedNow = isLinked(settings, form.llm_provider);
+  const keyPage = KEY_PAGE[form.llm_provider];
 
   return (
     <Card>
@@ -393,15 +459,58 @@ function AiModel({ settings, system, onSaved }) {
                 onChange={(e) => set({ api_base_url: e.target.value })}
               />
             )}
-            <Input
-              label="API key"
-              type="password"
-              autoComplete="off"
-              value={form.api_key}
-              placeholder={settings.api_key_set ? "Saved. Type a new key to replace it." : "Paste your API key"}
-              hint="Stored only in this PrivMeet server's settings file; never shown again."
-              onChange={(e) => set({ api_key: e.target.value })}
-            />
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-zinc-800 dark:text-zinc-100">Account</span>
+                {linkedNow ? <Badge tone="green" dot>Linked</Badge> : <Badge tone="gray">Not linked</Badge>}
+                <KeyExpiry expiresAt={test?.expires_at} />
+                {linkedNow && (
+                  <Button
+                    variant="ghost"
+                    className="ml-auto"
+                    onClick={() =>
+                      save(async () => {
+                        const field = LINKED.includes(form.llm_provider)
+                          ? `${form.llm_provider}_api_key`
+                          : "api_key";
+                        await api("/api/settings/", { method: "PATCH", body: { [field]: null } });
+                        set({ api_key: "" });
+                        setTest(null);
+                        onSaved(await api("/api/settings/"));
+                      })
+                    }
+                  >
+                    Unlink
+                  </Button>
+                )}
+              </div>
+              <Input
+                label="API key"
+                type="password"
+                autoComplete="off"
+                value={form.api_key}
+                placeholder={linkedNow ? "Saved. Type a new key to replace it." : "Paste your API key"}
+                hint={
+                  keyPage ? (
+                    <>
+                      Create one at{" "}
+                      <a
+                        href={keyPage[1]}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={cx("text-primary-600 underline dark:text-primary-400", focusRing)}
+                      >
+                        {keyPage[0]}
+                      </a>
+                      . Kept in this server&apos;s settings file only, and never shown again.
+                    </>
+                  ) : (
+                    "Stored only in this PrivMeet server's settings file; never shown again."
+                  )
+                }
+                onChange={(e) => set({ api_key: e.target.value })}
+              />
+            </div>
             <div className="flex flex-wrap items-end gap-3">
               <div className="min-w-64 flex-1">
                 <Input
@@ -483,7 +592,7 @@ function AiModel({ settings, system, onSaved }) {
           provider={pending}
           onCancel={() => setPending(null)}
           onConfirm={() => {
-            set({ llm_provider: pending });
+            set({ llm_provider: pending, api_key: "", api_model: providerModel(settings, pending) });
             setTest(null);
             setPending(null);
           }}
