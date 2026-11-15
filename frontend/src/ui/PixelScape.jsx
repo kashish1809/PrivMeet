@@ -438,6 +438,138 @@ function render(ctx, w, h, seed, opts, pal) {
   };
 
   const lake = opts.scene === "lake";
+
+  // ---- Neon Drive, the special world. Its own scene, not a recolour of the lake: a synthwave
+  // night with a striped sun sinking behind neon mountains, a glowing grid running to the
+  // horizon and faint CRT scanlines over everything. (Palms were tried and read as burnt
+  // umbrellas at this pixel size, so the frame is left to the sun and the grid.)
+  if (pal.biome === "neon") {
+    const ov = { lanterns: [], blinks: [], sparks: [], beams: [], fires: [], kites: [], planes: [] };
+    const hex = (v) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    const SKY = [0x0b0418, 0x1a0936, 0x3a0d5c, 0x7c1366, 0xd0246e].map(hex);
+    const SUN = [0xffe66b, 0xffb340, 0xff6a4d, 0xff2f8f, 0xe01fd1].map(hex);
+    const PINK = hex(0xff2bd6);
+    const CYAN = hex(0x2de2e6);
+    const horizon = Math.round(h * (lake ? 0.6 : 0.66));
+    const sunX = Math.round(w * (lake ? 0.5 : opts.orbX));
+    const sunR = Math.max(8, Math.round(h * (lake ? 0.22 : 0.3)));
+    const sunY = horizon - Math.round(sunR * 0.45);
+
+    // sky: five stops, dithered at every boundary
+    for (let y = 0; y < horizon; y += 1) {
+      const f = (y / horizon) * (SKY.length - 1);
+      const k = Math.floor(f);
+      for (let x = 0; x < w; x += 1) put(x, y, f - k > dither(x, y) ? SKY[Math.min(SKY.length - 1, k + 1)] : SKY[k]);
+    }
+    // stars, thinning toward the glow of the horizon; a few twinkle
+    for (let i = 0; i < w * 0.22; i += 1) {
+      const x = Math.floor(rand() * w);
+      const y = Math.floor(rand() * horizon * 0.62);
+      if (Math.hypot(x - sunX, y - sunY) < sunR * 1.6) continue;
+      blend(x, y, rand() < 0.25 ? PINK : WHITE, 0.4 + rand() * 0.6);
+      if (i % 37 === 0) ov.sparks.push({ x, y, delay: (rand() * 3).toFixed(2) });
+    }
+    // a soft glow round the sun
+    for (let y = Math.max(0, sunY - sunR * 2); y < horizon; y += 1) {
+      for (let x = Math.max(0, sunX - sunR * 2.4); x < Math.min(w, sunX + sunR * 2.4); x += 1) {
+        const d = Math.hypot((x - sunX) / 1.2, y - sunY) / (sunR * 2);
+        if (d < 1 && (1 - d) * 0.55 > dither(x, y)) blend(x, y, PINK, 0.22);
+      }
+    }
+    // the sun: a vertical gradient, cut by horizontal bands that thicken toward the horizon
+    for (let y = sunY - sunR; y <= sunY + sunR && y < horizon; y += 1) {
+      const dy = y - sunY;
+      const half = Math.sqrt(Math.max(0, sunR * sunR - dy * dy));
+      const t = (dy + sunR) / (2 * sunR); // 0 top .. 1 bottom
+      // the cuts: bands of sky through the lower sun, thickening toward the horizon
+      if (dy > -sunR * 0.22) {
+        const below = (dy + sunR * 0.22) / (sunR * 1.22); // 0 .. 1 across the cut zone
+        const period = Math.max(4, Math.round(sunR * 0.24));
+        const gap = Math.max(1, Math.round(below * period * 0.62));
+        if ((y - sunY + 1000 * period) % period < gap) continue;
+      }
+      // flat bands of colour, not dithered: dithering made the sun a checkerboard
+      const c = SUN[Math.min(SUN.length - 1, Math.floor(t * SUN.length))];
+      for (let x = Math.round(sunX - half); x <= Math.round(sunX + half); x += 1) put(x, y, c);
+    }
+    // neon mountains, two ranges, low in the middle so the sun shows between them
+    [
+      { tone: hex(0x2a0d4d), rim: PINK, hi: 0.46, count: w / 34 },
+      { tone: hex(0x160829), rim: CYAN, hi: 0.28, count: w / 26 },
+    ].forEach((R, ri) => {
+      const ridge = peaks(rand, w, Math.max(3, Math.round(R.count)), horizon * 0.06, horizon * R.hi, 0.85);
+      for (let x = 0; x < w; x += 1) {
+        const valley = Math.min(1, Math.abs(x - sunX) / (sunR * (lake ? 2.6 : 2.2))); // dips under the sun
+        const alt = ridge.alt[x] * (0.15 + 0.85 * valley ** 1.4);
+        const top = Math.round(horizon - alt);
+        for (let y = Math.max(0, top); y < horizon; y += 1) {
+          let c = R.tone;
+          // a wireframe: faint lines down the slopes
+          if ((x + (y >> 1) * (ri ? -1 : 1)) % 9 === 0 && y > top + 1) c = mix(R.tone, R.rim, 0.25);
+          put(x, y, c);
+        }
+        if (top < horizon) put(x, top, R.rim);
+        if (top + 1 < horizon) blend(x, top + 1, R.rim, 0.35);
+      }
+    });
+    // the floor: dark, a pink haze along the horizon line, then the grid
+    for (let y = horizon; y < h; y += 1) {
+      const t = (y - horizon) / Math.max(1, h - horizon);
+      for (let x = 0; x < w; x += 1) {
+        let c = mix(hex(0x1c0838), hex(0x06010e), Math.min(1, t * 1.3));
+        // the sun's reflection: a warm column straight down from it, fading toward the viewer
+        const r = Math.abs(x - sunX) / (sunR * (1 + t * 1.5));
+        if (r < 1 && (1 - r) * (1 - t) * 0.7 > dither(x, y)) c = mix(c, SUN[3], 0.35);
+        put(x, y, c);
+      }
+    }
+    for (let x = 0; x < w; x += 1) put(x, horizon, mix(PINK, WHITE, 0.25));
+    for (let y = horizon + 1; y < horizon + 4 && y < h; y += 1) for (let x = 0; x < w; x += 1) blend(x, y, PINK, 0.35 - (y - horizon) * 0.08);
+    // horizontal grid lines, closer together toward the horizon (perspective)
+    const depth = h - horizon;
+    // spacing grows with the square of the distance from the horizon, so the lines do not
+    // pile into a solid pink band near the viewer
+    // as many lines as the floor has room for: twelve on a 48 px floor was one every 4 px,
+    // which read as solid stripes
+    const rows = Math.max(4, Math.round(depth / 7));
+    let lastY = -1;
+    for (let k = 1; k <= rows; k += 1) {
+      const y = horizon + Math.round(depth * (k / rows) ** 1.85);
+      if (y >= h || y === lastY) continue;
+      lastY = y;
+      const near = (y - horizon) / depth;
+      for (let x = 0; x < w; x += 1) blend(x, y, PINK, 0.4 + near * 0.45);
+    }
+    // vertical grid lines, all running to the vanishing point under the sun
+    // Drawn as connected segments: one pixel per row left gaps wherever a line runs shallow,
+    // since x then jumps several pixels between rows, and the outer lines broke into dots.
+    for (let i = -40; i <= 40; i += 1) {
+      const xFar = sunX + i * 0.8;
+      const xNear = sunX + i * (w / 11);
+      // Only lines that fan across the visible floor. The rest run almost flat from the
+      // vanishing point and piled into one solid cyan band under the horizon.
+      if (xNear < -w * 0.25 || xNear > w * 1.25) continue;
+      const steep = Math.min(1, Math.max(0.2, (depth * 3) / Math.max(1, Math.abs(xNear - xFar))));
+      let prev = null;
+      for (let y = horizon + 1; y < h; y += 1) {
+        const t = (y - horizon) / depth;
+        const x = Math.round(xFar + (xNear - xFar) * t);
+        const a = (0.25 + t * 0.5) * steep;
+        if (prev === null || Math.abs(x - prev) <= 1) blend(x, y, CYAN, a);
+        else {
+          const step = Math.sign(x - prev);
+          for (let xx = prev + step; xx !== x + step; xx += step) blend(xx, y, CYAN, a);
+        }
+        prev = x;
+        if (x < -w || x > 2 * w) break;
+      }
+    }
+    // CRT scanlines over the sky: every other row a touch darker. Not over the floor, where
+    // they chopped the grid's vertical lines into dots and striped the whole ground.
+    for (let y = 1; y < horizon; y += 2) for (let x = 0; x < w; x += 1) blend(x, y, BLACK, 0.12);
+    ctx.putImageData(img, 0, 0);
+    return ov;
+  }
   const horizonY = Math.round(h * (lake ? 0.7 : 0.99));
   const orb = {
     x: Math.round(w * opts.orbX),

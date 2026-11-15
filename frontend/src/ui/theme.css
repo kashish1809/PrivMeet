@@ -171,6 +171,18 @@ html[data-theme="glacier"] {
   --color-zinc-900: #151f28; --color-zinc-950: #0b131a;
 }
 
+/* ---- Neon Drive, the special theme: hot pink on a deep synthwave purple. Dark. */
+html[data-theme="neon"] {
+  --color-primary-50: #fff0fb; --color-primary-100: #ffe0f7; --color-primary-200: #ffc1ef;
+  --color-primary-300: #ff94e2; --color-primary-400: #ff5ccf; --color-primary-500: #ff2bc2;
+  --color-primary-600: #e011ac; --color-primary-700: #b80c8e; --color-primary-800: #8f0e70;
+  --color-primary-900: #6b0f56; --color-primary-950: #3d0532;
+  --color-zinc-50: #f7f4fb; --color-zinc-100: #eee8f6; --color-zinc-200: #ddd3ee;
+  --color-zinc-300: #c2b2de; --color-zinc-400: #9b85c3; --color-zinc-500: #725c9e;
+  --color-zinc-600: #4f3d78; --color-zinc-700: #382a5a; --color-zinc-800: #261b40;
+  --color-zinc-900: #180f2b; --color-zinc-950: #0d0619;
+}
+
 /* Scene easter-egg motion: a lighthouse beam, a campfire, a paper plane. Off for reduced motion. */
 @keyframes pm-sweep {
   0%, 100% { transform: rotate(-18deg); opacity: 0.25; }
