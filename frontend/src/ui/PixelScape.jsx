@@ -585,7 +585,6 @@ function render(ctx, w, h, seed, opts, pal) {
         { hi: 0.62, lo: 0.18, count: w / 22, steep: 1.05, fade: 0.06, snow: 0.62 },
       ];
   const horizonColor = stops[stops.length - 1];
-  let perch = null;
   layers.forEach((L, li) => {
     const hiPx = L.hi * horizonY;
     const ridge = peaks(rand, w, Math.max(3, Math.round(L.count)), L.lo * horizonY, hiPx, L.steep);
@@ -604,8 +603,6 @@ function render(ctx, w, h, seed, opts, pal) {
       // Desert mesas: each peak is cut off flat at its own height, leaving a table-top butte.
       if (desert && li < 4) altX = Math.min(altX, ridge.list[ridge.owner[x]].top * (0.55 + 0.25 * hash(ridge.owner[x], li, seed)));
       const top = Math.round(horizonY - altX);
-      // remember the nearest mesa top around a third of the way in: the coyote stands there
-      if (desert && li === 2 && x > w * 0.28 && x < w * 0.44 && (!perch || top < perch.y)) perch = { x, y: top };
       const pk = ridge.list[ridge.owner[x]];
       const litFace = x === pk.c || Math.sign(x - pk.c) === Math.sign(orb.x - pk.c);
       const ragged = (hash(x >> 1, li, seed) - 0.5) * 4 + Math.sin(x * 0.7) * 1.2;
@@ -778,7 +775,7 @@ function render(ctx, w, h, seed, opts, pal) {
     sprite(["XXXXX", ".XXX.", ".X.X.", ".XXX."], lx - 2, lBase - 20, { X: pal.ground[1] });
     overlays.beams.push({ x: lx, y: lBase - 18 });
   } else if (pal.biome === "amber") {
-    // Cacti on the banks, a campfire on the outcrop, a coyote howling on a mesa.
+    // Cacti on the banks and a campfire on the outcrop.
     const cactus = ["..X..", "X.X..", "X.X.X", "XXX.X", "..XXX", "..X..", "..X.."];
     [0.12, 0.19, 0.86, 0.95].forEach((at2) => {
       const cxp = Math.round(w * at2);
@@ -788,8 +785,6 @@ function render(ctx, w, h, seed, opts, pal) {
     const fy = h - shoreH(fx);
     sprite(["X...X", ".XXX."], fx - 2, fy - 2, { X: pal.wood });
     overlays.fires.push({ x: fx, y: fy - 3 });
-    const coyote = ["......X.", ".....XX.", "X...XXX.", "XXXXXX..", "XXXXX...", "X.X.X..."];
-    if (perch) sprite(coyote, perch.x - 4, perch.y - 6, { X: mix(pal.ground[1], BLACK, 0.3) });
   } else if (pal.biome === "slate") {
     // A sailboat on the water, a logo-shaped kite on a string from the dock, a paper plane.
     const bx = Math.round(w * 0.42);
