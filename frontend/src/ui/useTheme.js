@@ -14,7 +14,7 @@ export const THEMES = [
   { id: "dawn", name: "Dawn (Light)", caption: "Warm cream and coral, like the first hour of light.", dark: false },
   { id: "glacier", name: "Glacier (Light)", caption: "Icy blue and crisp white, cool and clear.", dark: false },
   // `dark` here is only a default: the custom theme's own mode decides (see applyTheme()).
-  { id: "custom", name: "Custom", caption: "Your colours, your world. Built in the editor below.", dark: true },
+  { id: "custom", name: "Custom", caption: "Your colours, your world. Tap the pencil to edit.", dark: true },
 ];
 const IDS = new Set(THEMES.map((t) => t.id));
 

@@ -86,7 +86,7 @@ function Preview({ cfg }) {
  * The custom theme editor. Every control applies at once: the whole app re-colours behind it,
  * the landscape at the bottom of the page included, so the page itself is the preview.
  */
-export default function CustomTheme() {
+export default function CustomTheme({ onClose }) {
   const [cfg, update] = useCustomTheme();
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState("");
@@ -124,7 +124,10 @@ export default function CustomTheme() {
   }
 
   return (
-    <div className="mt-5 flex flex-col gap-6 rounded-2xl border border-primary-200 p-5 dark:border-primary-900/60">
+    <div
+      id="custom-theme-editor"
+      className="mt-5 flex flex-col gap-6 rounded-2xl border border-primary-200 p-5 dark:border-primary-900/60"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Make it yours</h3>
@@ -137,6 +140,11 @@ export default function CustomTheme() {
           <Button variant="ghost" icon={RotateCcw} onClick={() => update({ ...CUSTOM_DEFAULT })}>
             Reset
           </Button>
+          {onClose && (
+            <Button icon={Check} onClick={onClose}>
+              Done
+            </Button>
+          )}
         </div>
       </div>
 
