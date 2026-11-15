@@ -25,6 +25,7 @@ PROMPT_TOKENS = 450  # the longest system prompt below plus chat-template overhe
 MAP_REPLY_TOKENS = 500
 REDUCE_REPLY_TOKENS = 900
 QA_REPLY_TOKENS = 350
+VERIFY_REPLY_TOKENS = 400
 MAX_ROUNDS = 4
 # Small models lose track of a long chunk: qwen2.5:1.5b fed ~3000 tokens of a planning
 # meeting kept the decisions of one topic in five. ~1500 tokens per map call keeps them all.
@@ -98,6 +99,22 @@ QA_SYSTEM = (
 )
 QA_PROMPT = ChatPromptTemplate.from_messages(
     [("system", QA_SYSTEM), ("human", "Excerpts:\n{text}\n\nQuestion: {question}")]
+)
+
+
+VERIFY_SYSTEM = (
+    "You check one summary against the transcript it was written from. Reply with the "
+    "corrected summary and nothing else: no heading, no comment, no quotes.\n"
+    "- Keep the same language, length and style: 3 to 6 sentences of plain prose.\n"
+    "- Change only what the transcript contradicts: a number, a name, a date, a ranking or "
+    "a claim that a later line corrects. When two lines disagree, the later one is right.\n"
+    "- Example: the transcript says \"it is the fastest ever\" and later \"it is the third "
+    "fastest\"; a summary saying \"the fastest\" has to say \"the third fastest\".\n"
+    "- Drop a claim the transcript does not support. Never add a fact of your own.\n"
+    "- If nothing is wrong, reply with the summary exactly as it is."
+)
+VERIFY_PROMPT = ChatPromptTemplate.from_messages(
+    [("system", VERIFY_SYSTEM), ("human", "Transcript:\n{text}\n\nSummary:\n{summary}")]
 )
 
 
@@ -282,9 +299,36 @@ def _on_topic(text, source_words):
     return len(content) < 2 or len(content & source_words) * 2 > len(content)
 
 
-def ground(notes, transcript):
+# Someone taking on work says so, and in a recording with no such phrase anywhere there is
+# nothing for anyone to do after it. Measured over the test material: the news report of bug
+# B6 has 0 of these, while a stand-up has 8, a client call 7 and a 55 min planning meeting 66.
+COMMITMENT = re.compile(
+    r"i'll|i will|we'll|we will|let's|can you|could you|going to|need to|needs to|have to|"
+    r"has to|should |make sure|follow up|action item|take care of|i'm on it|assign|deadline|"
+    r"send (?:you|me|over|the)|take that|owns? this|"
+    r"by (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|next week|end of)",
+    re.IGNORECASE,
+)
+
+
+def _has_commitment(transcript, language):
+    """Whether anyone in an English transcript said they would do something. Unknown or other
+    languages are not tested, so their action items are left alone."""
+    if not (language or "").lower().startswith("en"):
+        return True
+    return COMMITMENT.search(transcript) is not None
+
+
+def ground(notes, transcript, language=""):
     source = _words(transcript)
     text = " ".join(re.findall(r"\w+", transcript.lower()))
+    if notes["action_items"] and not _has_commitment(transcript, language):
+        # The prompt asks for [] on a recording with no tasks, but a small model fills the slot
+        # anyway on maybe half its runs: the news report gave 0 items twice and 4 on the third
+        # run, built out of things the report merely described (bug B6).
+        log.info("dropping %d action_items: nobody in this recording took on work",
+                 len(notes["action_items"]))
+        notes["action_items"] = []
     for kind, key in (("decisions", str), ("action_items", lambda i: i["task"])):
         kept = [v for v in notes[kind] if _on_topic(key(v), source)]
         if len(kept) < len(notes[kind]):
@@ -376,7 +420,79 @@ def merge(found, notes, union=False):
     }
 
 
-def summarize(transcript, prof, on_progress=lambda frac: None):
+def trim_to(text, room):
+    """Keep the start and the end of `text` when it does not fit `room`: a meeting's outcome,
+    and a correction of something said early, both come late."""
+    if len(text) <= room:
+        return text
+    half = room // 2
+    return text[:half] + "\n...\n" + text[-half:]
+
+
+# Ranking words. A check that rewrites "the fastest" into "the second fastest" when the
+# transcript says "the third" has invented a fact of its own, which is no better than the
+# claim it replaced, so a reply may only use a rank the transcript actually contains.
+RANKS = re.compile(
+    r"(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|"
+    r"\d+(?:st|nd|rd|th))", re.IGNORECASE)
+
+
+def _ranks_grounded(reply, transcript):
+    said = {w.lower() for w in RANKS.findall(transcript)}
+    return {w.lower() for w in RANKS.findall(reply)} <= said
+
+
+def _check_once(summary, text, prof):
+    """One pass of the summary check. Returns the reply, or "" when it is unusable."""
+    try:
+        reply = (
+            VERIFY_PROMPT | chat(prof, num_predict=VERIFY_REPLY_TOKENS) | StrOutputParser()
+        ).invoke({"text": text, "summary": summary}).strip()
+    except Exception as e:  # a provider error must not lose the summary we already have
+        log.warning("summary check failed (%s), keeping the original", e)
+        return ""
+    reply = FENCE.sub("", reply).strip().strip('"').strip()
+    if not reply or len(reply) < len(summary) // 3 or len(reply) > 2 * len(summary) + 200:
+        log.info("summary check gave an unusable reply (%d chars)", len(reply))
+        return ""
+    if reply.lower().startswith(("the summary", "corrected summary", "here", "i ", "note")):
+        log.info("summary check answered with commentary")
+        return ""
+    return reply
+
+
+def verify(summary, transcript, prof):
+    """One extra LLM call that checks the summary against the transcript and returns the
+    corrected text.
+
+    The reduce prompt tells the model that a later correction wins, but a 3b model obeyed that
+    in only 2 of 5 runs on a news report whose anchor overclaimed and whose reporter corrected
+    him (bug B5): the claim is in the transcript, so nothing downstream can catch it. Checking
+    one short summary against the transcript is a far smaller job than writing it, and the
+    model does it with the claim and the correction side by side.
+
+    Fail-safe: an empty, truncated, wildly longer or commentary reply is discarded and the
+    original summary kept, so this can only improve the result.
+    """
+    if not summary.strip() or not transcript.strip():
+        return summary
+    text = trim_to(transcript, input_chars(prof, VERIFY_REPLY_TOKENS))
+    # Two attempts: the first reply is often right, and when it invents a rank the second
+    # usually does not. Anything still ungrounded leaves the summary as the reduce call wrote it.
+    for attempt in (1, 2):
+        reply = _check_once(summary, text, prof)
+        if not reply:
+            break
+        if not _ranks_grounded(reply, transcript):
+            log.info("summary check invented a rank on attempt %d, discarding it", attempt)
+            continue
+        if reply != summary:
+            log.info("summary check rewrote the summary")
+        return reply
+    return summary
+
+
+def summarize(transcript, prof, on_progress=lambda frac: None, language=""):
     if not transcript.strip():
         return parse_notes("{}")
     chain = MAP_PROMPT | chat(prof, num_predict=MAP_REPLY_TOKENS) | StrOutputParser()
@@ -404,15 +520,15 @@ def summarize(transcript, prof, on_progress=lambda frac: None):
         # Still too long after MAX_ROUNDS: keep the start and the end (outcomes come late in a
         # meeting) rather than letting Ollama drop the start without telling anyone.
         log.warning("notes still %d chars after %d rounds, trimming to %d", len(notes), MAX_ROUNDS, reduce_room)
-        half = reduce_room // 2
-        notes = notes[:half] + "\n...\n" + notes[-half:]
+        notes = trim_to(notes, reduce_room)
     raw = (REDUCE_PROMPT | chat(prof, json_mode=True, num_predict=REDUCE_REPLY_TOKENS) | StrOutputParser()).invoke(
         {"text": notes}
     )
     result = parse_notes(raw)
     if found is not None:
         result = merge(found, result, union=notes is transcript)
-    return ground(result, transcript)
+    result["summary"] = verify(result["summary"], transcript, prof)
+    return ground(result, transcript, language)
 
 
 STAMP = re.compile(r"\[(\d{1,2}(?::\d{2}){1,2})\]")

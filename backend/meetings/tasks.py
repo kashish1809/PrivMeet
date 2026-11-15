@@ -77,6 +77,7 @@ def process_meeting(meeting_id):
         notes = llm.summarize(
             m.transcript(), prof,
             on_progress=lambda f: m.set_status(Meeting.Status.SUMMARIZING, 80 + int(15 * f)),
+            language=m.language,
         )
         for k, v in notes.items():
             setattr(m, k, v)
