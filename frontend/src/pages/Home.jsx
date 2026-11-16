@@ -15,7 +15,19 @@ import {
 import { api, deleteMeeting, listMeetings, meetingExportUrl } from "../api";
 import { navigate } from "../App";
 import { isProcessing } from "../format";
-import { Badge, Button, Card, ConfirmDialog, EmptyState, Menu, PixelScape, cx, focusRing } from "../ui";
+import {
+  Badge,
+  Button,
+  Card,
+  ConfirmDialog,
+  cx,
+  EmptyState,
+  focusRing,
+  heroTitle,
+  Menu,
+  PixelScape,
+  useHeroText,
+} from "../ui";
 
 const POLL_MS = 2000;
 const RECENT = 5;
@@ -51,6 +63,8 @@ function StatusPill({ m }) {
 }
 
 function Hero({ name }) {
+  // the custom theme's own greeting, or the default one (Settings -> Appearance -> Custom)
+  const text = useHeroText();
   return (
     <Card className="relative isolate overflow-hidden border-primary-200 bg-primary-50 dark:border-primary-900/60 dark:bg-zinc-950">
       {/* The landscape fills the card and fades out under the text on the left. */}
@@ -62,11 +76,9 @@ function Hero({ name }) {
       />
       <div className="relative flex min-h-60 flex-col justify-center gap-3 p-7 sm:p-9">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl dark:text-white">
-          {name ? `Welcome back, ${name}` : "Welcome back"}
+          {heroTitle(text.title, name)}
         </h1>
-        <p className="max-w-sm text-sm text-zinc-600 sm:text-base dark:text-zinc-300">
-          Turn your meetings into structured, actionable insights.
-        </p>
+        <p className="max-w-sm text-sm text-zinc-600 sm:text-base dark:text-zinc-300">{text.line}</p>
         <div className="mt-3">
           <Button size="lg" icon={Plus} onClick={() => navigate("/new")}>
             New Meeting

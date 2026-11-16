@@ -40,6 +40,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.4** sidebar v2 + routes | Vinayak | `feat/link-llm-accounts` | the five v2 items, no group heading on them, Meetings active for `record` and `m/<id>`. **Deviation:** History and the four Tools entries are kept under a "Planned" heading instead of being deleted, each a stub naming the task that replaces it (R2.11, R2.10, R2.12, U1.4, R2.5). Remove them when those tasks land. |
 | **R1.7** settings store, flags, API reference | Vinayak | merged with U1.4 (#33), which needs it | `settings_store.py`, `FEATURES`, `docs/API.md` |
 | **R2.8** audio player | Kashish | `feat/link-llm-accounts` | `frontend/src/components/Player.jsx`, used by `TranscriptPanel.jsx` |
+| Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
 **Partly done, still open:** R1.1 (the four theme presets, `useTheme` and `THEMES` exist) and
 R1.3 (`docs/ui/logo.svg`, `Logo.jsx` with `TAGLINE` and `SUBLINE`, the favicon; the four logo
@@ -54,7 +55,10 @@ so. Doing this is what stops the next person rebuilding something that already e
 `(cut)` here.
 
 **Added beyond the task list** (Vinayak, approved during review; all merged):
-- **Themes:** the four theme presets (Indigo, Teal, Amber, Slate) with a picker in Settings → Appearance.
+- **Themes:** eleven of them, picked in Settings → Appearance. The four from the mockup
+  (Indigo, Teal, Amber, Slate), four more (Sakura, Pine, Dawn, Glacier), two special ones with
+  renderers of their own (Neon Drive, Meadow), and **Custom**, always last, which generates
+  both colour scales from one accent and is edited behind the pencil on its card.
 - **Art:** pixel landscapes behind every page. Each theme has its own scene and easter eggs, plus a starfield on dark themes.
 - **Logo:** the pixel speech-bubble logo, animated (it glances and blinks). The master is `docs/ui/logo.svg`; the structure and texture references are in `docs/ui/logo-mockup.png` and `docs/ui/logo-texture-ref.jpg`.
 - **Font and buttons:** the Monocraft pixel font (OFL, bundled) with textured pixel buttons, plus a font switch to a normal font, where the buttons go flat.
@@ -134,13 +138,37 @@ Either person can do all of their tasks in one go. Nothing waits for the other p
 ## UI v2 spec (what "matches the mockup" means)
 Read this with `docs/ui/mockup.webp` open. Hex values are sampled from the mockup.
 
-**Themes.** Four presets, chosen in Settings → Appearance:
+**Themes.** Eleven, chosen in Settings → Appearance. The four below are the mockup's; the
+rest are listed under "Themes beyond the mockup". A theme only re-maps `--color-primary-*` and
+`--color-zinc-*`, so every page re-colours with no edit, and each one has its own landscape.
 | id | Name | Caption | Kind | Page | Sidebar | Card | Accent |
 |---|---|---|---|---|---|---|---|
 | `indigo` | Indigo (Default) | Modern, professional, and focused. | dark | `#080C1A` | `#0E0F2A` | `#151D36` | `#4942E3` |
 | `teal` | Teal | Clean and calm, great for long sessions. | dark | `#0E1D25` | `#0D1D26` | a step lighter than page | teal `#14B8A6`, active item `#085E56` |
 | `amber` | Amber | Warm and minimal with high clarity. | dark | `#1E1A1D` | `#1D191D` | a step lighter than page | amber `#F59E0B`, active item `#6C441F` |
 | `slate` | Slate (Light) | Clean, minimal light theme for everyday use. | light | `#EAECFC` | `#E6E9FB` | `#EDEEFD` to white | soft indigo, active item `#C6C6FC` |
+
+**Themes beyond the mockup.** Same contract, each with its own world in `PixelScape`:
+
+| id | Name | Kind | Accent | Its landscape |
+|---|---|---|---|---|
+| `rose` | Sakura | dark | `#F43F78` | cherry trees in bloom, drifting petals, a pink aurora |
+| `forest` | Pine | dark | `#10B981` | pines along the banks, a green aurora |
+| `dawn` | Dawn (Light) | light | `#F05A33` | hot-air balloons rising into a sunrise |
+| `glacier` | Glacier (Light) | light | `#0EA5E9` | icebergs on the lake, deeper snow |
+| `neon` | Neon Drive | dark | `#FF2BC2` | **its own renderer**: a striped sun sinking behind neon ranges over a glowing grid |
+| `meadow` | Meadow (Light) | light | `#26A947` | **its own renderer**: cumulus over rolling hills, a lone tree, wildflowers, birds |
+| `custom` | Custom (always last) | either | yours | any of the ten worlds above |
+
+**The custom theme** (`frontend/src/ui/useTheme.js`, editor in `frontend/src/pages/CustomTheme.jsx`).
+`customScales()` turns one accent colour into both 11-step scales; `applyTheme()` writes them onto
+`<html>` as the same variables a preset sets, and sets `data-scene` for the landscape. It carries
+a name, the accent, dark or light mode, a neutral hue and tint strength, the landscape, and
+Home's greeting (`heroTitle`, `heroLine`, where `{name}` becomes the display name). The editor
+opens from the pencil on its card and shows WCAG contrast for body text, links and buttons.
+`shareCode()` and `readShareCode()` pass a theme between people as a `pm1:` code; `surprise()`
+makes a random harmonious one. Every field is validated on read, so a damaged value falls back
+on its own.
 
 - Brand palette: `#4942E3`, `#5B3CDD`, `#AFA1FC`, `#151F3A`, `#39466C`, `#E8E8F3`. Success green `#37C87C`.
 - Indigo extras: search field `#191E3A`, primary button `#483FE1`, "Summary Ready" pill is green text on `#0F282D`, "Processed" pill is blue text on `#0E203B`.
@@ -459,7 +487,7 @@ Read this with `docs/ui/mockup.webp` open. Hex values are sampled from the mocku
     - General: display name (shown on Home and as the avatar initials), default title format.
     - AI Model: the provider is Ollama only. Model select from the installed list, Server URL with Test Connection and a Connected status, and Advanced options (`num_ctx`, `cpu_threads`, diarization). A link to `#/models`.
     - Recording: default mic, include system audio, camera off by default. These three are stored in `localStorage`.
-    - Appearance: the four theme cards from the mockup (mini preview, name, caption), with a ring on the selected one.
+    - Appearance: a card per theme (mini preview, name, caption), with a ring on the selected one. **As built:** eleven cards, Custom last, with the editor behind the pencil on its card.
 - **Done when:** changing the model in Settings changes the model used by the next processed meeting, and picking a theme card re-colors the whole app.
 
 ### Kashish
@@ -532,6 +560,7 @@ Look and shell first, then backend features. None of these needs a Kashish task.
 - **Files:** `frontend/src/ui/theme.css`, `frontend/src/ui/useTheme.js`, `frontend/src/ui/index.js`
 - **Do:**
   - Four presets on `<html data-theme>`: `indigo` (default), `teal`, `amber`, `slate`. The three dark ones also set the `.dark` class, so every existing `dark:` class keeps working.
+    **As built:** eleven, including the generated `custom`, whose own mode decides the `.dark` class.
   - A preset only overrides CSS variables: `--color-primary-50…950` (accent) and `--color-zinc-50…950` (neutrals, tinted navy / deep teal / warm brown / cool slate). Use the hex values in "UI v2 spec". Pages need no edit.
   - Extra tokens for the hero wave and the active nav pill: `--pm-grad-from`, `--pm-grad-to`.
   - `useTheme()` returns `[theme, setTheme]` with the four ids. `applyTheme()` maps an old stored value: `light` → `slate`; `dark`, `system` or nothing → `indigo`.

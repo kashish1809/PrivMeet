@@ -89,14 +89,9 @@ export function Logo({ rail }) {
  */
 function LocalAI({ system, error, rail }) {
   const provider = system?.llm_provider && system.llm_provider !== "ollama" ? system.llm_provider : "";
-  const title = !system ? "Local AI" : provider ? "Using a cloud model" : "Self-hosted";
-  const line = !system
-    ? error
-      ? "Backend offline"
-      : "Connecting…"
-    : provider
-      ? `Notes written by ${provider}`
-      : "Your data. Your server.";
+  // Short enough for the card: "Notes written by groq" lost the provider to the ellipsis.
+  const title = !system ? "Local AI" : provider ? "Cloud model" : "Self-hosted";
+  const line = !system ? (error ? "Backend offline" : "Connecting…") : provider ? `Notes by ${provider}` : "Your data. Your server.";
   return (
     <a
       href="#/settings"

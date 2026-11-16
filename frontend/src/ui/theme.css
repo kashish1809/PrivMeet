@@ -82,7 +82,7 @@
   .pm-sparkle { animation: none; opacity: 0; }
 }
 
-/* ---- Theme presets (Settings -> Appearance): <html data-theme="indigo|teal|amber|slate">.
+/* ---- Theme presets (Settings -> Appearance): <html data-theme="indigo|teal|amber|slate|...">.
    A preset only re-maps the primary-* (accent) and zinc-* (neutral) scales, so every page
    re-colors with no edit. indigo, teal and amber are dark (useTheme adds .dark); slate is light.
    Values from docs/TASKS.md "UI v2 spec". */
@@ -125,6 +125,74 @@ html[data-theme="slate"] {
   --color-zinc-300: #b2b7d6; --color-zinc-400: #8a90b3; --color-zinc-500: #666c8f;
   --color-zinc-600: #4c5274; --color-zinc-700: #393e5c; --color-zinc-800: #262a45;
   --color-zinc-900: #171a2e; --color-zinc-950: #0c0e1c;
+}
+
+/* ---- Four more presets. Same contract: they only re-map primary-* and zinc-*. rose and
+   forest are dark (useTheme adds .dark), dawn and glacier are light. Neutrals are tinted
+   toward each accent so cards, borders and text belong to the same world as the scene. */
+html[data-theme="rose"] {
+  --color-primary-50: #fff1f5; --color-primary-100: #ffe4ec; --color-primary-200: #fecdda;
+  --color-primary-300: #fda4bd; --color-primary-400: #fb7199; --color-primary-500: #f43f78;
+  --color-primary-600: #e11d62; --color-primary-700: #be1250; --color-primary-800: #9d1246;
+  --color-primary-900: #6b1238; --color-primary-950: #3a0a22;
+  --color-zinc-50: #faf6f8; --color-zinc-100: #f3ecf0; --color-zinc-200: #e7dbe2;
+  --color-zinc-300: #cfbac6; --color-zinc-400: #a98f9f; --color-zinc-500: #7d6474;
+  --color-zinc-600: #574352; --color-zinc-700: #3f2f3b; --color-zinc-800: #2c202a;
+  --color-zinc-900: #1e151d; --color-zinc-950: #130c13;
+}
+html[data-theme="forest"] {
+  --color-primary-50: #ecfdf5; --color-primary-100: #d1fae5; --color-primary-200: #a7f3d0;
+  --color-primary-300: #6ee7b7; --color-primary-400: #34d399; --color-primary-500: #10b981;
+  --color-primary-600: #059669; --color-primary-700: #047857; --color-primary-800: #065f46;
+  --color-primary-900: #064e3b; --color-primary-950: #022c22;
+  --color-zinc-50: #f4f8f5; --color-zinc-100: #e8f0ea; --color-zinc-200: #d3e1d7;
+  --color-zinc-300: #b0c7b8; --color-zinc-400: #85a291; --color-zinc-500: #5b7867;
+  --color-zinc-600: #3c5647; --color-zinc-700: #2a4034; --color-zinc-800: #1c2d24;
+  --color-zinc-900: #121f19; --color-zinc-950: #0a140f;
+}
+html[data-theme="dawn"] {
+  --color-primary-50: #fff4ef; --color-primary-100: #ffe6db; --color-primary-200: #ffcab4;
+  --color-primary-300: #ffa685; --color-primary-400: #fb7a52; --color-primary-500: #f05a33;
+  --color-primary-600: #d9431f; --color-primary-700: #b3341a; --color-primary-800: #8f2b1b;
+  --color-primary-900: #73261b; --color-primary-950: #3f100a;
+  --color-zinc-50: #fdf5ee; --color-zinc-100: #f8eadf; --color-zinc-200: #efdacb;
+  --color-zinc-300: #dcc0ab; --color-zinc-400: #b89982; --color-zinc-500: #8d715d;
+  --color-zinc-600: #6a5343; --color-zinc-700: #513e32; --color-zinc-800: #372921;
+  --color-zinc-900: #241a15; --color-zinc-950: #140e0b;
+}
+html[data-theme="glacier"] {
+  --color-primary-50: #f0f9ff; --color-primary-100: #e0f2fe; --color-primary-200: #bae6fd;
+  --color-primary-300: #7dd3fc; --color-primary-400: #38bdf8; --color-primary-500: #0ea5e9;
+  --color-primary-600: #0284c7; --color-primary-700: #0369a1; --color-primary-800: #075985;
+  --color-primary-900: #0c4a6e; --color-primary-950: #082f49;
+  --color-zinc-50: #edf5fa; --color-zinc-100: #e1edf5; --color-zinc-200: #cde0eb;
+  --color-zinc-300: #aec8d8; --color-zinc-400: #86a5b9; --color-zinc-500: #617e92;
+  --color-zinc-600: #455e70; --color-zinc-700: #334756; --color-zinc-800: #22303c;
+  --color-zinc-900: #151f28; --color-zinc-950: #0b131a;
+}
+
+/* ---- Neon Drive, the special theme: hot pink on a deep synthwave purple. Dark. */
+html[data-theme="neon"] {
+  --color-primary-50: #fff0fb; --color-primary-100: #ffe0f7; --color-primary-200: #ffc1ef;
+  --color-primary-300: #ff94e2; --color-primary-400: #ff5ccf; --color-primary-500: #ff2bc2;
+  --color-primary-600: #e011ac; --color-primary-700: #b80c8e; --color-primary-800: #8f0e70;
+  --color-primary-900: #6b0f56; --color-primary-950: #3d0532;
+  --color-zinc-50: #f7f4fb; --color-zinc-100: #eee8f6; --color-zinc-200: #ddd3ee;
+  --color-zinc-300: #c2b2de; --color-zinc-400: #9b85c3; --color-zinc-500: #725c9e;
+  --color-zinc-600: #4f3d78; --color-zinc-700: #382a5a; --color-zinc-800: #261b40;
+  --color-zinc-900: #180f2b; --color-zinc-950: #0d0619;
+}
+
+/* ---- Meadow, the special light theme: leaf green on a warm summer cream. Light. */
+html[data-theme="meadow"] {
+  --color-primary-50: #effcf1; --color-primary-100: #d9f7de; --color-primary-200: #b4eebf;
+  --color-primary-300: #7fdf92; --color-primary-400: #49c766; --color-primary-500: #26a947;
+  --color-primary-600: #198b37; --color-primary-700: #176d2f; --color-primary-800: #17562a;
+  --color-primary-900: #144725; --color-primary-950: #072812;
+  --color-zinc-50: #f6f9f2; --color-zinc-100: #edf3e6; --color-zinc-200: #dde8d2;
+  --color-zinc-300: #c2d3b3; --color-zinc-400: #9db18b; --color-zinc-500: #788c67;
+  --color-zinc-600: #58694b; --color-zinc-700: #435039; --color-zinc-800: #2d3727;
+  --color-zinc-900: #1c2318; --color-zinc-950: #0e130c;
 }
 
 /* Scene easter-egg motion: a lighthouse beam, a campfire, a paper plane. Off for reduced motion. */

@@ -117,15 +117,34 @@ const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[
 const WHITE = [255, 255, 255];
 const BLACK = [0, 0, 0];
 
+/** Props every world can need, in either mode. The themed palettes override these; a custom
+ *  theme can put any world in any mode, so each one must exist everywhere. */
+const PROPS = {
+  petal: [255, 183, 213],
+  blossom: [[255, 205, 225], [244, 143, 186], [190, 70, 120]],
+  pine: [[12, 40, 28], [26, 72, 50]],
+  balloon: [[240, 90, 60], [255, 200, 90], [90, 160, 220], [250, 245, 235]],
+  ice: [[245, 252, 255], [190, 228, 248], [120, 180, 220]],
+  cactus: [70, 120, 80],
+};
+
 function palette() {
+  return { ...PROPS, ...themedPalette() };
+}
+
+function themedPalette() {
   const probe = document.createElement("canvas");
   probe.width = probe.height = 1;
   const p = (n) => readColor(probe, `--color-primary-${n}`, "#6366f1");
   const z = (n) => readColor(probe, `--color-zinc-${n}`, "#18181b");
-  const violet = mix(p(500), [168, 85, 247], 0.45); // a second hue so the scene is not one tone
   const root = document.documentElement;
   // Which world the theme lives in; each has its own easter eggs (see render()).
-  const biome = root.dataset.theme || (root.classList.contains("dark") ? "indigo" : "slate");
+  // A custom theme names its landscape in data-scene; otherwise the theme id is the world.
+  const biome = root.dataset.scene || root.dataset.theme || (root.classList.contains("dark") ? "indigo" : "slate");
+  // A second hue so the scene is not one tone: violet by default, magenta under the cherry
+  // blossom, a cold blue-green in the pine forest.
+  const second = { rose: [217, 70, 239], forest: [45, 170, 160] }[biome] || [168, 85, 247];
+  const violet = mix(p(500), second, 0.45);
   if (root.classList.contains("dark")) {
     if (biome === "amber") {
       // Warm dusk over a desert: red rock, a big harvest moon low over the mesas.
@@ -173,19 +192,24 @@ function palette() {
       wood: mix(z(800), p(900), 0.4),
       metal: p(300),
       bloom: [mix(p(300), [253, 224, 71], 0.6)],
-      // teal: a greener aurora over a fjord
+      // teal: a greener aurora over a fjord; sakura: a pink one; pine: a green one
       ...(biome === "teal" ? { aurora: mix(p(300), [110, 255, 170], 0.5) } : {}),
+      ...(biome === "rose" ? { aurora: mix(p(300), [255, 150, 210], 0.5), petal: [255, 183, 213], blossom: [[255, 205, 225], [244, 143, 186], [190, 70, 120]] } : {}),
+      ...(biome === "forest" ? { aurora: mix(p(300), [130, 255, 160], 0.55), snow: mix(p(100), WHITE, 0.7), pine: [mix(z(950), [10, 45, 30], 0.6), mix(z(900), [20, 70, 45], 0.55)] } : {}),
     };
   }
+  // Light themes. The horizon is warm by default; Glacier keeps it ice-cold, Dawn pushes it to
+  // a full sunrise.
+  const horizon = { glacier: [[200, 236, 255], [170, 220, 250]], dawn: [[255, 200, 160], [255, 160, 120]] }[biome] || [[255, 214, 186], [255, 190, 160]];
   return {
     dark: false,
     biome,
-    sky: [mix(p(100), WHITE, 0.45), mix(p(100), WHITE, 0.2), p(100), mix(p(100), [255, 214, 186], 0.45), mix(p(200), [255, 190, 160], 0.55)],
+    sky: [mix(p(100), WHITE, 0.45), mix(p(100), WHITE, 0.2), p(100), mix(p(100), horizon[0], 0.45), mix(p(200), horizon[1], 0.55)],
     celestial: mix([255, 186, 84], p(200), 0.15),
     celestialDeep: mix([244, 114, 72], p(400), 0.2),
     glow: mix([255, 214, 160], p(100), 0.3),
     star: p(300),
-    cloud: [WHITE, mix(WHITE, p(100), 0.55), mix(p(200), [255, 214, 196], 0.4), mix(p(300), p(400), 0.35)],
+    cloud: [WHITE, mix(WHITE, p(100), 0.55), mix(p(200), horizon[0], 0.4), mix(p(300), p(400), 0.35)],
     ridges: [mix(p(200), [255, 200, 190], 0.3), mix(p(300), p(200), 0.4), p(400), mix(p(500), p(600), 0.5), mix(p(700), p(800), 0.5)],
     light: mix([255, 214, 160], WHITE, 0.3),
     snow: WHITE,
@@ -196,6 +220,9 @@ function palette() {
     wood: mix(p(800), [120, 72, 48], 0.5),
     metal: p(700),
     bloom: [[251, 113, 133], [250, 204, 21], WHITE],
+    // Glacier: a pale winter sun and more snow; Dawn: a low, red sun.
+    ...(biome === "glacier" ? { celestial: [255, 250, 225], celestialDeep: [210, 235, 250], glow: [225, 245, 255], ice: [[245, 252, 255], [190, 228, 248], [120, 180, 220]] } : {}),
+    ...(biome === "dawn" ? { celestial: [255, 150, 90], celestialDeep: [235, 80, 60], glow: [255, 200, 150], balloon: [[240, 90, 60], [255, 200, 90], [90, 160, 220], [250, 245, 235]] } : {}),
   };
 }
 
@@ -268,6 +295,82 @@ function render(ctx, w, h, seed, opts, pal) {
     });
   };
 
+  /**
+   * One bank of the hero's cloud sea, painted the way pixel artists paint cumulus: round puffs
+   * stacked on each other, each one shaded as a sphere lit by the moon or sun, its light
+   * quantised into five tones with dithering between them. Higher puffs are painted first and
+   * the lower ones overlap them, so every puff's lit crown sits against the shaded belly of
+   * the one behind it, which separates them without any outline. Below the puffs the bank is
+   * a solid mass that falls into shadow; the next bank forward covers it.
+   *
+   * (The first version drew a dark seam wherever two lobes met, which on dozens of lobes read
+   * as a muddy jumble; the second used long flat lobes that read as striped rock strata.)
+   */
+  const cloudBank = ({ baseY, size, lightX, lightY, haze, hazeColor, ramp, glow }) => {
+    const puffs = [];
+    for (let x = -size + rand() * size; x < w + size; ) {
+      const r = size * (0.8 + rand() * 0.5);
+      puffs.push({ c: x, cy: baseY + (rand() - 0.5) * size * 0.3, r });
+      // about half carry a smaller puff on top: enough to make the silhouette billow, few
+      // enough that the bank does not turn into a field of pebbles
+      if (rand() < 0.5) {
+        const rr = r * (0.5 + rand() * 0.2);
+        puffs.push({ c: x + (rand() - 0.5) * r * 0.6, cy: baseY - r * (0.5 + rand() * 0.2), r: rr });
+      }
+      x += r * (1.0 + rand() * 0.5);
+    }
+    const tones = ramp.map((c) => (haze ? mix(c, hazeColor, haze) : c)); // deep .. rim
+    // The bank's body comes first, below the puffs, falling from shade into the deep tone.
+    // Painted after them it sliced their lower halves off flat.
+    const bodyTop = Math.round(baseY + size * 0.45);
+    for (let y = Math.max(0, bodyTop); y < h; y += 1) {
+      const f = (y - bodyTop) / Math.max(4, h - bodyTop);
+      for (let x = 0; x < w; x += 1) put(x, y, tones[f * 1.4 > dither(x, y) ? 0 : 1]);
+    }
+    paintPuffs(puffs, tones, lightX, glow);
+    void lightY;
+  };
+
+  /**
+   * Paint round cloud puffs, higher ones first so lower ones overlap them, each lit as a ball
+   * of scattering vapour. `clipY` gives a cloud a flat base (a small sky cloud); the tones run
+   * from the deepest shade to the rim light.
+   */
+  const paintPuffs = (puffs, tones, lightX, glow, clipY = Infinity) => {
+    puffs.sort((a, b) => a.cy - b.cy); // back (higher) first, front (lower) last
+    const levels = tones.length - 1;
+    const shadeAt = (x, y, light) => {
+      // light 0..1 -> one of the five tones. Flat tones, dithered only in a narrow strip at
+      // each boundary: dithering the whole range made every puff a checkerboard.
+      const f = Math.min(levels, Math.max(0, light * levels));
+      const k = Math.floor(f);
+      const frac = f - k;
+      const up = frac > 0.62 || (frac > 0.38 && (frac - 0.38) / 0.24 > dither(x, y));
+      return tones[Math.min(levels, up ? k + 1 : k)];
+    };
+    for (const pf of puffs) {
+      const lx = Math.sign(lightX - pf.c) * 0.55;
+      const ly = -0.75; // the light is always above the cloud tops
+      const warm = glow ? Math.max(0, 1 - Math.abs(pf.c - lightX) / (w * 0.4)) * 0.18 : 0;
+      for (let y = Math.floor(pf.cy - pf.r); y <= Math.min(clipY, Math.ceil(pf.cy + pf.r)); y += 1) {
+        for (let x = Math.floor(pf.c - pf.r); x <= Math.ceil(pf.c + pf.r); x += 1) {
+          const nx = (x - pf.c) / pf.r;
+          const ny = (y - pf.cy) / pf.r;
+          const rr = nx * nx + ny * ny;
+          if (rr > 1) continue;
+          const nz = Math.sqrt(1 - rr);
+          // Wrapped light: a cloud scatters light, so it bleeds round the side instead of
+          // stopping at a hard terminator. Plain lambert made each puff a stone ball.
+          const lambert = nx * lx + ny * ly + nz * 0.35;
+          const wrapped = (lambert + 0.75) / 1.75;
+          // the flat base of a small cloud sits in its own shade
+          const base = y >= clipY - 1 ? 0.18 : 0;
+          put(x, y, shadeAt(x, y, Math.min(1, wrapped * 0.9 + 0.12 + warm - base)));
+        }
+      }
+    }
+  };
+
   /** Draw an ASCII sprite: each character is a key of `colors`, "." is transparent. */
   const sprite = (rows, x0, y0, colors) => {
     rows.forEach((row, dy) => {
@@ -277,7 +380,308 @@ function render(ctx, w, h, seed, opts, pal) {
     });
   };
 
+  // ---- Props for the newer themes, shared by both scenes.
+  const CHERRY = [
+    "....bBBb......",
+    "..bBBPPBBb....",
+    ".bBPPPPPPBb...",
+    "bBPPbPPPPPBb..",
+    ".BPPPPPbPPPB..",
+    "..bBPPPPPBb...",
+    "....bBTBb.....",
+    "......T.......",
+    "......TT......",
+    ".......T......",
+    ".......T......",
+    "......TTT.....",
+  ];
+  const PINE = [
+    ["..X..", ".XXX.", "..X..", ".XXX.", "XXXXX", ".XXX.", "XXXXX", "..T.."],
+    ["..X..", ".XXX.", "XXXXX", "..X..", ".XXX.", "XXXXX", "..T..", "..T.."],
+    ["...X...", "..XXX..", ".XXXXX.", "...X...", "..XXX..", ".XXXXX.", "XXXXXXX", "...T...", "...T..."],
+  ];
+  const BALLOON = [
+    "..AAAAA..",
+    ".ABBABBA.",
+    "ABBAABBAA",
+    "ABBAABBAA",
+    "AABBAABBA",
+    ".ABBAABB.",
+    "..ABBAA..",
+    "...AAA...",
+    "...c.c...",
+    "...DDD...",
+    "...DDD...",
+  ];
+  const BERG = [
+    ".....I.........",
+    "....IIL........",
+    "...IIILL...I...",
+    "..IIIIILL.IIL..",
+    ".IIIIIIIILIIIL.",
+    "IIIIIIIIIIIIILL",
+    "WWWWWWWWWWWWWWW",
+  ];
+  /** Petals: single pink pixels, a few with a paler neighbour, scattered over an area. */
+  const petals = (n, x0, x1, y0, y1) => {
+    for (let i = 0; i < n; i += 1) {
+      const x = Math.round(x0 + rand() * (x1 - x0));
+      const y = Math.round(y0 + rand() * (y1 - y0));
+      put(x, y, pal.petal);
+      if (rand() < 0.4) blend(x + 1, y, pal.petal, 0.5);
+    }
+  };
+  /** A hot-air balloon in one of the theme's colour pairs. */
+  const balloon = (x, y, k) => {
+    const [a, b] = [pal.balloon[k % 4], pal.balloon[(k + 1) % 4]];
+    sprite(BALLOON, x, y, { A: a, B: b, c: mix(pal.wood, BLACK, 0.2), D: pal.wood });
+  };
+
   const lake = opts.scene === "lake";
+
+  // ---- Meadow, the special day world and Neon Drive's counterpart: a summer afternoon with
+  // towering cumulus over rolling green hills, a lone round tree, wildflowers in the grass and a
+  // few birds. Built only from shapes this renderer already draws well: puffs and smooth curves.
+  if (pal.biome === "meadow") {
+    const ov = { lanterns: [], blinks: [], sparks: [], beams: [], fires: [], kites: [], planes: [] };
+    const hex = (v) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    const SKY = [0x3d9be0, 0x5fb2ea, 0x8acbf2, 0xb6e0f8, 0xdff2fc].map(hex);
+    const CLOUD = [0x9db9d6, 0xc3d8ea, 0xe2edf7, 0xf3f8fd, 0xffffff].map(hex);
+    const LEAF = [0x24561d, 0x2f6e25, 0x438f31, 0x62ad45, 0x8dcb62].map(hex);
+    const FLOWERS = [0xff5d73, 0xffd23f, 0xffffff, 0xc084fc, 0xff8fb1].map(hex);
+    const horizon = Math.round(h * (lake ? 0.58 : 0.7));
+    const sunX = Math.round(w * (lake ? 0.82 : opts.orbX));
+    const sunY = Math.round(horizon * 0.22);
+    const sunR = Math.max(4, Math.round(h * 0.07));
+
+    // sky, deep blue at the top to pale at the horizon, dithered
+    for (let y = 0; y < h; y += 1) {
+      const f = Math.min(1, y / horizon) * (SKY.length - 1);
+      const k = Math.floor(f);
+      for (let x = 0; x < w; x += 1) put(x, y, f - k > dither(x, y) ? SKY[Math.min(SKY.length - 1, k + 1)] : SKY[k]);
+    }
+    // the sun: a bright disc in a wide soft glow
+    for (let y = Math.max(0, sunY - sunR * 4); y < sunY + sunR * 4; y += 1) {
+      for (let x = Math.max(0, sunX - sunR * 4); x < Math.min(w, sunX + sunR * 4); x += 1) {
+        const d = Math.hypot(x - sunX, y - sunY);
+        if (d <= sunR) put(x, y, d < sunR - 1 ? hex(0xfffbe6) : hex(0xffefb0));
+        else if (d < sunR * 4 && (1 - d / (sunR * 4)) * 0.6 > dither(x, y)) blend(x, y, hex(0xfff6d2), 0.35);
+      }
+    }
+    // towering cumulus: each a column of puffs, broad at the base, lit from the sun
+    const cloud = (cx, base, size) => {
+      const puffs = [];
+      for (let k = -2; k <= 2; k += 1) {
+        const r = size * (0.55 - Math.abs(k) * 0.08) * (0.9 + rand() * 0.25);
+        puffs.push({ c: cx + k * size * 0.42, cy: base - r * 0.3, r });
+      }
+      for (let k = 0; k < 3; k += 1) {
+        const r = size * (0.45 - k * 0.08);
+        puffs.push({ c: cx + (rand() - 0.5) * size * 0.5, cy: base - size * (0.45 + k * 0.38), r });
+      }
+      paintPuffs(puffs, CLOUD, sunX, null, Math.round(base));
+    };
+    const cloudY = Math.round(horizon * (lake ? 0.62 : 0.78));
+    const clouds = lake ? [[0.16, 0.2], [0.42, 0.26], [0.66, 0.17]] : [[0.62, 0.32], [0.98, 0.26]];
+    clouds.forEach(([fx, fs]) => cloud(Math.round(w * fx), cloudY + Math.round((rand() - 0.5) * 4), h * fs));
+
+    // rolling hills, far to near: hazy blue-green far away, saturated near
+    const hills = [
+      { base: 0.0, amp: 0.1, f: 0.021, tone: hex(0x9ccab6), haze: 0.5 },
+      { base: 0.08, amp: 0.09, f: 0.029, tone: hex(0x77b56f), haze: 0.25 },
+      { base: 0.18, amp: 0.08, f: 0.037, tone: hex(0x58a043), haze: 0.08 },
+      { base: 0.3, amp: 0.07, f: 0.045, tone: hex(0x438f31), haze: 0 },
+    ];
+    let treeAt = null;
+    hills.forEach((H, hi) => {
+      const ph = rand() * 6.28;
+      const ph2 = rand() * 6.28;
+      const lit = mix(H.tone, hex(0xe8f7b0), 0.35);
+      const shade = mix(H.tone, hex(0x1e3d1a), 0.3);
+      for (let x = 0; x < w; x += 1) {
+        // on the hero the heading sits on the left, so the land stays low there
+        const lean = lake ? 1 : 0.45 + 0.55 * Math.min(1, x / (w * 0.55));
+        const wave = Math.sin(x * H.f + ph) * 0.6 + Math.sin(x * H.f * 2.3 + ph2) * 0.4;
+        const top = Math.round(horizon + h * H.base - (h * H.amp * (1 + wave) * 0.5 + h * 0.03) * lean);
+        // the next hill forward hides the lower part of this one
+        for (let y = Math.max(0, top); y < h; y += 1) {
+          const d = y - top;
+          let c = d < 2 ? lit : d > 6 + hi * 2 && (d - 6) * 0.08 > dither(x, y) ? shade : H.tone;
+          if (H.haze) c = mix(c, SKY[4], H.haze);
+          put(x, y, c);
+        }
+        // the lone tree stands on the second-nearest hill, right of the middle
+        if (hi === 2 && x > w * (lake ? 0.58 : 0.7) && x < w * (lake ? 0.66 : 0.78) && (!treeAt || top < treeAt.y)) {
+          treeAt = { x, y: top };
+        }
+        // grass tufts and wildflowers on the nearest hill
+        if (hi === hills.length - 1) {
+          if (hash(x, 5, seed) > 0.55) put(x, top - 1, lit);
+          if (hash(x, 9, seed) > 0.86) {
+            const fy = top + 2 + Math.floor(hash(x, 11, seed) * (h - top - 3));
+            put(x, fy, FLOWERS[Math.floor(hash(x, 13, seed) * FLOWERS.length)]);
+          }
+        }
+      }
+    });
+    // the lone tree: a short trunk and a round crown of leafy puffs
+    if (treeAt) {
+      const tr = Math.max(4, Math.round(h * (lake ? 0.07 : 0.1)));
+      for (let y = treeAt.y - tr; y <= treeAt.y; y += 1) {
+        put(treeAt.x, y, hex(0x5b3a22));
+        put(treeAt.x + 1, y, hex(0x4a2e1a));
+      }
+      const crown = [];
+      for (let k = 0; k < 5; k += 1) {
+        crown.push({ c: treeAt.x + (k - 2) * tr * 0.42, cy: treeAt.y - tr - tr * 0.2 * (2 - Math.abs(k - 2)), r: tr * (0.55 + 0.1 * (2 - Math.abs(k - 2))) });
+      }
+      crown.push({ c: treeAt.x, cy: treeAt.y - tr * 1.75, r: tr * 0.6 });
+      paintPuffs(crown, LEAF, sunX, null);
+      // its shadow on the grass
+      for (let dx = -tr; dx <= tr; dx += 1) blend(treeAt.x + dx + 2, treeAt.y + 1, hex(0x1e3d1a), 0.35);
+    }
+    // birds: small dark V shapes high in the sky
+    const birds = lake ? [[0.3, 0.16], [0.34, 0.2], [0.55, 0.12]] : [[0.66, 0.14], [0.71, 0.2]];
+    birds.forEach(([fx, fy]) => {
+      const bx = Math.round(w * fx);
+      const by = Math.round(horizon * fy);
+      [[-2, -1], [-1, 0], [0, 1], [1, 0], [2, -1]].forEach(([dx, dy]) => put(bx + dx, by + dy, hex(0x3a4a5a)));
+    });
+    ctx.putImageData(img, 0, 0);
+    return ov;
+  }
+
+  // ---- Neon Drive, the special world. Its own scene, not a recolour of the lake: a synthwave
+  // night with a striped sun sinking behind neon mountains, a glowing grid running to the
+  // horizon and faint CRT scanlines over everything. (Palms were tried and read as burnt
+  // umbrellas at this pixel size, so the frame is left to the sun and the grid.)
+  if (pal.biome === "neon") {
+    const ov = { lanterns: [], blinks: [], sparks: [], beams: [], fires: [], kites: [], planes: [] };
+    const hex = (v) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    const SKY = [0x0b0418, 0x1a0936, 0x3a0d5c, 0x7c1366, 0xd0246e].map(hex);
+    const SUN = [0xffe66b, 0xffb340, 0xff6a4d, 0xff2f8f, 0xe01fd1].map(hex);
+    const PINK = hex(0xff2bd6);
+    const CYAN = hex(0x2de2e6);
+    const horizon = Math.round(h * (lake ? 0.6 : 0.66));
+    const sunX = Math.round(w * (lake ? 0.5 : opts.orbX));
+    const sunR = Math.max(8, Math.round(h * (lake ? 0.22 : 0.3)));
+    const sunY = horizon - Math.round(sunR * 0.45);
+
+    // sky: five stops, dithered at every boundary
+    for (let y = 0; y < horizon; y += 1) {
+      const f = (y / horizon) * (SKY.length - 1);
+      const k = Math.floor(f);
+      for (let x = 0; x < w; x += 1) put(x, y, f - k > dither(x, y) ? SKY[Math.min(SKY.length - 1, k + 1)] : SKY[k]);
+    }
+    // stars, thinning toward the glow of the horizon; a few twinkle
+    for (let i = 0; i < w * 0.22; i += 1) {
+      const x = Math.floor(rand() * w);
+      const y = Math.floor(rand() * horizon * 0.62);
+      if (Math.hypot(x - sunX, y - sunY) < sunR * 1.6) continue;
+      blend(x, y, rand() < 0.25 ? PINK : WHITE, 0.4 + rand() * 0.6);
+      if (i % 37 === 0) ov.sparks.push({ x, y, delay: (rand() * 3).toFixed(2) });
+    }
+    // a soft glow round the sun
+    for (let y = Math.max(0, sunY - sunR * 2); y < horizon; y += 1) {
+      for (let x = Math.max(0, sunX - sunR * 2.4); x < Math.min(w, sunX + sunR * 2.4); x += 1) {
+        const d = Math.hypot((x - sunX) / 1.2, y - sunY) / (sunR * 2);
+        if (d < 1 && (1 - d) * 0.55 > dither(x, y)) blend(x, y, PINK, 0.22);
+      }
+    }
+    // the sun: a vertical gradient, cut by horizontal bands that thicken toward the horizon
+    for (let y = sunY - sunR; y <= sunY + sunR && y < horizon; y += 1) {
+      const dy = y - sunY;
+      const half = Math.sqrt(Math.max(0, sunR * sunR - dy * dy));
+      const t = (dy + sunR) / (2 * sunR); // 0 top .. 1 bottom
+      // the cuts: bands of sky through the lower sun, thickening toward the horizon
+      if (dy > -sunR * 0.22) {
+        const below = (dy + sunR * 0.22) / (sunR * 1.22); // 0 .. 1 across the cut zone
+        const period = Math.max(4, Math.round(sunR * 0.24));
+        const gap = Math.max(1, Math.round(below * period * 0.62));
+        if ((y - sunY + 1000 * period) % period < gap) continue;
+      }
+      // flat bands of colour, not dithered: dithering made the sun a checkerboard
+      const c = SUN[Math.min(SUN.length - 1, Math.floor(t * SUN.length))];
+      for (let x = Math.round(sunX - half); x <= Math.round(sunX + half); x += 1) put(x, y, c);
+    }
+    // neon mountains, two ranges, low in the middle so the sun shows between them
+    [
+      { tone: hex(0x2a0d4d), rim: PINK, hi: 0.46, count: w / 34 },
+      { tone: hex(0x160829), rim: CYAN, hi: 0.28, count: w / 26 },
+    ].forEach((R, ri) => {
+      const ridge = peaks(rand, w, Math.max(3, Math.round(R.count)), horizon * 0.06, horizon * R.hi, 0.85);
+      for (let x = 0; x < w; x += 1) {
+        const valley = Math.min(1, Math.abs(x - sunX) / (sunR * (lake ? 2.6 : 2.2))); // dips under the sun
+        const alt = ridge.alt[x] * (0.15 + 0.85 * valley ** 1.4);
+        const top = Math.round(horizon - alt);
+        for (let y = Math.max(0, top); y < horizon; y += 1) {
+          let c = R.tone;
+          // a wireframe: faint lines down the slopes
+          if ((x + (y >> 1) * (ri ? -1 : 1)) % 9 === 0 && y > top + 1) c = mix(R.tone, R.rim, 0.25);
+          put(x, y, c);
+        }
+        if (top < horizon) put(x, top, R.rim);
+        if (top + 1 < horizon) blend(x, top + 1, R.rim, 0.35);
+      }
+    });
+    // the floor: dark, a pink haze along the horizon line, then the grid
+    for (let y = horizon; y < h; y += 1) {
+      const t = (y - horizon) / Math.max(1, h - horizon);
+      for (let x = 0; x < w; x += 1) {
+        let c = mix(hex(0x1c0838), hex(0x06010e), Math.min(1, t * 1.3));
+        // the sun's reflection: a warm column straight down from it, fading toward the viewer
+        const r = Math.abs(x - sunX) / (sunR * (1 + t * 1.5));
+        if (r < 1 && (1 - r) * (1 - t) * 0.7 > dither(x, y)) c = mix(c, SUN[3], 0.35);
+        put(x, y, c);
+      }
+    }
+    for (let x = 0; x < w; x += 1) put(x, horizon, mix(PINK, WHITE, 0.25));
+    for (let y = horizon + 1; y < horizon + 4 && y < h; y += 1) for (let x = 0; x < w; x += 1) blend(x, y, PINK, 0.35 - (y - horizon) * 0.08);
+    // horizontal grid lines, closer together toward the horizon (perspective)
+    const depth = h - horizon;
+    // spacing grows with the square of the distance from the horizon, so the lines do not
+    // pile into a solid pink band near the viewer
+    // as many lines as the floor has room for: twelve on a 48 px floor was one every 4 px,
+    // which read as solid stripes
+    const rows = Math.max(4, Math.round(depth / 7));
+    let lastY = -1;
+    for (let k = 1; k <= rows; k += 1) {
+      const y = horizon + Math.round(depth * (k / rows) ** 1.85);
+      if (y >= h || y === lastY) continue;
+      lastY = y;
+      const near = (y - horizon) / depth;
+      for (let x = 0; x < w; x += 1) blend(x, y, PINK, 0.4 + near * 0.45);
+    }
+    // vertical grid lines, all running to the vanishing point under the sun
+    // Drawn as connected segments: one pixel per row left gaps wherever a line runs shallow,
+    // since x then jumps several pixels between rows, and the outer lines broke into dots.
+    for (let i = -40; i <= 40; i += 1) {
+      const xFar = sunX + i * 0.8;
+      const xNear = sunX + i * (w / 11);
+      // Only lines that fan across the visible floor. The rest run almost flat from the
+      // vanishing point and piled into one solid cyan band under the horizon.
+      if (xNear < -w * 0.25 || xNear > w * 1.25) continue;
+      const steep = Math.min(1, Math.max(0.2, (depth * 3) / Math.max(1, Math.abs(xNear - xFar))));
+      let prev = null;
+      for (let y = horizon + 1; y < h; y += 1) {
+        const t = (y - horizon) / depth;
+        const x = Math.round(xFar + (xNear - xFar) * t);
+        const a = (0.25 + t * 0.5) * steep;
+        if (prev === null || Math.abs(x - prev) <= 1) blend(x, y, CYAN, a);
+        else {
+          const step = Math.sign(x - prev);
+          for (let xx = prev + step; xx !== x + step; xx += step) blend(xx, y, CYAN, a);
+        }
+        prev = x;
+        if (x < -w || x > 2 * w) break;
+      }
+    }
+    // CRT scanlines over the sky: every other row a touch darker. Not over the floor, where
+    // they chopped the grid's vertical lines into dots and striped the whole ground.
+    for (let y = 1; y < horizon; y += 2) for (let x = 0; x < w; x += 1) blend(x, y, BLACK, 0.12);
+    ctx.putImageData(img, 0, 0);
+    return ov;
+  }
   const horizonY = Math.round(h * (lake ? 0.7 : 0.99));
   const orb = {
     x: Math.round(w * opts.orbX),
@@ -387,9 +791,13 @@ function render(ctx, w, h, seed, opts, pal) {
     const sy = Math.round(horizonY * 0.12);
     for (let i = 0; i < 14; i += 1) blend(sx + i, sy + Math.floor(i / 2), pal.star, 0.9 - i * 0.06);
   } else {
-    const count = Math.max(3, Math.round(w / 70));
+    // On the hero the left half holds the heading, so the sky clouds keep to the right half.
+    const count = lake ? Math.max(3, Math.round(w / 70)) : 2;
+    // (named `spread`: the loop body declares its own `span`, and reading that before its
+    // declaration threw on every light theme and blanked the page)
+    const [from, spread] = lake ? [0, 1] : [0.56, 0.4];
     for (let i = 0; i < count; i += 1) {
-      const cx0 = Math.round(w * ((i + 0.2 + rand() * 0.6) / count));
+      const cx0 = Math.round(w * (from + spread * ((i + 0.2 + rand() * 0.6) / count)));
       const belly = Math.round(horizonY * (0.2 + rand() * (lake ? 0.32 : 0.22)));
       if (Math.abs(cx0 - orb.x) < orb.r * 4 && Math.abs(belly - orb.y) < orb.r * 3) continue;
       const span = 8 + Math.floor(rand() * 10);
@@ -398,7 +806,11 @@ function render(ctx, w, h, seed, opts, pal) {
         const r = span * (0.42 - Math.abs(k) * 0.08) * (0.85 + rand() * 0.3);
         parts.push({ c: cx0 + k * span * 0.42 + (rand() - 0.5) * 3, cy: belly - r * 0.35 - (2 - Math.abs(k)) * 1.5, r });
       }
-      cloudMass(parts, orb.x, belly, 0.85);
+      if (lake) cloudMass(parts, orb.x, belly, 0.85);
+      else {
+        const [c0, c1, c2] = pal.cloud;
+        paintPuffs(parts, [c2, mix(c1, c2, 0.5), c1, mix(c0, c1, 0.4), c0], orb.x, null, belly);
+      }
     }
   }
 
@@ -417,7 +829,6 @@ function render(ctx, w, h, seed, opts, pal) {
         { hi: 0.62, lo: 0.18, count: w / 22, steep: 1.05, fade: 0.06, snow: 0.62 },
       ];
   const horizonColor = stops[stops.length - 1];
-  let perch = null;
   layers.forEach((L, li) => {
     const hiPx = L.hi * horizonY;
     const ridge = peaks(rand, w, Math.max(3, Math.round(L.count)), L.lo * horizonY, hiPx, L.steep);
@@ -426,14 +837,16 @@ function render(ctx, w, h, seed, opts, pal) {
     const lit = mix(base, pal.light, pal.dark ? 0.24 : 0.38);
     const shade = mix(base, pal.dark ? BLACK : pal.ridges[4], pal.dark ? 0.32 : 0.3);
     const desert = pal.biome === "amber";
-    const snowAlt = desert ? Infinity : hiPx * L.snow; // absolute altitude of the snowline
+    // absolute altitude of the snowline; the glacier and the pine forest sit in deeper winter
+    const cold = pal.biome === "glacier" ? 0.62 : pal.biome === "forest" ? 0.85 : 1;
+    const snowAlt = desert ? Infinity : hiPx * Math.min(L.snow, 1) * cold + (L.snow > 1 ? Infinity : 0);
     for (let x = 0; x < w; x += 1) {
       let altX = ridge.alt[x];
+      // On the hero the heading sits on the left, so the peaks rise from there to the right.
+      if (!lake) altX *= 0.3 + 0.7 * Math.min(1, Math.max(0, (x / w - 0.3) / 0.35));
       // Desert mesas: each peak is cut off flat at its own height, leaving a table-top butte.
       if (desert && li < 4) altX = Math.min(altX, ridge.list[ridge.owner[x]].top * (0.55 + 0.25 * hash(ridge.owner[x], li, seed)));
       const top = Math.round(horizonY - altX);
-      // remember the nearest mesa top around a third of the way in: the coyote stands there
-      if (desert && li === 2 && x > w * 0.28 && x < w * 0.44 && (!perch || top < perch.y)) perch = { x, y: top };
       const pk = ridge.list[ridge.owner[x]];
       const litFace = x === pk.c || Math.sign(x - pk.c) === Math.sign(orb.x - pk.c);
       const ragged = (hash(x >> 1, li, seed) - 0.5) * 4 + Math.sin(x * 0.7) * 1.2;
@@ -469,19 +882,27 @@ function render(ctx, w, h, seed, opts, pal) {
   const overlays = { lanterns: [], blinks: [], sparks: [], beams: [], fires: [], kites: [], planes: [] };
 
   if (!lake) {
-    // ---- Sea of clouds: rows of shaded billows, back to front; each row sits on a solid mass
-    // in shade, the next row covers its lower half, the farthest row is hazy.
-    const rows = 3;
-    for (let k = 0; k < rows; k += 1) {
-      const floor = h - 1 + (k === rows - 1 ? 0 : 0);
-      const baseY = h * (0.72 + k * 0.09);
-      const haze = [0.45, 0.2, 0][k];
-      const parts = [];
-      for (let x = -16 + Math.floor(rand() * 10); x < w + 16; x += 9 + Math.floor(rand() * 10)) {
-        const r = 7 + rand() * 8 - k;
-        parts.push({ c: x, cy: baseY - r * 0.3 + (rand() - 0.5) * 4, r });
-      }
-      cloudMass(parts, orb.x, floor, 0.9, haze, horizonColor);
+    // ---- Sea of clouds: three banks back to front. The far bank is small and hazy, the near
+    // one big and crisp, so the eye reads depth; each covers the shadowed belly of the last.
+    const [c0, c1, c2, c3] = pal.cloud;
+    // deep -> rim. Weighted to the light end: a sea of cloud under the moon is mostly lit
+    // tops, and only its folds go dark. The darkest tones made it read as rock.
+    // Day needs the opposite weighting: white tops, but folds deep enough to give the puffs
+    // form; the night ramp on a light theme was nearly all white and read as fog.
+    const ramp = pal.dark
+      ? [mix(c1, c2, 0.45), c1, mix(c0, c1, 0.62), mix(c0, c1, 0.3), c0]
+      : [mix(c2, c3, 0.55), c2, mix(c1, c2, 0.5), c1, c0];
+    const banks = [
+      { baseY: h * 0.6, size: Math.max(6, h * 0.12), haze: 0.55 },
+      { baseY: h * 0.73, size: Math.max(8, h * 0.17), haze: 0.28 },
+      { baseY: h * 0.9, size: Math.max(9, h * 0.2), haze: 0 },
+    ];
+    banks.forEach((b) => cloudBank({ ...b, lightX: orb.x, lightY: orb.y, hazeColor: horizonColor, ramp, glow: pal.light }));
+    // A signature per theme, kept to the right half where the heading is not.
+    if (pal.biome === "rose") petals(Math.round(w * 0.12), w * 0.55, w, h * 0.08, h * 0.8);
+    if (pal.biome === "dawn") {
+      balloon(Math.round(w * 0.68), Math.round(h * 0.4), 0);
+      balloon(Math.round(w * 0.94), Math.round(h * 0.5), 2);
     }
     ctx.putImageData(img, 0, 0);
     return overlays;
@@ -598,7 +1019,7 @@ function render(ctx, w, h, seed, opts, pal) {
     sprite(["XXXXX", ".XXX.", ".X.X.", ".XXX."], lx - 2, lBase - 20, { X: pal.ground[1] });
     overlays.beams.push({ x: lx, y: lBase - 18 });
   } else if (pal.biome === "amber") {
-    // Cacti on the banks, a campfire on the outcrop, a coyote howling on a mesa.
+    // Cacti on the banks and a campfire on the outcrop.
     const cactus = ["..X..", "X.X..", "X.X.X", "XXX.X", "..XXX", "..X..", "..X.."];
     [0.12, 0.19, 0.86, 0.95].forEach((at2) => {
       const cxp = Math.round(w * at2);
@@ -608,8 +1029,6 @@ function render(ctx, w, h, seed, opts, pal) {
     const fy = h - shoreH(fx);
     sprite(["X...X", ".XXX."], fx - 2, fy - 2, { X: pal.wood });
     overlays.fires.push({ x: fx, y: fy - 3 });
-    const coyote = ["......X.", ".....XX.", "X...XXX.", "XXXXXX..", "XXXXX...", "X.X.X..."];
-    if (perch) sprite(coyote, perch.x - 4, perch.y - 6, { X: mix(pal.ground[1], BLACK, 0.3) });
   } else if (pal.biome === "slate") {
     // A sailboat on the water, a logo-shaped kite on a string from the dock, a paper plane.
     const bx = Math.round(w * 0.42);
@@ -621,6 +1040,46 @@ function render(ctx, w, h, seed, opts, pal) {
     });
     overlays.kites.push({ x: dockFrom - 6, y: Math.round(horizonY * 0.35), anchorX: dockFrom + 1, anchorY: dockY - 8 });
     overlays.planes.push({ y: Math.round(horizonY * 0.22) });
+  } else if (pal.biome === "rose") {
+    // A cherry tree in bloom on the outcrop, its petals drifting over the lake.
+    const tx = Math.round(w * 0.08);
+    sprite(CHERRY, tx - 7, h - shoreH(tx) - CHERRY.length + 1, {
+      P: pal.blossom[0],
+      B: pal.blossom[1],
+      b: pal.blossom[2],
+      T: mix(pal.wood, BLACK, 0.25),
+    });
+    const tx2 = Math.round(w * 0.9);
+    sprite(CHERRY, tx2 - 7, h - shoreH(tx2) - CHERRY.length + 1, {
+      P: pal.blossom[0],
+      B: pal.blossom[1],
+      b: pal.blossom[2],
+      T: mix(pal.wood, BLACK, 0.25),
+    });
+    petals(Math.round(w * 0.35), 0, w, horizonY * 0.3, h - 4);
+  } else if (pal.biome === "forest") {
+    // Pines along both banks, tallest at the edges of the frame.
+    const stand = (from, to) => {
+      for (let x = from; x < to; x += 3 + Math.floor(rand() * 4)) {
+        const ground = h - shoreH(x);
+        if (shoreH(x) < 3) continue;
+        const t = PINE[Math.floor(rand() * PINE.length)];
+        const lit = rand() < 0.3 ? pal.pine[1] : pal.pine[0];
+        sprite(t, x - 2, ground - t.length + 1, { X: lit, T: mix(pal.wood, BLACK, 0.4) });
+      }
+    };
+    stand(2, Math.round(leftEnd * 0.8));
+    stand(Math.round(rightStart + 4), w - 3);
+  } else if (pal.biome === "dawn") {
+    // Hot-air balloons rising into the sunrise.
+    [[0.24, 0.3], [0.62, 0.16], [0.74, 0.38]].forEach(([fx, fy], k) => balloon(Math.round(w * fx), Math.round(horizonY * fy), k));
+  } else if (pal.biome === "glacier") {
+    // Icebergs on the water.
+    [[0.38, 0.2], [0.6, 0.45], [0.15, 0.55]].forEach(([fx, fy]) => {
+      const bx = Math.round(w * fx);
+      const by = horizonY + Math.round((h - horizonY) * fy);
+      sprite(BERG, bx, by - BERG.length + 1, { I: pal.ice[0], L: pal.ice[1], W: pal.ice[2] });
+    });
   }
 
   // ---- Lanterns floating over the water, clear of the moon.
@@ -697,7 +1156,7 @@ export function PixelStars({ className }) {
 
   useEffect(() => {
     const obs = new MutationObserver(() => setTheme((t) => t + 1));
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "data-scene", "style"] });
     return () => obs.disconnect();
   }, []);
 
@@ -767,7 +1226,7 @@ export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, class
   // Redraw when the theme changes (class or data-theme on <html>).
   useEffect(() => {
     const obs = new MutationObserver(() => setTheme((t) => t + 1));
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "data-scene", "style"] });
     return () => obs.disconnect();
   }, []);
 
