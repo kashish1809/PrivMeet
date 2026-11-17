@@ -42,11 +42,10 @@ further down is kept only as the specification each was built to, and its headin
 | **R2.8** audio player | Kashish | `feat/link-llm-accounts` | `frontend/src/components/Player.jsx`, used by `TranscriptPanel.jsx` |
 | **R1.1** theme presets | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | the four mockup presets plus six more and Custom; `--pm-grad-from`/`--pm-grad-to` (mockup stops on indigo, teal, amber); every light preset's muted text and links pass WCAG AA |
 | **R1.2** UI kit re-skin | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | 16 px flat cards, "Summary Ready" and `processed` badges, filled active tab, filled fields, v2 menus/dialogs/chips, gradient progress, the mockup's avatar colours. **Deviation:** buttons keep the pixel style (approved beyond the task list) instead of the flat gradient. |
+| **R1.3** logo + brand | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | `docs/ui/logo.svg`, `TAGLINE`/`SUBLINE`, favicon, and `<Logo variant="gradient|light|mono|solid" size wordmark />`; theme-color for dark and light systems. **Deviation:** the mark is the approved pixel speech bubble, not the gradient "P". |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
-**Partly done, still open:** R1.3 (`docs/ui/logo.svg`, `Logo.jsx` with `TAGLINE` and `SUBLINE`, the favicon; the four logo
-variants are still missing). Everything else in R1.x and R2.x that is not in the table above is
-open.
+Everything in R1.x and R2.x that is not in the table above is open.
 
 **When you finish a task, add a row here in the same commit**, and put `— **DONE**` on its
 heading below. A task that is dropped instead gets `(cut)` on its heading and a row here saying
@@ -582,7 +581,7 @@ Look and shell first, then backend features. None of these needs a Kashish task.
   - Avatar: the mockup's participant colors (indigo, cyan, pink, violet first).
 - **Done when:** `npm run build` passes, no export was renamed or removed, and each component matches the mockup in all four themes.
 
-#### R1.3 · Logo + brand assets
+#### R1.3 · Logo + brand assets — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.3-logo-brand`
 - **Needs:** none
 - **Files:** `docs/ui/logo.svg`, `frontend/src/ui/Logo.jsx`, `frontend/src/ui/index.js`, `frontend/public/favicon.svg`, `frontend/index.html`
