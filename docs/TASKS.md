@@ -53,6 +53,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R2.5** Download menu | Kashish | `v2/kashish/R2.5-download-menu` | `DownloadMenu.jsx` with Notes / Transcript / Action items / Audio groups, empty ones dropped; `exportCsv.js` builds the two CSVs in the browser (RFC 4180, BOM, formula guard); server formats behind `exports`, `exports-office`, `exports-ics`, `audio-exports`; the list kebab uses it too. **Not built:** the PDF entry, which waits for R2.15's print view. |
 | **R1.9** note templates backend | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | six built-ins in `note_templates.py`, `NoteTemplate` (migration 0005), `/api/templates/` CRUD, upload `template`, `default_template` setting, the template's focus in the summary prompt; flag `templates`. |
 | **R1.10** Templates page | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | grid of template cards (icon, Default pill, Built-in tag, the instructions behind a disclosure), New / Edit dialog, Delete with ConfirmDialog, Set as default, Use to `#/new?template=<id>`. |
+| **R1.11** models backend | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | `GET /api/models/` (hardware, Whisper sizes with RAM and downloaded, Ollama models, diarization, pull), `POST /api/models/pull` (one at a time, progress in `DATA_DIR/model_pull.json`), `DELETE /api/models/<name>` (not the one in use); flag `models`. Recommendations follow the hardware tier. |
 | Blocky themes (beyond the task list) | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | three themes drawn from scratch in the style of a sandbox game: **Nether Gate** (lava, fortress bridge, glowstone, an obsidian portal showing the overworld), **Overworld (Light)** (grass hills, oaks, a village house, block clouds, a portal showing the nether) and **Ancient City** (a deep-dark cave, the centrepiece with its wide frame, waterfalls, sculk, candles, eyes in a doorway). Clicking the hero's portal travels between Nether and Overworld through a pixel spiral. No game textures or characters; the bubble mascot stands in. |
 | **R2.6** Share menu | Kashish | `v2/kashish/R2.6-share-menu` | `ShareMenu.jsx`: "Copy summary" pastes the title, date, summary, key points and action items as plain text, "Copy link" says it opens only on this computer, "Share…" where `navigator.share` exists, and the `.html` share page behind `share-page`; the trigger confirms with "Copied summary" / "Copied link" for 2.5 s. **Not built:** the copied link is a localhost address, so "Copy link" is only useful on this machine. |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
@@ -700,7 +701,7 @@ Built; the text below is the specification it was built to.
   - "Use" goes to `#/new?template=<id>`.
 - **Done when:** a template made here is offered by the API, and the page matches the v2 look in all four themes.
 
-#### R1.11 · Models: backend
+#### R1.11 · Models: backend — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.11-models-backend`
 - **Needs:** R1.7
 - **Files:** `backend/meetings/views.py`, `backend/meetings/urls.py`, `backend/meetings/tasks.py`, `backend/meetings/hw.py`, `docs/API.md`

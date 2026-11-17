@@ -187,3 +187,30 @@ default template makes General the default again. 404 for an unknown id.
   when unset.
 - The full meeting JSON carries `template`. The summary prompt adds the template's
   instructions; the output shape does not change.
+
+## Models (flag `models`)
+
+### `GET /api/models/`
+Everything the Models page shows:
+```json
+{"hardware": {"tier": "low", "ram_gb": 5.7, "device": "cpu", "gpu": false, "cuda_error": ""},
+ "whisper": {"current": "base", "recommended": "base",
+             "sizes": [{"name": "base", "ram_gb": 0.7, "download_mb": 145, "downloaded": true}, ...]},
+ "ollama": {"reachable": true, "installed": [{"name": "qwen2.5:1.5b", "size": 986061892}],
+            "current": "qwen2.5:1.5b", "recommended": "qwen2.5:1.5b", "provider": "ollama"},
+ "diarization": {"enabled": false, "available": true},
+ "pull": {"model": "qwen2.5:3b", "percent": 42, "status": "pulling", "running": true, "updated": 1794904153.6}}
+```
+- `hardware.tier` and the `recommended` names follow the hardware (`hw.TIERS`), even when a
+  cloud provider makes `/api/system/` report `high`.
+- `pull` is the running or last download, or `null`. `running` turns false when it ends with
+  `status` `success` or `error` (then with `error`), or after 120 s without progress.
+
+### `POST /api/models/pull`
+`{"model": "qwen2.5:3b"}`. 202 with `{"pull": ...}`. 400 for a name not matching
+`^[\w.\-/:]+$`, 409 while another pull runs. The download goes through the worker queue, so it
+never runs beside a transcription. Poll `GET /api/models/` for progress.
+
+### `DELETE /api/models/<name>`
+Removes an installed Ollama model. 204; 404 when it is not installed; 409 for the model that
+writes the notes now; 502 when Ollama cannot be reached.
