@@ -63,3 +63,40 @@ BUILTINS = [
 ]
 BUILTIN_IDS = {t["id"] for t in BUILTINS}
 DEFAULT_ID = "general"
+
+
+def default_id():
+    """The template used when an upload names none: the saved default if it still exists."""
+    from . import settings_store
+
+    saved = settings_store.load().get("default_template", "")
+    return saved if saved and get(saved) else DEFAULT_ID
+
+
+def as_json(t, default):
+    """A built-in dict or a NoteTemplate row, in the API's shape."""
+    if isinstance(t, dict):
+        return {**t, "builtin": True, "is_default": t["id"] == default}
+    return {
+        "id": t.key, "name": t.name, "description": t.description, "instructions": t.instructions,
+        "builtin": False, "is_default": t.key == default,
+    }
+
+
+def get(tid):
+    """The built-in dict or NoteTemplate row for an id, or None."""
+    from .models import NoteTemplate
+
+    tid = str(tid or "")
+    for t in BUILTINS:
+        if t["id"] == tid:
+            return t
+    if tid.startswith("u") and tid[1:].isdigit():
+        return NoteTemplate.objects.filter(pk=int(tid[1:])).first()
+    return None
+
+
+def instructions(tid):
+    """What the summary should focus on for a meeting's template id ("" = the default)."""
+    t = get(tid or default_id()) or get(DEFAULT_ID)
+    return t["instructions"] if isinstance(t, dict) else t.instructions

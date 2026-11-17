@@ -15,4 +15,6 @@ urlpatterns = [
     path("settings/test", views.settings_test),
     path("tags/", views.tags),
     path("action-items/", views.action_items),
+    path("templates/", views.templates),
+    path("templates/<str:tid>/", views.template_detail),
 ]

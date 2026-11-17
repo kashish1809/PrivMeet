@@ -13,8 +13,8 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from . import hw, settings_store, tasks
-from .models import PROCESSING, Meeting, Question, Segment, mmss
+from . import hw, note_templates, settings_store, tasks
+from .models import PROCESSING, Meeting, NoteTemplate, Question, Segment, mmss
 from .pipeline import audio
 from .search import search_segments
 
@@ -24,7 +24,7 @@ ALLOWED_EXT = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac"
 
 # What this server supports beyond the v1 API; GET /api/system/ returns it so the frontend
 # shows a control only when its endpoint exists (docs/TASKS.md "Feature flags").
-FEATURES = ["settings", "notes", "tags", "filters", "providers"]
+FEATURES = ["settings", "notes", "tags", "filters", "providers", "templates"]
 
 MAX_TAGS, MAX_TAG_LEN, MAX_NOTES = 10, 30, 20000
 # ?status= also takes the list page's filter names, so the UI does not have to know the stages.
@@ -449,6 +449,74 @@ def action_items(request):
                 "due": item.get("due", ""), "done": bool(item.get("done")),
             })
     return JsonResponse({"action_items": rows})
+
+
+TEMPLATE_LIMITS = {"name": 60, "description": 200, "instructions": 2000}
+
+
+def clean_template(data, partial=False):
+    """Validated {name, description, instructions} from a request body. Raises Invalid."""
+    if not isinstance(data, dict):
+        raise Invalid("Expected a JSON object.")
+    out = {}
+    for key, limit in TEMPLATE_LIMITS.items():
+        if key not in data:
+            if not partial and key != "description":
+                raise Invalid(f"{key} is required.")
+            continue
+        v = data[key]
+        if not isinstance(v, str):
+            raise Invalid(f"{key} must be a string.")
+        v = v.strip()
+        if len(v) > limit:
+            raise Invalid(f"{key} can be at most {limit} characters.")
+        if not v and key != "description":
+            raise Invalid(f"{key} cannot be empty.")
+        out[key] = v
+    return out
+
+
+def _body(request):
+    try:
+        return json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        raise Invalid("Invalid JSON.") from None
+
+
+@require_http_methods(["GET", "POST"])
+def templates(request):
+    """The built-in templates, then the user's own, each marked builtin and is_default."""
+    if request.method == "POST":
+        try:
+            t = NoteTemplate.objects.create(**clean_template(_body(request)))
+        except Invalid as e:
+            return bad(str(e))
+        return JsonResponse(note_templates.as_json(t, note_templates.default_id()), status=201)
+    default = note_templates.default_id()
+    rows = list(note_templates.BUILTINS) + list(NoteTemplate.objects.all())
+    return JsonResponse({"templates": [note_templates.as_json(t, default) for t in rows]})
+
+
+@require_http_methods(["GET", "PATCH", "DELETE"])
+def template_detail(request, tid):
+    t = note_templates.get(tid)
+    if t is None:
+        raise Http404
+    if request.method != "GET" and isinstance(t, dict):
+        return bad("Built-in templates cannot be changed. Make your own instead.", 403)
+    if request.method == "DELETE":
+        if note_templates.default_id() == t.key:
+            settings_store.save({"default_template": None})  # back to General
+        t.delete()
+        return HttpResponse(status=204)
+    if request.method == "PATCH":
+        try:
+            for k, v in clean_template(_body(request), partial=True).items():
+                setattr(t, k, v)
+        except Invalid as e:
+            return bad(str(e))
+        t.save()
+    return JsonResponse(note_templates.as_json(t, note_templates.default_id()))
 
 
 @ensure_csrf_cookie
