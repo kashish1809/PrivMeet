@@ -80,12 +80,124 @@ CONTENT = {
             (3, "Thanks everyone, see you tomorrow."),
         ],
     ),
+    "Design Review": dict(
+        speakers=["Meera", "Kabir", "Vinayak"],
+        summary=(
+            "The team reviewed the new onboarding screens. The layout was approved with two "
+            "changes: a clearer empty state and larger touch targets on mobile. Dark mode "
+            "colours need one more contrast pass before hand-off."
+        ),
+        decisions=[
+            "Onboarding layout approved",
+            "Empty state needs a clearer call to action",
+            "Touch targets grow to 44 px on mobile",
+            "One more contrast pass on dark mode",
+        ],
+        action_items=[
+            {"task": "Redesign the empty state", "owner": "Meera", "due": "Oct 30", "done": False},
+            {"task": "Bump mobile touch targets to 44 px", "owner": "Kabir", "due": "Friday", "done": True},
+            {"task": "Run a contrast check on dark mode", "owner": "Vinayak", "due": "next week", "done": False},
+        ],
+        lines=[
+            (2, "Let's go through the onboarding screens Meera shared."),
+            (0, "Three screens: welcome, connect your calendar, and the empty meetings list."),
+            (0, "I kept the layout close to the dashboard so it feels familiar."),
+            (1, "The welcome screen reads well. The illustration is a nice touch."),
+            (2, "Agreed. The connect step is clear too, one button and a skip link."),
+            (1, "My worry is the empty list. It just says no meetings yet."),
+            (0, "True, there's no next step. I can add a call to action there."),
+            (2, "Maybe two buttons, start recording and upload a file."),
+            (0, "That works. I'll redesign the empty state with both."),
+            (1, "On mobile the buttons feel tiny. I missed the skip link twice."),
+            (2, "What size are they now?"),
+            (1, "Thirty-two pixels high. Guidelines say at least forty-four."),
+            (0, "Let's make every touch target forty-four on mobile."),
+            (1, "I'll take that one, it's mostly spacing tokens."),
+            (2, "Kabir, can you have it by Friday?"),
+            (1, "Yes, Friday is fine."),
+            (2, "Now dark mode. Some grey text looks faint to me."),
+            (0, "The hint text under the inputs is the lightest grey."),
+            (2, "We should measure it, not eyeball it."),
+            (1, "There are contrast checkers built into the browser tools now."),
+            (2, "I'll run a contrast check on every dark screen next week."),
+            (0, "If anything fails I'll adjust the palette, not single screens."),
+            (2, "Good, fix it once in the tokens."),
+            (1, "Do we need another review after these changes?"),
+            (2, "A quick async one is enough. Post screenshots in the channel."),
+            (0, "I'll post them by Thursday."),
+            (2, "Then the layout is approved with those changes."),
+            (1, "Nice work Meera, it looks much cleaner than the old flow."),
+            (0, "Thanks, the feedback helped."),
+            (2, "Okay, that's it for the design review. Thanks both."),
+        ],
+    ),
+    # Done, but the model wrote nothing: the list shows "Processed" (has_summary is false).
+    "Team Sync": dict(
+        speakers=["Aryan", "Rohan", "Sneha", "Meera", "Vinayak"],
+        lines=[
+            (4, "Quick round today, everyone share what you're on."),
+            (0, "Still on the API, mostly reviewing pull requests."),
+            (1, "Error handling, I started mapping auth failures."),
+            (2, "Docs. I'm collecting examples for the auth section."),
+            (3, "Design fixes from the review, the empty state first."),
+            (4, "Any blockers for anyone?"),
+            (1, "I need the staging database refreshed, it's a week old."),
+            (0, "I can do that after this call."),
+            (2, "I'm waiting on the final error messages before I write them up."),
+            (1, "They should be stable by Friday."),
+            (3, "I need someone to test the new screens on a real phone."),
+            (4, "I have an Android phone here, I'll try them today."),
+            (0, "I can test on iOS tomorrow morning."),
+            (4, "Let's talk about the release date."),
+            (1, "If errors land Friday, a candidate on Monday is realistic."),
+            (2, "Docs would follow the same week."),
+            (3, "Design changes are small, they'll be in before Monday."),
+            (4, "So Monday for the release candidate, if nothing slips."),
+            (0, "Should we freeze new features until then?"),
+            (4, "Yes, bug fixes only until the candidate is tagged."),
+            (1, "Fine by me."),
+            (2, "Same."),
+            (3, "Works for me."),
+            (4, "Also, the office is closed next Thursday for the holiday."),
+            (0, "Good to know, I'll move my review session."),
+            (2, "Can we keep this sync on Fridays after the release?"),
+            (4, "Let's keep Fridays, it's been working."),
+            (1, "One more thing, the CI runs got slow this week."),
+            (0, "I'll look at the cache settings, probably the dependency step."),
+            (4, "Thanks all, that's the sync."),
+        ],
+    ),
+    "Client Onboarding": dict(
+        speakers=["Vinayak", "Client"],
+        lines=[
+            (0, "Thanks for joining, let's walk through the setup."),
+            (1, "Sure, we installed it on a laptop last week."),
+            (0, "Great. Did the first meeting process without errors?"),
+            (1, "The transcript came through, the summary did not."),
+            (0, "That usually means the language model was not running."),
+            (1, "We may have closed Ollama after the install."),
+        ],
+    ),
+    # Stuck mid-transcription, so it carries only the part that was transcribed.
+    "Sprint Planning": dict(
+        speakers=["Aryan", "Rohan", "Vinayak"],
+        lines=[
+            (2, "Let's plan the next sprint, starting with carry-over."),
+            (0, "Two API tickets carry over, both nearly done."),
+            (1, "Error handling carries over too, it's half finished."),
+            (2, "Then new work: the export formats and the share page."),
+            (0, "I can take exports, I know that code."),
+            (1, "I'll pair on the share page once errors are merged."),
+        ],
+    ),
 }
 
 
 def lines_to_segments(m, lines):
-    """Spread the lines evenly over the meeting, each a little shorter than its slot."""
-    slot = m.duration / max(len(lines), 1)
+    """Spread the lines evenly over the transcribed part (all of it unless the meeting is
+    still transcribing), each a little shorter than its slot."""
+    done = m.duration if m.status != Meeting.Status.TRANSCRIBING else m.duration * m.progress / 100
+    slot = done / max(len(lines), 1)
     return [
         Segment(meeting=m, start=round(i * slot, 2), end=round((i + 1) * slot - 1, 2), speaker=who, text=text)
         for i, (who, text) in enumerate(lines)
