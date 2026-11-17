@@ -51,6 +51,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R2.3** Participants card | Kashish | `v2/kashish/R2.3-participants` | `ParticipantsCard.jsx`: two columns of avatar + name, talking time as a percentage, rename in place (PATCH `speaker_names`); suggestions behind `suggestions`, merge behind `speaker-merge` |
 | **R2.4** Notes tab | Kashish | `v2/kashish/R2.4-notes-tab` | `NotesTab.jsx`: autosave 800 ms after typing, also on blur, tab switch and page hide, with "Saving… / Saved"; tags add on Enter and remove on the chip's ×; both disabled without their flag |
 | **R2.5** Download menu | Kashish | `v2/kashish/R2.5-download-menu` | `DownloadMenu.jsx` with Notes / Transcript / Action items / Audio groups, empty ones dropped; `exportCsv.js` builds the two CSVs in the browser (RFC 4180, BOM, formula guard); server formats behind `exports`, `exports-office`, `exports-ics`, `audio-exports`; the list kebab uses it too. **Not built:** the PDF entry, which waits for R2.15's print view. |
+| **R1.9** note templates backend | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | six built-ins in `note_templates.py`, `NoteTemplate` (migration 0005), `/api/templates/` CRUD, upload `template`, `default_template` setting, the template's focus in the summary prompt; flag `templates`. |
 | Blocky themes (beyond the task list) | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | three themes drawn from scratch in the style of a sandbox game: **Nether Gate** (lava, fortress bridge, glowstone, an obsidian portal showing the overworld), **Overworld (Light)** (grass hills, oaks, a village house, block clouds, a portal showing the nether) and **Ancient City** (a deep-dark cave, the centrepiece with its wide frame, waterfalls, sculk, candles, eyes in a doorway). Clicking the hero's portal travels between Nether and Overworld through a pixel spiral. No game textures or characters; the bubble mascot stands in. |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
@@ -674,7 +675,7 @@ Built; the text below is the specification it was built to.
   - Demo rows are marked with `tier_used="demo"`. `--reset` deletes only those. Running twice adds nothing.
 - **Done when:** on an empty database the command makes Home and the detail page show the mockup's content.
 
-#### R1.9 · Note templates: backend
+#### R1.9 · Note templates: backend — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.9-templates-backend`
 - **Needs:** R1.7
 - **Files:** `backend/meetings/models.py`, `backend/meetings/migrations/*`, `backend/meetings/note_templates.py` (new), `backend/meetings/views.py`, `backend/meetings/urls.py`, `backend/meetings/pipeline/llm.py`, `backend/meetings/tasks.py`, `backend/meetings/settings_store.py`, `docs/API.md`

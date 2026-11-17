@@ -158,3 +158,32 @@ The action items of all meetings, newest meeting first. `?open=1` leaves out the
   "index": 0, "task": "Push latest API changes", "owner": "Aryan", "due": "Oct 29", "done": false}]}
 ```
 To change an item, `PATCH` its meeting's whole `action_items` list. `index` is the item's position in that list.
+
+## Note templates (flag `templates`)
+
+A template says what a meeting's summary should focus on. Six built-ins are read-only
+(`general`, `standup`, `one-on-one`, `client-call`, `interview`, `lecture`); own templates
+have ids `u<n>`. Every template has the shape:
+```json
+{"id": "standup", "name": "Stand-up", "description": "Yesterday, today and blockers, per person.",
+ "instructions": "This is a daily stand-up. ...", "builtin": true, "is_default": false}
+```
+
+### `GET /api/templates/`
+`{"templates": [...]}`: the built-ins, then own templates by name.
+
+### `POST /api/templates/`
+`{"name", "instructions", "description"?}` (60, 2000 and 200 characters). Returns 201 with the
+template. 400 when a field is missing, empty or too long.
+
+### `GET|PATCH|DELETE /api/templates/<id>/`
+PATCH takes any of the three fields. Built-ins answer 403 to PATCH and DELETE. Deleting the
+default template makes General the default again. 404 for an unknown id.
+
+### Using a template
+- Upload (`POST /api/meetings/`) accepts `template`; without it the meeting gets the default.
+  400 for an unknown id.
+- The default is the settings key `default_template` (`PATCH /api/settings/`), `general`
+  when unset.
+- The full meeting JSON carries `template`. The summary prompt adds the template's
+  instructions; the output shape does not change.
