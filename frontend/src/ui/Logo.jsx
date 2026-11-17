@@ -112,9 +112,23 @@ export function Logo({ size = 36, tile = true, animated = true, variant, wordmar
   return (
     <span className={cx("inline-flex items-center gap-2.5", className)}>
       <LogoMark {...mark} />
-      <span className="leading-tight">
-        <span className="block text-base font-semibold text-zinc-900 dark:text-zinc-100">PrivMeet</span>
-        {subline && <span className="block text-[11px] text-zinc-500 dark:text-zinc-400">{SUBLINE}</span>}
+      {/* The wordmark scales with the mark: 16 px beside the default 36 px mark, as before. mono
+          keeps the one ink of its outline. */}
+      <span className="leading-tight" style={size === 36 ? undefined : { fontSize: Math.round(size * 0.44) }}>
+        <span
+          className={cx(
+            "block font-semibold",
+            size === 36 && "text-base",
+            variant === "mono" ? "text-current" : "text-zinc-900 dark:text-zinc-100",
+          )}
+        >
+          PrivMeet
+        </span>
+        {subline && (
+          <span className={cx("block text-[0.6875em]", variant === "mono" ? "opacity-70" : "text-zinc-500 dark:text-zinc-400")}>
+            {SUBLINE}
+          </span>
+        )}
       </span>
     </span>
   );
