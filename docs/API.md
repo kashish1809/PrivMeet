@@ -132,8 +132,28 @@ The original file. It supports `Range` (206 for a range, 416 when the range is o
 ### `POST /api/meetings/<id>/retry`
 Runs the whole pipeline again. Returns 409 while the meeting is still processing.
 
-### `GET /api/meetings/<id>/export.md`
-The notes and transcript as a Markdown download.
+### `GET /api/meetings/<id>/export.<fmt>`
+The meeting as a download named after its title. 404 for an unknown format.
+
+| `fmt` | Flag | What |
+|---|---|---|
+| `md` | (always) | notes and transcript as Markdown |
+| `txt` | `exports` | the same as plain text, with notes |
+| `json` | `exports` | the full meeting, as `GET /api/meetings/<id>/` |
+| `srt`, `vtt` | `exports` | one subtitle cue per segment, the speaker's name in front |
+| `html` | `share-page` | one self-contained page: inline CSS, no script, no outside request, every value escaped |
+| `docx`, `odt` | `exports-office` | the notes as a Word / OpenDocument file (title, date, participants, summary, key points, an action-items table, notes, transcript) |
+| `ics` | `exports-ics` | action items with a resolvable due date as `VTODO`s (see below) |
+
+`ics`: a due text resolves from the meeting's day: `today`, `tomorrow`, `next week` (the Monday
+after), a weekday (the next one after the meeting), a month and day (`Oct 30`, `30 October`) or
+`the 14th`. Others are left out and counted in the `X-Skipped-Items` header. When none
+resolves: 404 `{"error": "No action item has a date."}`.
+
+### `GET /api/meetings/<id>/audio.mp3` and `audio.opus` (flag `audio-exports`)
+The recording converted for sharing, mono: MP3 at 64 kb/s, Opus in Ogg at 32 kb/s. Made on the
+first request and cached next to the upload (deleted with the meeting). 404 when the audio was
+deleted.
 
 ### `POST /api/meetings/<id>/ask`
 `{"question": "..."}`. Returns 201 with `{"id", "question", "answer": "", "status": "pending"}`. Returns 409 unless the meeting is `done`.

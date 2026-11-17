@@ -55,6 +55,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.10** Templates page | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | grid of template cards (icon, Default pill, Built-in tag, the instructions behind a disclosure), New / Edit dialog, Delete with ConfirmDialog, Set as default, Use to `#/new?template=<id>`. |
 | **R1.11** models backend | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | `GET /api/models/` (hardware, Whisper sizes with RAM and downloaded, Ollama models, diarization, pull), `POST /api/models/pull` (one at a time, progress in `DATA_DIR/model_pull.json`), `DELETE /api/models/<name>` (not the one in use); flag `models`. Recommendations follow the hardware tier. |
 | **R1.12** Models page | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | Hardware, Speech to text (Whisper sizes with RAM, Recommended, Downloaded, a Heavy warning), Summaries (pick, delete, download with a rising progress bar polled every 2 s only while a pull runs; Cloud note), Speakers (diarization switch, models present). |
+| **R1.13** export formats + share page | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | `export.py`: md (moved, unchanged), txt, json, srt, vtt, the html share page, docx and odt (zipfile, no dependency), ics (due dates resolved from the meeting day), audio.mp3 / audio.opus (cached); flags `exports`, `share-page`, `exports-office`, `exports-ics`, `audio-exports`. |
 | Blocky themes (beyond the task list) | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | three themes drawn from scratch in the style of a sandbox game: **Nether Gate** (lava, fortress bridge, glowstone, an obsidian portal showing the overworld), **Overworld (Light)** (grass hills, oaks, a village house, block clouds, a portal showing the nether) and **Ancient City** (a deep-dark cave, the centrepiece with its wide frame, waterfalls, sculk, candles, eyes in a doorway). Clicking the hero's portal travels between Nether and Overworld through a pixel spiral. No game textures or characters; the bubble mascot stands in. |
 | **R2.6** Share menu | Kashish | `v2/kashish/R2.6-share-menu` | `ShareMenu.jsx`: "Copy summary" pastes the title, date, summary, key points and action items as plain text, "Copy link" says it opens only on this computer, "Share…" where `navigator.share` exists, and the `.html` share page behind `share-page`; the trigger confirms with "Copied summary" / "Copied link" for 2.5 s. **Not built:** the copied link is a localhost address, so "Copy link" is only useful on this machine. |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
@@ -726,7 +727,7 @@ Built; the text below is the specification it was built to.
   - Warn when the picked model is larger than the tier recommends.
 - **Done when:** picking a model here changes `/api/system/`, and a pull can be watched to the end.
 
-#### R1.13 · Export formats + share page
+#### R1.13 · Export formats + share page — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.13-exports`
 - **Needs:** R1.7
 - **Files:** `backend/meetings/export.py` (new), `backend/meetings/views.py`, `backend/meetings/urls.py`, `docs/API.md`
