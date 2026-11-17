@@ -157,7 +157,16 @@ export function downloadGroups(meeting, features) {
   return groups.filter((group) => group.items.length);
 }
 
-export default function DownloadMenu({ meeting, features, variant = "button", className }) {
+export default function DownloadMenu({
+  meeting,
+  features,
+  variant = "button",
+  leading = [],
+  trailing = [],
+  label,
+  icon,
+  className,
+}) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState("");
   const id = useId();
@@ -166,7 +175,9 @@ export default function DownloadMenu({ meeting, features, variant = "button", cl
   const itemRefs = useRef([]);
 
   const groups = downloadGroups(meeting, features);
-  const rows = groups.flatMap((group) => group.items);
+  // Leading and trailing entries let the list row use this menu for Open and Delete too,
+  // rather than growing a second kebab next to it.
+  const rows = [...leading, ...groups.flatMap((group) => group.items), ...trailing];
   // Each entry's place in the flat list, so its ref lands in the right slot.
   const place = new Map(rows.map((row, i) => [row, i]));
   // Only the entries that can be chosen take part in keyboard movement.
@@ -200,6 +211,40 @@ export default function DownloadMenu({ meeting, features, variant = "button", cl
       e.preventDefault();
       itemRefs.current[positions[(step + n) % n]]?.focus();
     }
+  }
+
+  function renderItem(item) {
+    const at = place.get(item);
+    const Icon = item.icon || FileText;
+    return (
+      <button
+        key={item.label}
+        ref={(el) => (itemRefs.current[at] = el)}
+        type="button"
+        role="menuitem"
+        tabIndex={-1}
+        aria-disabled={item.disabled || undefined}
+        disabled={item.disabled}
+        onClick={() => choose(item)}
+        className={cx(
+          "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm",
+          item.disabled
+            ? "cursor-not-allowed text-zinc-400 dark:text-zinc-600"
+            : item.danger
+              ? "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+              : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800",
+          focusRing,
+        )}
+      >
+        <Icon className="size-4 shrink-0" aria-hidden="true" />
+        <span className="flex-1">
+          {item.label}
+          {item.disabled && item.hint && (
+            <span className="block text-[11px] text-zinc-400 dark:text-zinc-500">{item.hint}</span>
+          )}
+        </span>
+      </button>
+    );
   }
 
   async function choose(item) {
@@ -241,8 +286,8 @@ export default function DownloadMenu({ meeting, features, variant = "button", cl
       ) : (
         <IconButton
           ref={trigger}
-          icon={Download}
-          label={`Download ${meeting.title}`}
+          icon={icon || Download}
+          label={label || `Download ${meeting.title}`}
           aria-haspopup="menu"
           aria-expanded={open}
           aria-controls={open ? id : undefined}
@@ -254,12 +299,15 @@ export default function DownloadMenu({ meeting, features, variant = "button", cl
         <div
           id={id}
           role="menu"
-          aria-label="Download"
+          aria-label={label || "Download"}
           className={cx(
             "absolute right-0 z-30 mt-1 min-w-56 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg",
             "dark:border-zinc-700 dark:bg-zinc-900",
           )}
         >
+          {leading.map(renderItem)}
+          {leading.length > 0 && <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" aria-hidden="true" />}
+
           {groups.map((group) => (
             <div key={group.key} role="group" aria-label={group.label} className="py-0.5">
               <p
@@ -268,40 +316,16 @@ export default function DownloadMenu({ meeting, features, variant = "button", cl
               >
                 {group.label}
               </p>
-              {group.items.map((item) => {
-                const at = place.get(item);
-                const ref = (el) => (itemRefs.current[at] = el);
-                const Icon = item.icon || FileText;
-                return (
-                  <button
-                    key={item.label}
-                    ref={ref}
-                    type="button"
-                    role="menuitem"
-                    tabIndex={-1}
-                    aria-disabled={item.disabled || undefined}
-                    disabled={item.disabled}
-                    onClick={() => choose(item)}
-                    className={cx(
-                      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm",
-                      item.disabled
-                        ? "cursor-not-allowed text-zinc-400 dark:text-zinc-600"
-                        : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                      focusRing,
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0" aria-hidden="true" />
-                    <span className="flex-1">
-                      {item.label}
-                      {item.disabled && item.hint && (
-                        <span className="block text-[11px] text-zinc-400 dark:text-zinc-500">{item.hint}</span>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
+              {group.items.map(renderItem)}
             </div>
           ))}
+
+          {trailing.length > 0 && (
+            <>
+              <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" aria-hidden="true" />
+              {trailing.map(renderItem)}
+            </>
+          )}
         </div>
       )}
     </div>
