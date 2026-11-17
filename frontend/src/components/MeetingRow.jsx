@@ -2,7 +2,7 @@ import { Download, ExternalLink, FileText, Trash2 } from "lucide-react";
 
 import { meetingExportUrl } from "../api";
 import { Badge, Card, Menu, ProgressBar } from "../ui";
-import { duration, isProcessing } from "../format";
+import { duration, isProcessing, participants, statusBadge } from "../format";
 import { dayAndTime, timeOfDay } from "./meetingGroups";
 
 /** Matches shown per row in search results (the API returns up to 100 across meetings). */
@@ -24,9 +24,7 @@ function exportMeeting(meeting) {
  * nested inside an anchor.
  */
 export default function MeetingRow({ meeting, group, onDelete }) {
-  // shortcut: the list endpoint returns no speaker count, so participants only shows once
-  // names were saved; upgrade when the API returns a per-meeting speaker count (U1.4).
-  const participants = Object.keys(meeting.speaker_names || {}).length;
+  const people = participants(meeting);
   // "Today" and "Yesterday" sections show the clock time; longer buckets need the date,
   // otherwise every row in "Last week" would read like the same day.
   const when = group === "Today" || group === "Yesterday" ? timeOfDay(meeting.created) : dayAndTime(meeting.created);
@@ -48,7 +46,7 @@ export default function MeetingRow({ meeting, group, onDelete }) {
             </a>
             <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
               {duration(meeting.duration)}
-              {participants > 0 && ` · ${participants} participant${participants === 1 ? "" : "s"}`}
+              {people > 0 && ` · ${people} participant${people === 1 ? "" : "s"}`}
               {` · ${when}`}
             </p>
           </div>
@@ -60,7 +58,7 @@ export default function MeetingRow({ meeting, group, onDelete }) {
               {meeting.progress}%
             </span>
           )}
-          <Badge status={meeting.status} />
+          <Badge {...statusBadge(meeting)} />
           <Menu
             label={`Actions for ${meeting.title}`}
             items={[
