@@ -553,6 +553,314 @@ function render(ctx, w, h, seed, opts, pal) {
     return ov;
   }
 
+  /**
+   * Shared by the two blocky worlds (Nether Gate and Overworld). B is the block size in art
+   * pixels, `cols` the number of block columns, `defaultFog` the haze colour.
+   */
+  const blockKit = (B, cols, defaultFog) => {
+    const clump = B >= 6 ? 1 : 0; // texture pixels come in 2x2 clumps on big blocks
+    /** One textured block, top-left at (x0, y0): clumped noise over `tones`, sparse bright
+     *  specks and dark pits, a lit top-left edge and a shaded bottom-right one, then haze. */
+    const cell = (x0, y0, tones, salt, haze = 0, fog = defaultFog) => {
+      const n = tones.length;
+      for (let yy = 0; yy < B; yy += 1) {
+        for (let xx = 0; xx < B; xx += 1) {
+          const x = x0 + xx;
+          const y = y0 + yy;
+          const v = hash((x0 + (xx >> clump)) | 0, (y0 + (yy >> clump)) | 0, salt);
+          let c = tones[Math.min(n - 2, Math.floor(v * (n - 1)))];
+          const fleck = hash(x, y, salt + 1);
+          if (fleck > 0.93) c = tones[n - 1];
+          else if (fleck < 0.06) c = mix(tones[0], BLACK, 0.3);
+          if (yy === 0 || xx === 0) c = mix(c, tones[n - 1], 0.4);
+          else if (yy === B - 1 || xx === B - 1) c = mix(c, BLACK, 0.35);
+          put(x, y, haze ? mix(c, fog, haze) : c);
+        }
+      }
+    };
+    /** Stepped heights in blocks per column, from fractal noise. */
+    const steps = (lo, hi, rough) => fractal(rand, cols, rough).map((v) => Math.round(lo + v * (hi - lo)));
+    /** A soft round light: blends `color` in with a smooth falloff (no dither). */
+    const glowAt = (gx, gy, radius, color, strength) => {
+      for (let y = Math.max(0, Math.round(gy - radius)); y < Math.min(h, gy + radius); y += 1) {
+        for (let x = Math.max(0, Math.round(gx - radius * 1.2)); x < Math.min(w, gx + radius * 1.2); x += 1) {
+          const dd = Math.hypot((x - gx) / 1.2, y - gy) / radius;
+          if (dd < 1) blend(x, y, color, strength * (1 - dd) ** 1.6);
+        }
+      }
+    };
+    return { cell, steps, glowAt };
+  };
+
+  // ---- Overworld, Nether Gate's daylight twin, in the same blocks: a banded sky with a
+  // square sun and flat block clouds, far stone peaks with snow, grass hills with their
+  // dripping grass edge, a pond, oaks, a village house, flowers, the mascot carrying a grass
+  // block, and on the hill a lit portal that shows the nether through its swirl.
+  if (pal.biome === "overworld") {
+    const ov = { lanterns: [], blinks: [], sparks: [], beams: [], fires: [], kites: [], planes: [], motes: [] };
+    const hex = (v) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    const SKY = [0x7fa9ff, 0x8fb5ff, 0xa2c3ff, 0xb6d1ff, 0xcadfff].map(hex);
+    const GRASS = [0x4f8f2c, 0x5ea535, 0x6cb93d, 0x86cf52].map(hex);
+    const DIRT = [0x6b4a2f, 0x7d5839, 0x8f6744, 0xa47a52].map(hex);
+    const STONE = [0x6d6d6d, 0x7f7f7f, 0x8f8f8f, 0xa6a6a6].map(hex);
+    const LEAF = [0x2f6b1e, 0x3c8226, 0x4a952e, 0x5fae3c].map(hex);
+    const LOG = [0x4a3520, 0x5c4228, 0x6e5131].map(hex);
+    const PLANK = [0x9c7a48, 0xb18c55, 0xc29d62].map(hex);
+    const COBBLE = [0x5a5a5a, 0x787878, 0x939393, 0xb0b0b0].map(hex);
+    const OBS = [0x0b0814, 0x130c20, 0x1c1430, 0x2a1e4a, 0x453078].map(hex);
+    const SWIRL = [0x3c0a8c, 0x6a1fd0, 0x9440f5, 0xc07bff, 0xe8c8ff].map(hex);
+    const WATER = [0x2f5fd0, 0x3a70e0, 0x4f86ee, 0x7aa8f6].map(hex);
+    const B = Math.max(4, Math.min(8, Math.round(h / (lake ? 16 : 9))));
+    const cols = Math.ceil(w / B) + 1;
+    const { cell, steps, glowAt } = blockKit(B, cols, SKY[4]);
+    const ground = h - B * (lake ? 1 : 1); // the lowest grass row sits one block up
+
+    // sky: flat bands one block tall, the way a blocky world draws its gradient
+    for (let y = 0; y < h; y += 1) {
+      const k = Math.min(SKY.length - 1, Math.floor((y / h) * SKY.length * 1.1));
+      for (let x = 0; x < w; x += 1) put(x, y, SKY[k]);
+    }
+    // a square sun with a soft square halo
+    const sunX = Math.round(w * (lake ? 0.14 : 0.42));
+    const sunY = Math.round(lake ? h * 0.52 : h * 0.22);
+    const sr = Math.max(3, Math.round(B * 0.9));
+    for (let y = sunY - sr * 2; y <= sunY + sr * 2; y += 1) for (let x = sunX - sr * 2; x <= sunX + sr * 2; x += 1) blend(x, y, [255, 250, 220], 0.25);
+    for (let y = sunY - sr; y <= sunY + sr; y += 1) for (let x = sunX - sr; x <= sunX + sr; x += 1) put(x, y, Math.abs(x - sunX) < sr - 1 && Math.abs(y - sunY) < sr - 1 ? [255, 246, 170] : [255, 226, 110]);
+    // block clouds: big flat slabs on a grid of cells, shaped by low-frequency noise. Each cell
+    // has a white top face; where the slab ends below, a grey-blue front face shows its
+    // thickness, and a faint shadow falls under it.
+    const cw = B * 2; // one cloud cell: two blocks wide, one deep
+    const ch = Math.max(2, Math.round(B * 0.7));
+    // The footer's top half sits under the page's cards, so its clouds float in the strip of
+    // sky that shows below them; the hero keeps them high.
+    const bandTop = lake ? Math.round(h * 0.46) : Math.round(B * 0.5);
+    const bandRows = Math.max(2, Math.round((h * (lake ? 0.13 : 0.2)) / ch));
+    const coarse = (gx, gy) => {
+      // value noise on a 4 x 2 cell lattice, bilinear, so slabs come out as rounded blobs
+      const X = gx / 4;
+      const Y = gy / 2;
+      const x0 = Math.floor(X);
+      const y0 = Math.floor(Y);
+      const fx = X - x0;
+      const fy = Y - y0;
+      const v = (a, b) => hash(a, b, 91);
+      const top = v(x0, y0) * (1 - fx) + v(x0 + 1, y0) * fx;
+      const bot = v(x0, y0 + 1) * (1 - fx) + v(x0 + 1, y0 + 1) * fx;
+      return top * (1 - fy) + bot * fy;
+    };
+    const isCloud = (gx, gy) => gy >= 0 && gy < bandRows && coarse(gx, gy) + hash(gx, gy, 92) * 0.12 > 0.63;
+    const gcols = Math.ceil(w / cw) + 1;
+    for (let gy = 0; gy < bandRows; gy += 1) {
+      for (let gx = 0; gx < gcols; gx += 1) {
+        if (!isCloud(gx, gy)) continue;
+        const x0 = gx * cw;
+        const y0 = bandTop + gy * ch;
+        const edgeL = !isCloud(gx - 1, gy);
+        const edgeR = !isCloud(gx + 1, gy);
+        for (let yy = 0; yy < ch; yy += 1) {
+          for (let xx = 0; xx < cw; xx += 1) {
+            let c = [252, 253, 255];
+            if (yy === 0 && !isCloud(gx, gy - 1)) c = [255, 255, 255]; // the lit rim on top
+            if ((edgeL && xx === 0) || (edgeR && xx === cw - 1)) c = [232, 238, 248];
+            put(x0 + xx, y0 + yy, c);
+          }
+        }
+        if (!isCloud(gx, gy + 1)) {
+          // the slab's front face, then its soft shadow on the sky
+          const face = Math.max(1, Math.round(ch * 0.55));
+          for (let yy = 0; yy < face; yy += 1) for (let xx = 0; xx < cw; xx += 1) put(x0 + xx, y0 + ch + yy, yy === face - 1 ? [196, 210, 232] : [214, 225, 242]);
+          for (let yy = face; yy < face + 2; yy += 1) for (let xx = 0; xx < cw; xx += 1) blend(x0 + xx, y0 + ch + yy, [90, 120, 180], 0.08);
+        }
+      }
+    }
+    // distant hills, two ranges, fading into the sky's blue the farther they are (the haze is
+    // what makes them read as far away, not as a grey wall). They stand on the ground, so no
+    // block floats.
+    [
+      { lo: 2, hi: lake ? 7 : 4, haze: 0.62, salt: 5 },
+      { lo: 1, hi: lake ? 4 : 3, haze: 0.4, salt: 6 },
+    ].forEach((R) => {
+      const tall = steps(R.lo, R.hi, 0.55);
+      for (let c = 0; c < cols; c += 1) {
+        for (let k = 0; k < tall[c]; k += 1) {
+          const y0 = ground - (k + 1) * B;
+          if (k === tall[c] - 1) {
+            cell(c * B, y0, GRASS, R.salt, R.haze, SKY[3]);
+          } else cell(c * B, y0, k < tall[c] - 3 ? STONE : DIRT, R.salt + k, R.haze, SKY[3]);
+        }
+      }
+    });
+    // near hills: grass blocks over dirt, stepped; flat where the house, the mascot and the
+    // portal stand
+    const portalCol = Math.round((w * (lake ? 0.78 : opts.orbX)) / B);
+    const houseCol = Math.round((w * (lake ? 0.5 : 0.62)) / B);
+    const mascotCol = houseCol - 2;
+    const pondFrom = Math.round((w * (lake ? 0.26 : 0.1)) / B);
+    const pondTo = pondFrom + (lake ? 6 : 3);
+    const hills = steps(1, lake ? 4 : 2, 0.6).map((v, c) => {
+      if (Math.abs(c - portalCol) <= 2) return lake ? 3 : 2;
+      if (c >= houseCol - 3 && c <= houseCol + 3) return lake ? 2 : 1;
+      if (c >= pondFrom && c <= pondTo) return 0;
+      return v;
+    });
+    const grassBlock = (x0, y0, salt) => {
+      cell(x0, y0, DIRT, salt);
+      // the grass top, and the green that drips down the side
+      for (let xx = 0; xx < B; xx += 1) {
+        const drip = 1 + Math.floor(hash(x0 + xx, y0, salt + 3) * Math.max(2, B / 2.5));
+        for (let yy = 0; yy < drip; yy += 1) put(x0 + xx, y0 + yy, GRASS[Math.floor(hash(x0 + xx, y0 + yy, salt + 4) * 3)]);
+        put(x0 + xx, y0, GRASS[3]);
+      }
+    };
+    for (let c = 0; c < cols; c += 1) {
+      const n = hills[c];
+      for (let k = 0; k <= n; k += 1) {
+        const y0 = ground - k * B;
+        if (k === n) grassBlock(c * B, y0, 11);
+        else cell(c * B, y0, k === 0 && n > 2 ? STONE : DIRT, 12 + k);
+      }
+    }
+    // the pond, one block deep, with a light rim
+    for (let c = pondFrom; c <= pondTo; c += 1) {
+      for (let y = ground; y < h; y += 1) for (let xx = 0; xx < B; xx += 1) {
+        const x = c * B + xx;
+        put(x, y, y === ground ? WATER[3] : WATER[Math.floor(hash(x >> 1, y >> 1, 31) * 3)]);
+      }
+    }
+    const topOf = (c) => ground - hills[c] * B; // the y of a column's grass surface
+
+    // flowers on the grass: red and yellow pixels on short stems
+    for (let c = 0; c < cols; c += 1) {
+      if (hills[c] === 0 || rand() > 0.35 || Math.abs(c - portalCol) <= 2) continue;
+      const fx = c * B + 1 + Math.floor(rand() * (B - 2));
+      const fy = topOf(c);
+      put(fx, fy - 1, [60, 140, 40]);
+      put(fx, fy - 2, rand() < 0.5 ? [220, 40, 40] : [250, 215, 50]);
+    }
+    // oaks: a log trunk under a leafy crown with a few holes
+    const oak = (c) => {
+      const base = topOf(c);
+      const trunk = lake ? 3 : 2;
+      for (let k = 1; k <= trunk; k += 1) cell(c * B, base - k * B, LOG, 17 + k);
+      for (let ry = 0; ry < 2; ry += 1) {
+        for (let rx = -1 - (ry ? 0 : 1); rx <= 1 + (ry ? 0 : 1); rx += 1) {
+          if ((rx === -2 || rx === 2) && rand() < 0.4) continue;
+          cell((c + rx) * B, base - (trunk + 1 + ry) * B + B, LEAF, 27 + rx + ry);
+        }
+      }
+      cell(c * B, base - (trunk + 2) * B, LEAF, 29);
+    };
+    const oaks = lake ? [0.06, 0.42, 0.64, 0.95] : [0.04, 0.32];
+    oaks.forEach((f) => {
+      const c = Math.round((w * f) / B);
+      if (hills[c] > 0 && Math.abs(c - portalCol) > 3 && Math.abs(c - houseCol) > 4) oak(c);
+    });
+
+    // the village house: a cobble footing, plank walls between log posts, a glass window, a
+    // door and a stepped roof
+    const hb = topOf(houseCol);
+    const hx0 = (houseCol - 2) * B;
+    for (let bx = 0; bx < 5; bx += 1) cell(hx0 + bx * B, hb - B, COBBLE, 41 + bx);
+    for (let by = 2; by <= 3; by += 1) {
+      for (let bx = 0; bx < 5; bx += 1) {
+        const x0 = hx0 + bx * B;
+        const y0 = hb - by * B;
+        if (bx === 0 || bx === 4) cell(x0, y0, LOG, 43 + by);
+        else {
+          for (let yy = 0; yy < B; yy += 1) for (let xx = 0; xx < B; xx += 1) {
+            const seam = (y0 + yy) % Math.max(2, Math.round(B / 2)) === 0;
+            put(x0 + xx, y0 + yy, seam ? mix(PLANK[0], BLACK, 0.25) : PLANK[Math.floor(hash(x0 + xx >> 1, y0 + yy, 45) * 3)]);
+          }
+        }
+      }
+    }
+    // the window (glass with a white glint) and the door
+    const wx = hx0 + 3 * B;
+    const wy = hb - 3 * B;
+    for (let yy = 1; yy < B - 1; yy += 1) for (let xx = 1; xx < B - 1; xx += 1) put(wx + xx, wy + yy, xx === yy || xx === yy + 1 ? [240, 250, 255] : [170, 210, 235]);
+    const dx0 = hx0 + B;
+    for (let yy = 0; yy < 2 * B; yy += 1) for (let xx = 1; xx < B - 1; xx += 1) put(dx0 + xx, hb - 3 * B + yy, (yy + 1) % Math.max(2, Math.round(B / 2)) === 0 ? [70, 45, 25] : [104, 70, 40]);
+    put(dx0 + B - 3, hb - 2 * B, [220, 200, 120]); // the handle
+    // the roof: dark stair steps, wider at the eaves
+    for (let r = 0; r < 2; r += 1) {
+      for (let bx = -1 + r; bx <= 5 - r; bx += 1) cell(hx0 + bx * B, hb - (4 + r) * B, LOG, 51 + r);
+    }
+    // smoke from the chimney would need motion: a few pale motes do
+    ov.motes.push({ x: hx0 + 4 * B, y: hb - 5 * B, tone: "smoke", delay: "0" }, { x: hx0 + 4 * B + 1, y: hb - 5 * B, tone: "smoke", delay: "2.2" });
+
+    // the portal on the hill, and through it the nether: red haze over lava
+    const fx0 = (portalCol - 2) * B;
+    const groundY = topOf(portalCol);
+    const fy0 = groundY - 5 * B;
+    const ix0 = fx0 + B;
+    const iy0 = fy0 + B;
+    const iw = 2 * B;
+    const ih = 3 * B;
+    const pcx = ix0 + iw / 2;
+    const pcy = iy0 + ih / 2;
+    glowAt(pcx, pcy, B * 3.5, SWIRL[2], 0.3);
+    for (let by = 0; by < 5; by += 1) for (let bx = 0; bx < 4; bx += 1) {
+      if (bx > 0 && bx < 3 && by > 0 && by < 4) continue;
+      cell(fx0 + bx * B, fy0 + by * B, OBS, 23 + bx * 7 + by);
+    }
+    for (let y = iy0; y < iy0 + ih; y += 1) {
+      for (let x = ix0; x < ix0 + iw; x += 1) {
+        const u = (x - pcx) / (iw / 2);
+        const v = (y - pcy) / (ih / 2);
+        const r = Math.hypot(u, v);
+        const wave = Math.sin(Math.atan2(v, u) * 2 + r * 8) * 0.5 + 0.5;
+        let c = SWIRL[Math.max(0, Math.min(4, Math.floor((wave + (hash(x, y, 61) - 0.5) * 0.3) * 5)))];
+        const see = Math.max(0, 1 - r / 0.75);
+        if (see > 0) {
+          const lavaY = Math.round(pcy + ih * 0.12);
+          const o = y < lavaY ? mix([60, 14, 14], [140, 40, 20], (y - iy0) / ih) : hash(x, y, 64) < 0.4 ? [255, 170, 40] : [230, 80, 20];
+          c = mix(c, o, Math.min(0.9, see * 1.4));
+        }
+        put(x, y, c);
+      }
+    }
+    for (let i = 0; i < (lake ? 6 : 4); i += 1) {
+      ov.motes.push({ x: Math.round(ix0 + rand() * iw), y: Math.round(iy0 + rand() * ih), tone: "violet", delay: (rand() * 4).toFixed(2) });
+    }
+
+    // the mascot again, here hauling a grass block
+    const mx = mascotCol * B + Math.round(B / 2);
+    const feet = topOf(mascotCol);
+    const bw = Math.max(5, Math.round(B * 1.3));
+    const bhh = Math.max(4, Math.round(B * 1.05));
+    const legH = Math.max(1, Math.round(B / 3));
+    const top = feet - legH - bhh;
+    const INK = [42, 40, 70];
+    const left = mx - Math.floor(bw / 2);
+    for (let y = top; y < top + bhh; y += 1) {
+      for (let x = left; x < left + bw; x += 1) {
+        const edgeX = x === left || x === left + bw - 1;
+        const edgeY = y === top || y === top + bhh - 1;
+        if (edgeX && edgeY) continue;
+        put(x, y, edgeX || edgeY ? INK : y > top + bhh * 0.6 ? [214, 230, 250] : [255, 255, 255]);
+      }
+    }
+    put(left + 1, top + bhh, INK);
+    const eyeY = top + Math.max(1, Math.round(bhh * 0.35));
+    [mx - Math.max(1, Math.round(bw / 4)), mx + Math.max(1, Math.round(bw / 4)) - 1].forEach((ex) => {
+      put(ex, eyeY, [86, 163, 47]);
+      put(ex, eyeY + 1, [59, 125, 34]);
+    });
+    for (let k = 0; k < legH; k += 1) {
+      put(mx - 1, top + bhh + k, INK);
+      put(mx + 1, top + bhh + k, INK);
+    }
+    const blockY = top - B - Math.max(1, Math.round(B / 4));
+    for (let y = blockY + B; y < top + 1; y += 1) {
+      put(left - 1, y, INK);
+      put(left + bw, y, INK);
+    }
+    grassBlock(mx - Math.floor(B / 2), blockY, 98);
+
+    ctx.putImageData(img, 0, 0);
+    return ov;
+  }
+
   // ---- Nether Gate: a blocky underworld in the style of a certain sandbox game, every block
   // drawn here from noise (no game textures). Red haze, a fortress bridge on brick arches far
   // off, a netherrack roof hung with glowstone (hero), a lava sea with a lavafall, stepped
@@ -573,37 +881,7 @@ function render(ctx, w, h, seed, opts, pal) {
     const B = Math.max(4, Math.min(8, Math.round(h / (lake ? 16 : 9))));
     const cols = Math.ceil(w / B) + 1;
     const lavaTop = h - Math.round(B * (lake ? 2 : 1.5));
-    const clump = B >= 6 ? 1 : 0; // texture pixels come in 2x2 clumps on big blocks
-
-    /** One textured block, top-left at (x0, y0): clumped noise over `tones`, sparse bright
-     *  specks and dark pits, a lit top-left edge and a shaded bottom-right one, then haze. */
-    const cell = (x0, y0, tones, salt, haze = 0, fog = FOG[2]) => {
-      const n = tones.length;
-      for (let yy = 0; yy < B; yy += 1) {
-        for (let xx = 0; xx < B; xx += 1) {
-          const x = x0 + xx;
-          const y = y0 + yy;
-          const v = hash((x0 + (xx >> clump)) | 0, (y0 + (yy >> clump)) | 0, salt);
-          let c = tones[Math.min(n - 2, Math.floor(v * (n - 1)))];
-          const fleck = hash(x, y, salt + 1);
-          if (fleck > 0.93) c = tones[n - 1];
-          else if (fleck < 0.06) c = mix(tones[0], BLACK, 0.3);
-          if (yy === 0 || xx === 0) c = mix(c, tones[n - 1], 0.4);
-          else if (yy === B - 1 || xx === B - 1) c = mix(c, BLACK, 0.35);
-          put(x, y, haze ? mix(c, fog, haze) : c);
-        }
-      }
-    };
-    const steps = (lo, hi, rough) => fractal(rand, cols, rough).map((v) => Math.round(lo + v * (hi - lo)));
-    const glowAt = (gx, gy, radius, color, strength) => {
-      for (let y = Math.max(0, Math.round(gy - radius)); y < Math.min(h, gy + radius); y += 1) {
-        for (let x = Math.max(0, Math.round(gx - radius * 1.2)); x < Math.min(w, gx + radius * 1.2); x += 1) {
-          const dd = Math.hypot((x - gx) / 1.2, y - gy) / radius;
-          // a smooth falloff: dithered, the light read as a checkerboard round the portal
-          if (dd < 1) blend(x, y, color, strength * (1 - dd) ** 1.6);
-        }
-      }
-    };
+    const { cell, steps, glowAt } = blockKit(B, cols, FOG[2]);
 
     // the cave air: dark at the top, warming toward the lava
     for (let y = 0; y < h; y += 1) {
@@ -1527,7 +1805,9 @@ export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, class
             "pm-rise absolute size-1",
             m.tone === "violet"
               ? "bg-fuchsia-300 shadow-[0_0_6px_2px_rgb(192_132_252/0.7)]"
-              : "bg-orange-300 shadow-[0_0_6px_2px_rgb(251_146_60/0.7)]",
+              : m.tone === "smoke"
+                ? "size-2 bg-zinc-100/80"
+                : "bg-orange-300 shadow-[0_0_6px_2px_rgb(251_146_60/0.7)]",
           )}
           style={{ ...at(m, scene), animationDelay: `${m.delay}s` }}
         />
