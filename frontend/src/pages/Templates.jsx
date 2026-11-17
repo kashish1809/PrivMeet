@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  ArrowRight,
   BookOpen,
   Briefcase,
   LayoutTemplate,
@@ -8,12 +9,14 @@ import {
   Pencil,
   Plus,
   Sparkles,
+  Star,
   Trash2,
   UserRound,
   Users,
 } from "lucide-react";
 
 import { api } from "../api";
+import { navigate } from "../App";
 import { Badge, Button, Card, ConfirmDialog, EmptyState, IconButton, Input, Modal, Skeleton, Textarea, toast } from "../ui";
 
 // An icon per built-in; own templates get the notebook.
@@ -26,7 +29,7 @@ const ICONS = {
   lecture: BookOpen,
 };
 
-function TemplateCard({ t, onEdit, onDelete }) {
+function TemplateCard({ t, onEdit, onDelete, onDefault }) {
   const Icon = ICONS[t.id] || NotebookPen;
   return (
     <Card className="flex flex-col gap-3 p-5">
@@ -48,6 +51,16 @@ function TemplateCard({ t, onEdit, onDelete }) {
       </div>
       <p className="flex-1 text-sm text-zinc-600 dark:text-zinc-400">{t.description || t.instructions}</p>
       <div className="flex flex-wrap items-center gap-2">
+        {/* the next upload from New Meeting starts with this template picked */}
+        <Button size="sm" icon={ArrowRight} onClick={() => navigate(`/new?template=${encodeURIComponent(t.id)}`)}>
+          Use
+        </Button>
+        {!t.is_default && (
+          <Button size="sm" variant="secondary" icon={Star} onClick={() => onDefault(t)}>
+            Set as default
+          </Button>
+        )}
+        <span className="flex-1" />
         {/* built-ins are read-only; own templates can be edited and deleted */}
         {!t.builtin && (
           <>
@@ -144,6 +157,16 @@ export default function Templates() {
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
+  async function makeDefault(t) {
+    try {
+      await api("/api/settings/", { method: "PATCH", body: { default_template: t.id } });
+      toast(`"${t.name}" is now the default`, "green");
+      load();
+    } catch (e) {
+      toast(e.message, "red");
+    }
+  }
+
   async function remove() {
     const t = deleting;
     setDeleting(null);
@@ -223,7 +246,7 @@ export default function Templates() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {list.map((t) => (
-            <TemplateCard key={t.id} t={t} onEdit={setEditing} onDelete={setDeleting} />
+            <TemplateCard key={t.id} t={t} onEdit={setEditing} onDelete={setDeleting} onDefault={makeDefault} />
           ))}
         </div>
       )}
