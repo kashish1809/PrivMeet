@@ -43,15 +43,26 @@ export const SUBLINE = "Self-hosted AI meeting notes";
 const VARIANT_TILES = {
   gradient: ["fill-[#1e2550]", "fill-[#0e0f2a]"], // gradient mark on a dark tile (docs/ui/logo.svg)
   light: ["fill-white", "fill-zinc-100"], // gradient mark on a white tile
+  solid: ["fill-[#4942e3]", "fill-[#3a33c4]"], // white mark on the indigo accent tile
 };
+// solid: the bubble turns white, the window a pale indigo, rim and panes deep indigo. Fixed
+// brand colours, like the tile, so the variation looks the same in every theme.
+function solidFill(fill, part) {
+  if (fill === "fill-zinc-950") return "fill-[#262273]";
+  if (part === "eyes") return fill === "fill-primary-100" ? "fill-white" : "fill-[#3a33c4]";
+  return fill === "fill-white" && !part ? "fill-[#dfddfc]" : "fill-white";
+}
 
 export function LogoMark({ size = 36, tile = true, animated = true, variant, className, title }) {
   const fixed = VARIANT_TILES[variant];
   const mono = variant === "mono";
   // mono is the outline alone in the current text colour: the rim and the pane frames are
   // the zinc-950 cells, every other cell is dropped.
-  const paint = (fill) => (mono ? (fill === "fill-zinc-950" ? "fill-current" : null) : fill);
-  const cells = (part) => CELLS.filter(([fill, , p]) => p === part && paint(fill));
+  const paint = (fill, part) => {
+    if (mono) return fill === "fill-zinc-950" ? "fill-current" : null;
+    return variant === "solid" ? solidFill(fill, part) : fill;
+  };
+  const cells = (part) => CELLS.filter(([fill, , p]) => p === part && paint(fill, p));
   const hasTile = tile && !mono;
   const live = animated && !mono;
   return (
@@ -77,11 +88,11 @@ export function LogoMark({ size = 36, tile = true, animated = true, variant, cla
       {/* The panes blink and the highlight twinkles: CSS transform/opacity only (theme.css). */}
       <g className={live ? "pm-eyes" : undefined}>
         {cells("eyes").map(([fill, d]) => (
-          <path key={fill} d={d} className={paint(fill)} />
+          <path key={fill} d={d} className={paint(fill, "eyes")} />
         ))}
       </g>
       {cells("glint").map(([fill, d]) => (
-        <path key={fill} d={d} className={cx(paint(fill), live && "pm-twinkle")} />
+        <path key={fill} d={d} className={cx(paint(fill, "glint"), live && "pm-twinkle")} />
       ))}
       {/* A pixel sparkle that pops on the top-right corner now and then (CSS only). */}
       {live && (
