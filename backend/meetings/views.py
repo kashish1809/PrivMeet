@@ -26,7 +26,7 @@ ALLOWED_EXT = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac"
 
 # What this server supports beyond the v1 API; GET /api/system/ returns it so the frontend
 # shows a control only when its endpoint exists (docs/TASKS.md "Feature flags").
-FEATURES = ["settings", "notes", "tags", "filters", "providers", "templates", "models", "exports", "share-page", "exports-office", "exports-ics"]
+FEATURES = ["settings", "notes", "tags", "filters", "providers", "templates", "models", "exports", "share-page", "exports-office", "exports-ics", "audio-exports"]
 
 MAX_TAGS, MAX_TAG_LEN, MAX_NOTES = 10, 30, 20000
 # ?status= also takes the list page's filter names, so the UI does not have to know the stages.
@@ -221,6 +221,8 @@ def create_meeting(request):
 def meeting_detail(request, pk):
     m = reap(get_object_or_404(Meeting, pk=pk))
     if request.method == "DELETE":
+        for p in export.audio_copies(m):  # the shared MP3/Opus copies go with it
+            p.unlink(missing_ok=True)
         m.file.delete(save=False)
         m.delete()
         return HttpResponse(status=204)
@@ -343,6 +345,26 @@ def meeting_export(request, pk, fmt="md"):
     resp = HttpResponse(body, content_type=ctype)
     for k, v in (extra[0] if extra else {}).items():
         resp[k] = v
+    resp["Content-Disposition"] = f'attachment; filename="{export.filename(m, fmt)}"'
+    return resp
+
+
+@require_GET
+def meeting_audio_export(request, pk, fmt):
+    """GET /api/meetings/<id>/audio.mp3 or audio.opus: the recording converted for sharing."""
+    import subprocess
+
+    if fmt not in export.AUDIO:
+        raise Http404
+    m = get_object_or_404(Meeting, pk=pk)
+    try:
+        path = export.audio_copy(m, fmt)
+    except (subprocess.SubprocessError, OSError) as e:
+        log.warning("audio export of %s failed: %s", pk, e)
+        return bad("Could not convert the audio.", 500)
+    if path is None:
+        return bad("This meeting's audio was deleted.", 404)
+    resp = FileResponse(path.open("rb"), content_type=export.AUDIO[fmt][1])
     resp["Content-Disposition"] = f'attachment; filename="{export.filename(m, fmt)}"'
     return resp
 

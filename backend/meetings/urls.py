@@ -6,6 +6,7 @@ urlpatterns = [
     path("meetings/", views.meetings),
     path("meetings/<uuid:pk>/", views.meeting_detail),
     path("meetings/<uuid:pk>/audio", views.meeting_audio),
+    path("meetings/<uuid:pk>/audio.<str:fmt>", views.meeting_audio_export),
     path("meetings/<uuid:pk>/ask", views.meeting_ask),
     path("meetings/<uuid:pk>/retry", views.meeting_retry),
     path("meetings/<uuid:pk>/export.<str:fmt>", views.meeting_export),

@@ -7,6 +7,8 @@ whose audio was deleted still exports.
 
 import calendar
 import io
+import subprocess
+from pathlib import Path
 import json
 from datetime import date, timedelta
 import re
@@ -431,3 +433,38 @@ def ics(m):
 
 # extension -> builder; later commits add the other formats
 BUILDERS = {"md": markdown, "txt": plain_text, "json": as_json, "srt": srt, "vtt": vtt, "html": share_html, "docx": docx, "odt": odt, "ics": ics}
+
+
+# ---- the recording, converted for sharing: mono, small, speech stays clear
+AUDIO = {
+    # the format is named, not guessed: the file is written as .part, then renamed
+    "mp3": (["-c:a", "libmp3lame", "-b:a", "64k", "-f", "mp3"], "audio/mpeg"),
+    "opus": (["-c:a", "libopus", "-b:a", "32k", "-f", "ogg"], "audio/ogg"),
+}
+
+
+def audio_copy(m, fmt):
+    """The cached conversion of the meeting's audio (made on first request), or None when the
+    meeting has no audio file any more."""
+    if not m.file or not Path(m.file.path).is_file():
+        return None
+    src = Path(m.file.path)
+    dst = src.with_name(f"{src.stem}.share.{fmt}")
+    if not dst.is_file() or dst.stat().st_mtime < src.stat().st_mtime:
+        tmp = dst.with_name(dst.name + ".part")
+        args, _ = AUDIO[fmt]
+        # list args, never a shell; the pipeline's timeout rule (3 h)
+        subprocess.run(
+            ["ffmpeg", "-nostdin", "-y", "-loglevel", "error", "-i", str(src), "-vn", "-ac", "1", *args, str(tmp)],
+            check=True, capture_output=True, timeout=3 * 3600,
+        )
+        tmp.replace(dst)  # a half-written file is never served
+    return dst
+
+
+def audio_copies(m):
+    """Every cached conversion of the meeting's audio, to delete with it."""
+    if not m.file:
+        return []
+    src = Path(m.file.path)
+    return [p for p in src.parent.glob(f"{src.stem}.share.*") if p.is_file()]
