@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Settings } from "lucide-react";
+import { Settings, User } from "lucide-react";
 
+import { api } from "../api";
 import { navigate } from "../App";
 import { SearchInput, StatusDot, cx, focusRing } from "../ui";
 
@@ -24,7 +25,42 @@ function AIPill({ system, error }) {
   );
 }
 
-/** The bar above every page: search, the AI pill and settings; the avatar follows. */
+/** "Vinayak Kamath" -> "VK", "vinayak" -> "V". */
+const initials = (name) =>
+  name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("");
+
+/** Round avatar with the display name's initials; a user icon when there is no name or the
+ *  settings endpoint is missing. Re-read on every route change, so a name saved in Settings
+ *  shows as soon as the user leaves that page. */
+function UserAvatar() {
+  const [name, setName] = useState("");
+  useEffect(() => {
+    const load = () =>
+      api("/api/settings/")
+        .then((s) => setName((s?.display_name || "").trim()))
+        .catch(() => setName(""));
+    load();
+    window.addEventListener("hashchange", load);
+    return () => window.removeEventListener("hashchange", load);
+  }, []);
+  const text = initials(name);
+  return (
+    <a
+      href="#/settings"
+      title={name || "Set your name in Settings"}
+      aria-label={name ? `${name}, settings` : "Your profile, settings"}
+      className={cx(
+        "inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-primary-600 text-xs font-semibold text-white",
+        text.length > 1 && "tracking-tighter",
+        focusRing,
+      )}
+    >
+      {text || <User className="size-4" aria-hidden="true" />}
+    </a>
+  );
+}
+
+/** The bar above every page: search, the AI pill, settings and the user's avatar. */
 export default function TopBar({ system, error }) {
   const [q, setQ] = useState("");
   const input = useRef(null);
@@ -72,6 +108,7 @@ export default function TopBar({ system, error }) {
         >
           <Settings className="size-4" aria-hidden="true" />
         </a>
+        <UserAvatar />
       </div>
     </div>
   );
