@@ -17,4 +17,5 @@ urlpatterns = [
     path("action-items/", views.action_items),
     path("templates/", views.templates),
     path("templates/<str:tid>/", views.template_detail),
+    path("models/", views.models),
 ]

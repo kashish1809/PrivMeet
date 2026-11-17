@@ -3,6 +3,8 @@ import logging
 import mimetypes
 import os
 import re
+import urllib.error
+import urllib.request
 from datetime import date
 from pathlib import Path
 
@@ -24,7 +26,7 @@ ALLOWED_EXT = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac"
 
 # What this server supports beyond the v1 API; GET /api/system/ returns it so the frontend
 # shows a control only when its endpoint exists (docs/TASKS.md "Feature flags").
-FEATURES = ["settings", "notes", "tags", "filters", "providers", "templates"]
+FEATURES = ["settings", "notes", "tags", "filters", "providers", "templates", "models"]
 
 MAX_TAGS, MAX_TAG_LEN, MAX_NOTES = 10, 30, 20000
 # ?status= also takes the list page's filter names, so the UI does not have to know the stages.
@@ -456,6 +458,60 @@ def action_items(request):
                 "due": item.get("due", ""), "done": bool(item.get("done")),
             })
     return JsonResponse({"action_items": rows})
+
+
+def _ollama_models(prof):
+    """Installed Ollama models as [{name, size}], or None when Ollama does not answer."""
+    from .pipeline import llm
+
+    try:
+        with urllib.request.urlopen(f"{llm.ollama_url(prof).rstrip('/')}/api/tags", timeout=5) as r:
+            data = json.load(r)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    return sorted(
+        ({"name": m["name"], "size": m.get("size", 0)} for m in data.get("models", []) if m.get("name")),
+        key=lambda m: m["name"],
+    )
+
+
+def _profile():
+    """The profile the worker runs with (it may see a GPU the web side does not), plus the
+    saved settings: the same one /api/system/ reports."""
+    try:
+        prof = json.loads(tasks.WORKER_PROFILE.read_text())
+    except (OSError, ValueError):
+        prof = hw.base_profile()
+    return hw.apply_overrides(prof, settings_store.load())
+
+
+@require_GET
+def models(request):
+    """Everything the Models page shows: hardware, Whisper sizes, Ollama models, diarization
+    and the running pull."""
+    from .pipeline import diarize
+
+    prof = _profile()
+    # Recommend for the hardware, not the profile's tier: with a cloud provider the tier
+    # reads "high" (hw.apply_overrides), and a 6 GB laptop must not be told to run 7b here.
+    hw_tier = hw.detect_tier(prof.get("ram_gb") or 0, bool(prof.get("cuda")))
+    rec = hw.recommended(hw_tier)
+    installed = _ollama_models(prof)
+    return JsonResponse({
+        "hardware": {"tier": hw_tier, "ram_gb": prof.get("ram_gb"), "device": prof["device"],
+                     "gpu": bool(prof.get("cuda")), "cuda_error": hw.cuda_error()},
+        "whisper": {
+            "current": prof["whisper_model"], "recommended": rec["whisper_model"],
+            "sizes": [{**w, "downloaded": hw.whisper_downloaded(w["name"])} for w in hw.WHISPER_SIZES],
+        },
+        "ollama": {
+            "reachable": installed is not None, "installed": installed or [],
+            "current": prof["llm_model"], "recommended": rec["llm_model"],
+            "provider": prof.get("llm_provider", "ollama"),
+        },
+        "diarization": {"enabled": bool(prof["diarize"]), "available": diarize.available()},
+        "pull": tasks.pull_state(),
+    })
 
 
 TEMPLATE_LIMITS = {"name": 60, "description": 200, "instructions": 2000}
