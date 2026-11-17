@@ -108,3 +108,56 @@ def answer_question(question_id):
         log.exception("question %s failed", question_id)
         q.answer, q.status = f"Error: {e}", "failed"
     q.save(update_fields=["answer", "status"])
+
+
+# ---- Model downloads (R1.11). One pull at a time, through the worker queue, so a download
+# never runs beside a transcription (concurrency 1). Progress goes to a small JSON file the
+# web side reads for GET /api/models/.
+PULL_STATE = settings.DATA_DIR / "model_pull.json"
+PULL_STALE_AFTER = 120  # seconds without an update: the worker running the pull is gone
+
+
+def _write_pull(state):
+    settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = PULL_STATE.with_suffix(".tmp")
+    tmp.write_text(json.dumps({**state, "updated": time.time()}))
+    os.replace(tmp, PULL_STATE)  # atomic: a reader never sees half a file
+
+
+def pull_state():
+    """The last pull, or None. `running` is false once it finished, failed or went stale."""
+    try:
+        s = json.loads(PULL_STATE.read_text())
+    except (OSError, ValueError):
+        return None
+    s["running"] = s.get("status") not in ("success", "error") and time.time() - s.get("updated", 0) < PULL_STALE_AFTER
+    return s
+
+
+@shared_task
+def pull_model(name):
+    """Stream Ollama's /api/pull for `name`, writing {model, percent, status} as it goes."""
+    import urllib.request
+
+    url = llm.ollama_url(hw.profile()).rstrip("/")
+    _write_pull({"model": name, "percent": 0, "status": "starting"})
+    percent, last = 0, 0.0
+    try:
+        req = urllib.request.Request(
+            f"{url}/api/pull", data=json.dumps({"model": name, "stream": True}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=3600) as r:
+            for line in r:
+                d = json.loads(line or b"{}")
+                if d.get("error"):
+                    raise RuntimeError(d["error"])
+                if d.get("total"):
+                    percent = min(99, round(100 * d.get("completed", 0) / d["total"]))
+                if time.monotonic() - last >= 1:  # at most one write a second
+                    _write_pull({"model": name, "percent": percent, "status": d.get("status", "pulling")})
+                    last = time.monotonic()
+        _write_pull({"model": name, "percent": 100, "status": "success"})
+    except Exception as e:  # noqa: BLE001 - every failure is reported the same way
+        log.warning("pull of %s failed: %s", name, e)
+        _write_pull({"model": name, "percent": percent, "status": "error", "error": str(e)[:300]})
