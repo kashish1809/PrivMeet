@@ -34,17 +34,52 @@ and readable by both.
 |---|---|---|
 | 1 | Server core: router, Host check, the React app under `/static/`, CSRF | done |
 | 2 | SQLite and FTS5 schema, settings store, hardware tiers; `/api/system/`, `/api/settings/` | done |
-| 3 | Meetings: upload, list and search, detail, edit, delete, audio with Range | next |
-| 4 | Pipeline: ffmpeg, whisper.cpp or cloud transcription, names, diarization, summary, Q&A | |
-| 5 | Templates, tags, action items, models, exports, settings test, demo data, import from Django | |
+| 3 | Meetings: upload, list and search, detail, edit, delete, audio with Range, retry, tags, action items, ask | done |
+| 4 | Pipeline: ffmpeg, whisper.cpp or cloud transcription, names, diarization, summary, Q&A | **code written, not yet run end to end** |
+| 5 | Template, models and export endpoints, settings test, demo data, import from Django | |
 | 6 | Measure against Python, side-by-side tests, then hand-over to the desktop app | |
+
+### Where stage 4 stands (resume here)
+
+The code is ported and builds, and `cargo test` passes (25 tests). It has not processed a real meeting yet.
+
+**Modules:**
+- `providers.rs`: Ollama `/api/chat` and the cloud chat and transcription APIs.
+- `llm.rs`: prompts, map-reduce, parsing, de-duplication, grounding, the summary check and citations.
+- `stt.rs`: whisper.cpp, downloading the ggml model on first use, and cloud transcription in chunks.
+- `diarize.rs`: sherpa-rs.
+- `names.rs`: the name hint, the corrector, and speaker inference.
+- `templates.rs`
+- `pipeline.rs`: the worker, `process_meeting`, `answer_question` and the Q&A excerpts.
+
+**Next steps, in order:**
+1. **Fix the runtime library.** `./target/release/privmeet-server` stops at start-up with
+   `error while loading shared libraries: libsherpa-onnx-c-api.so`: sherpa-rs links sherpa-onnx
+   dynamically. Try sherpa-rs's static feature, or set an rpath to the downloaded library folder.
+2. **Run the English test meeting through the Rust server.** It is
+   `scratchpad/sim/Weekly product sync.mp3` from the session that made it; regenerate it if
+   that is gone. Run it twice:
+   - cloud mode (Groq transcription and summary);
+   - whisper.cpp `base` with diarization on this machine.
+
+   Compare against the Python result: WER 3.8 %, every name right (17 of 17), 4 speakers,
+   3 of 5 owners right.
+3. **Measure peak memory** during a local run, then add the stage 4 flags to `FEATURES`.
+4. **Known shortcuts:**
+   - Whisper progress is reported only when transcription ends.
+   - sherpa-rs ignores `cpu_threads`.
+   - Name correction handles Latin script only.
+   - RAM detection is Linux only.
 
 `FEATURES` in `server/src/web.rs` lists only what is built, so the app hides the rest.
 
 ## Checked so far
 
-- **Unit tests:** `cargo test` runs 13 of them, covering CSRF parsing, settings validation (Django's
-  messages, word for word), tiers and overrides, migrations, FTS5 search and dates.
+- **Unit tests:** `cargo test` runs 25 of them, covering CSRF parsing, settings validation (Django's
+  messages, word for word), tiers and overrides, migrations, FTS5 search, dates, tags and notes,
+  dates in filters, prompt-output parsing, harvest and de-duplication, grounding, citations, the
+  text splitter, silence cleanup, speaker assignment, the name corrector (difflib's ratio,
+  exactly) and speaker inference.
 - **Against Django on the same `settings.json`:** `/api/system/` is identical apart from the
   feature list, and `GET /api/settings/` is identical.
 - **Memory:**

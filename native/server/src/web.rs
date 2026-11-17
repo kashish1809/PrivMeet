@@ -33,7 +33,9 @@ pub type AppState = Arc<App>;
 pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters"];
 
 /// Built-in note template ids (backend/meetings/note_templates.py); own ones are "u<pk>".
-pub const BUILTIN_TEMPLATES: &[&str] = &["general", "standup", "one-on-one", "client-call", "interview", "lecture"];
+pub fn builtin_template(id: &str) -> bool {
+    crate::templates::BUILTINS.iter().any(|b| b.id == id)
+}
 
 /// The error body every endpoint uses, as Django's bad(): {"error": "..."}; api.js shows it.
 pub fn error(status: StatusCode, msg: impl Into<String>) -> Response {
@@ -49,7 +51,7 @@ impl App {
 
     /// Whether a note template id exists: a built-in, or an own template "u<pk>".
     pub fn template_exists(&self, id: &str) -> bool {
-        if BUILTIN_TEMPLATES.contains(&id) {
+        if builtin_template(id) {
             return true;
         }
         let Some(pk) = id.strip_prefix('u').and_then(|n| n.parse::<i64>().ok()) else { return false };
@@ -79,7 +81,11 @@ impl App {
     pub fn profile(&self) -> hw::Profile {
         let (ram, cuda, cpus, vram) = self.hardware;
         let base = hw::build_profile(&hw::env_map(), ram, cuda, cpus, vram);
-        hw::apply_overrides(&base, &self.settings())
+        let mut p = hw::apply_overrides(&base, &self.settings());
+        if p.ollama_url.as_deref().unwrap_or("").is_empty() {
+            p.ollama_url = Some(self.cfg.ollama_url.clone()); // OLLAMA_URL from the environment
+        }
+        p
     }
 }
 

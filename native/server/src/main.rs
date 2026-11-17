@@ -8,10 +8,16 @@ mod audio;
 mod config;
 mod csrf;
 mod db;
+mod diarize;
 mod hw;
+mod llm;
 mod meetings;
+mod names;
 mod pipeline;
+mod providers;
 mod settings;
+mod stt;
+mod templates;
 mod web;
 
 use std::net::SocketAddr;
