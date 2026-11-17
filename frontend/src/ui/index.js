@@ -35,3 +35,4 @@ export { Logo, LogoMark, TAGLINE, SUBLINE } from "./Logo";
 export { toast, dismissToast, Toaster } from "./Toast";
 export { Skeleton } from "./Skeleton";
 export { Checkbox } from "./Checkbox";
+export { Breadcrumb } from "./Breadcrumb";
