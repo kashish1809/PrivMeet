@@ -53,3 +53,48 @@ def corrector(names):
 
 # shortcut: Latin-script names only (the regex wants A-Z); names in Devanagari, Kannada, Tamil
 # and other scripts are left as Whisper wrote them. Upgrade with a per-script skeleton.
+
+
+# ---- who is which speaker, from how people talk to each other (used for the summary only)
+_INTRO = re.compile(r"\b(?:I'm|I am|this is|my name is)\s+([A-Z][a-z]{2,})\b")
+_ADDRESS = re.compile(r"(?:^|[.?!]\s+)([A-Z][a-z]{2,}),")  # "Arjun, can you ..."
+_REPLY = re.compile(r"^(?:yes|yeah|sure|thanks|thank you|okay|ok|good point|right|hi|hey)[,!]?\s+([A-Z][a-z]{2,})\b", re.IGNORECASE)
+# capitalised words that start a sentence and a comma but are not names
+_NOT_NAMES = {"Yes", "Yeah", "Sure", "Okay", "Thanks", "Well", "Now", "Then", "Great", "Good", "Right", "Also",
+              "So", "And", "But", "Hello", "Hi", "Hey", "Today", "Tomorrow", "Next", "First", "Second", "Finally"}
+
+
+def infer_speakers(segments, known=()):
+    """{speaker number: name} worked out from the conversation: a speaker who says "I'm
+    Priya" is Priya; whoever answers "Arjun, can you ..." is Arjun; whoever was just
+    speaking when the next one says "Thanks Priya" is Priya. Votes decide, and each name and
+    each speaker is used once. `known` names count with any number of votes; another word
+    needs two votes to count as a name. Nothing here is saved: speaker names stay the user's
+    to set (R1.18); this only lets the summary know who said "I'll do it"."""
+    from collections import Counter
+
+    votes = Counter()
+    segs = [s for s in segments if s.speaker is not None]
+    for i, s in enumerate(segs):
+        for name in _INTRO.findall(s.text):
+            votes[(s.speaker, name)] += 2
+        nxt = next((t for t in segs[i + 1:i + 3] if t.speaker != s.speaker), None)
+        if nxt:
+            for name in _ADDRESS.findall(s.text):
+                votes[(nxt.speaker, name)] += 1
+        prev = next((t for t in reversed(segs[max(0, i - 2):i]) if t.speaker != s.speaker), None)
+        m = _REPLY.match(s.text.strip())
+        if prev and m:
+            votes[(prev.speaker, m.group(1))] += 1
+    known = set(known)
+    total = Counter()
+    for (spk, name), n in votes.items():
+        total[name] += n
+    out, used = {}, set()
+    for (spk, name), n in votes.most_common():
+        if name in _NOT_NAMES or spk in out or name in used:
+            continue
+        if name not in known and total[name] < 2:
+            continue
+        out[spk], _ = name, used.add(name)
+    return out

@@ -15,7 +15,7 @@ from django.conf import settings
 from . import hw, note_templates
 from .models import Meeting, Question, Segment
 from .pipeline import audio, diarize, llm
-from .pipeline.names import corrector
+from .pipeline.names import corrector, infer_speakers
 from .pipeline.transcribe import transcribe
 from .search import excerpts
 
@@ -113,8 +113,12 @@ def process_meeting(meeting_id):
 
         m.set_status(Meeting.Status.SUMMARIZING, 80)
         llm.ensure_model(prof)
+        # who is which speaker, from the conversation, so "I'll do it" gets the right owner
+        guessed = infer_speakers(list(m.segments.all()), names)
+        if guessed:
+            log.info("meeting %s: speakers guessed for the summary: %s", meeting_id, guessed)
         notes = llm.summarize(
-            m.transcript(), prof,
+            m.transcript(guessed=guessed), prof,
             on_progress=lambda f: m.set_status(Meeting.Status.SUMMARIZING, 80 + int(15 * f)),
             language=m.language,
             focus=note_templates.instructions(m.template),
