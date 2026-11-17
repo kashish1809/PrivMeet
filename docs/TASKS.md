@@ -41,6 +41,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.7** settings store, flags, API reference | Vinayak | merged with U1.4 (#33), which needs it | `settings_store.py`, `FEATURES`, `docs/API.md` |
 | **R2.8** audio player | Kashish | `feat/link-llm-accounts` | `frontend/src/components/Player.jsx`, used by `TranscriptPanel.jsx` |
 | **R2.1** API helpers v2 + feature flags | Kashish | `v2/kashish/R2.1-api-v2` | `getSystem()` shares one promise, `hasFeature()` / `useFeatures()`; one helper per v2 endpoint; `format.js` gains `minutes`, `shortDate`, `participants`, `statusBadge` |
+| **R2.2** Meetings list v2 | Kashish | `v2/kashish/R2.2-list-v2` | rows per the mockup (icon tile, `Oct 28, 2026 · 42 min · 4 participants`, pill, kebab); `q` read from the route and written back with `replaceState` |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
 **Partly done, still open:** R1.1 (the four theme presets, `useTheme` and `THEMES` exist) and
@@ -834,8 +835,9 @@ Built; the text below is the specification it was built to.
   - `format.js`: `minutes(seconds)` → "42 min", `shortDate(iso)` → "Oct 28, 2026", `participants(meeting)` (uses `speakers`, else `speaker_names`, else the segments), and `statusBadge(meeting)` → the Badge props from the "Status pill" contract.
 - **Done when:** `npm run build` passes, and against today's backend `useFeatures()` is empty and nothing breaks.
 
-#### R2.2 · Meetings list v2
-- **Branch:** `v2/kashish/R2.2-list-v2`
+#### R2.2 · Meetings list v2 — **DONE** (see "Finished tasks")
+Built; the text below is the specification it was built to.
+- **Branch:** `v2/kashish/R2.2-list-v2` (unused)
 - **Needs:** R2.1
 - **Files:** `frontend/src/pages/MeetingList.jsx`, `frontend/src/components/MeetingRow.jsx`, `frontend/src/components/meetingGroups.js`
 - **Do:**

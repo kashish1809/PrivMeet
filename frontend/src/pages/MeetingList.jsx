@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Plus, SearchX } from "lucide-react";
 
 import { deleteMeeting, listMeetings } from "../api";
-import { useRoute } from "../App";
+import { navigate, useRoute } from "../App";
 import MeetingRow from "../components/MeetingRow";
 import { groupByDay } from "../components/meetingGroups";
 import { isProcessing } from "../format";
@@ -94,7 +94,7 @@ export default function MeetingList() {
     <section className="mx-auto flex max-w-4xl flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Meetings</h1>
-        <Button icon={Plus} onClick={() => (window.location.hash = "/new")}>New Meeting</Button>
+        <Button icon={Plus} onClick={() => navigate("/new")}>New Meeting</Button>
       </div>
 
       <SearchInput
@@ -120,7 +120,7 @@ export default function MeetingList() {
           <EmptyState
             icon={Mic}
             title="No meetings yet"
-            action={<Button onClick={() => (window.location.hash = "/new")}>Add your first meeting</Button>}
+            action={<Button onClick={() => navigate("/new")}>Add your first meeting</Button>}
           >
             Upload an audio or video file to get a transcript, speaker labels and notes.
           </EmptyState>
