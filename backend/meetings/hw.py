@@ -181,6 +181,16 @@ def apply_overrides(p, saved):
             key = f"{provider}_{'api_key' if field == 'api_key' else 'model'}"
             if saved.get(key):
                 p[field] = saved[key]
+    # A cloud provider runs the heavy stages, so local RAM no longer limits them: use the
+    # high tier's values unless the user saved their own.
+    from .pipeline.transcribe import uses_cloud
+
+    if provider != "ollama" and "num_ctx" not in saved:
+        p["num_ctx"] = TIERS["high"]["num_ctx"]
+    if uses_cloud(p):
+        p["tier"] = "high"
+        if "diarize" not in saved:  # diarization stays local, but Whisper and the LLM no longer share its RAM
+            p["diarize"] = TIERS["high"]["diarize"]
     return p
 
 
