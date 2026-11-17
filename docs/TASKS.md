@@ -44,6 +44,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.2** UI kit re-skin | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | 16 px flat cards, "Summary Ready" and `processed` badges, filled active tab, filled fields, v2 menus/dialogs/chips, gradient progress, the mockup's avatar colours. **Deviation:** buttons keep the pixel style (approved beyond the task list) instead of the flat gradient. |
 | **R1.3** logo + brand | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | `docs/ui/logo.svg`, `TAGLINE`/`SUBLINE`, favicon, and `<Logo variant="gradient|light|mono|solid" size wordmark />`; theme-color for dark and light systems. **Deviation:** the mark is the approved pixel speech bubble, not the gradient "P". |
 | **R1.5** top bar | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | `frontend/src/layout/TopBar.jsx`: search (Enter to `#/meetings?q=`, Ctrl/Cmd+K), the AI pill (amber "Cloud AI" with a cloud provider, like the sidebar card), gear, initials avatar, the Recording pill; on phones the drawer button, logo and a collapsible search. |
+| **R1.6** feedback components | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | in `src/ui`: `toast()`/`dismissToast()`/`<Toaster />` (mounted in AppShell), `Skeleton`, `Checkbox`, `Breadcrumb`, `Tooltip`. Pages can swap their plain-Tailwind versions in their next task. |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
 Everything in R1.x and R2.x that is not in the table above is open.
@@ -625,7 +626,7 @@ Built; the text below is the specification it was built to.
   - On phones the search collapses to an icon and the drawer button stays.
 - **Done when:** the bar matches the mockup, and searching from any page lands on the Meetings page.
 
-#### R1.6 · Feedback components
+#### R1.6 · Feedback components — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.6-feedback-components`
 - **Needs:** R1.2
 - **Files:** `frontend/src/ui/*`, `frontend/src/layout/AppShell.jsx` (mount the toaster)
