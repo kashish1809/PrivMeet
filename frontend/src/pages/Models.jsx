@@ -323,7 +323,9 @@ export default function Models() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">Models</h1>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          The models that turn speech into text and write your notes. Everything here runs on this machine.
+          The models that turn speech into text and write your notes.
+          {/* only claim "all local" when it is: a cloud provider sends the transcript out */}
+          {data?.ollama.provider === "ollama" && " Everything here runs on this machine."}
         </p>
       </header>
       {error ? (
