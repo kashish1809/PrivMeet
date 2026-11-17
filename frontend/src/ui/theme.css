@@ -263,6 +263,19 @@ html[data-theme="meadow"] {
   .pm-rise { opacity: 0.6; }
 }
 
+/* Lava running down a lavafall: bright streaks slide down over the drawn fall. */
+@keyframes pm-flow {
+  from { background-position: 0 0; }
+  to { background-position: 0 24px; }
+}
+.pm-flow {
+  background-image: repeating-linear-gradient(to bottom, rgb(255 226 122 / 0.55) 0 3px, transparent 3px 12px);
+  mix-blend-mode: screen;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pm-flow { animation: pm-flow 0.9s linear infinite; }
+}
+
 @keyframes pm-drift {
   from { transform: translateX(-10vw); }
   to { transform: translateX(110vw); }

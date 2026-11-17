@@ -1141,15 +1141,40 @@ function render(ctx, w, h, seed, opts, pal) {
         if (k === 0) for (let yy = 0; yy < B; yy += 1) for (let xx = 0; xx < B; xx += 1) blend(c * B + xx, y0 + yy, LAVA[2], 0.32 * (yy / B));
       }
     }
-    // a lavafall pouring from the roof (hero) or from a cliff top (footer) into the sea
+    // a lavafall pouring from the roof (hero) or off the bridge (footer) into the sea: dark
+    // edges, a hot core, long streaks running down; a spout where it leaves the stone, a
+    // splash and droplets where it lands, and a slow animated flow over it (CSS overlay)
     const fallCol = Math.round((w * (lake ? 0.2 : 0.93)) / B);
-    const fallTop = lake ? deckY + deckH : 0; // in the footer it pours off the bridge
+    const fallTop = lake ? deckY + deckH : 0;
+    const fx = fallCol * B;
+    const fwid = Math.max(3, Math.round(B * 0.75));
+    const fx1 = fx + Math.round((B - fwid) / 2);
     for (let y = fallTop; y < lavaTop; y += 1) {
-      for (let xx = 0; xx < B; xx += 1) {
-        const n = hash(fallCol * B + xx, (y >> 1) + (xx & 1), 81);
-        put(fallCol * B + xx, y, LAVA[Math.min(4, 1 + Math.floor(n * 3.6))]);
+      for (let xx = 0; xx < fwid; xx += 1) {
+        const x = fx1 + xx;
+        const edge = xx === 0 || xx === fwid - 1;
+        const core = Math.abs(xx - (fwid - 1) / 2) < 1;
+        // streaks: noise stretched three times taller than wide, sliding a little per column
+        const st = hash(x, Math.floor((y + xx * 5) / Math.max(3, B * 0.8)), 81);
+        let k = edge ? 1 : core ? 3 : 2;
+        if (st > 0.72) k += 1;
+        else if (st < 0.18) k -= 1;
+        put(x, y, LAVA[Math.max(0, Math.min(4, k))]);
       }
     }
+    // the spout: a short lip of brighter lava where it leaves the stone
+    for (let xx = -1; xx <= fwid; xx += 1) put(fx1 + xx, fallTop, LAVA[3]);
+    // the splash: a low bright mound, then droplets thrown out on both sides
+    for (let dx = -fwid; dx <= fwid * 2; dx += 1) {
+      const hgt = Math.max(0, Math.round(2 - Math.abs(dx - fwid / 2) / (fwid * 0.8)));
+      for (let k = 0; k <= hgt; k += 1) put(fx1 + dx, lavaTop - k, LAVA[k === hgt ? 4 : 3]);
+    }
+    for (let d = 0; d < 6; d += 1) {
+      const side = d % 2 ? 1 : -1;
+      // whole pixels only: a fractional x makes put() write into the wrong colour channels
+      put(Math.round(fx1 + fwid / 2 + side * (fwid + 1 + Math.floor(rand() * B))), lavaTop - 2 - Math.floor(rand() * B * 0.6), LAVA[4]);
+    }
+    ov.flows = [{ x: fx1, y: fallTop, w: fwid, h: lavaTop - fallTop }];
     glowAt(fallCol * B + B / 2, lavaTop, B * 3, LAVA[3], 0.35);
 
     // ---- the portal
@@ -1973,6 +1998,13 @@ export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, class
             s.tone === "cyan" ? "bg-cyan-200 shadow-[0_0_6px_2px_rgb(34_211_238/0.7)]" : "bg-yellow-200 shadow-[0_0_6px_2px_rgb(253_224_71/0.6)]",
           )}
           style={{ ...at(s, scene), animationDelay: `${s.delay}s` }}
+        />
+      ))}
+      {scene?.flows?.map((f, i) => (
+        <span
+          key={`fl${i}`}
+          className="pm-flow absolute"
+          style={{ ...at(f, scene), width: `${(f.w / scene.w) * 100}%`, height: `${(f.h / scene.h) * 100}%` }}
         />
       ))}
       {scene?.motes?.map((m, i) => (
