@@ -5,14 +5,16 @@ import {
   LayoutTemplate,
   MessagesSquare,
   NotebookPen,
+  Pencil,
   Plus,
   Sparkles,
+  Trash2,
   UserRound,
   Users,
 } from "lucide-react";
 
 import { api } from "../api";
-import { Badge, Button, Card, EmptyState, Input, Modal, Skeleton, Textarea, toast } from "../ui";
+import { Badge, Button, Card, ConfirmDialog, EmptyState, IconButton, Input, Modal, Skeleton, Textarea, toast } from "../ui";
 
 // An icon per built-in; own templates get the notebook.
 const ICONS = {
@@ -24,7 +26,7 @@ const ICONS = {
   lecture: BookOpen,
 };
 
-function TemplateCard({ t }) {
+function TemplateCard({ t, onEdit, onDelete }) {
   const Icon = ICONS[t.id] || NotebookPen;
   return (
     <Card className="flex flex-col gap-3 p-5">
@@ -45,6 +47,15 @@ function TemplateCard({ t }) {
         </div>
       </div>
       <p className="flex-1 text-sm text-zinc-600 dark:text-zinc-400">{t.description || t.instructions}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {/* built-ins are read-only; own templates can be edited and deleted */}
+        {!t.builtin && (
+          <>
+            <IconButton icon={Pencil} label={`Edit ${t.name}`} size="sm" onClick={() => onEdit(t)} />
+            <IconButton icon={Trash2} label={`Delete ${t.name}`} size="sm" onClick={() => onDelete(t)} />
+          </>
+        )}
+      </div>
     </Card>
   );
 }
@@ -131,6 +142,19 @@ export default function Templates() {
   const [error, setError] = useState("");
   // the dialog: null closed, {} new, a template to edit it
   const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+
+  async function remove() {
+    const t = deleting;
+    setDeleting(null);
+    try {
+      await api(`/api/templates/${t.id}/`, { method: "DELETE" });
+      toast(`Deleted "${t.name}"`, "green");
+      load();
+    } catch (e) {
+      toast(e.message, "red");
+    }
+  }
 
   const load = useCallback(
     () =>
@@ -171,6 +195,15 @@ export default function Templates() {
           load();
         }}
       />
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Delete template?"
+        onConfirm={remove}
+        onCancel={() => setDeleting(null)}
+      >
+        "{deleting?.name}" is removed for good. Meetings already summarized with it keep their notes.
+        {deleting?.is_default && " General becomes the default again."}
+      </ConfirmDialog>
       {error ? (
         <Card>
           <EmptyState icon={LayoutTemplate} title="Templates are not available">
@@ -190,7 +223,7 @@ export default function Templates() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {list.map((t) => (
-            <TemplateCard key={t.id} t={t} />
+            <TemplateCard key={t.id} t={t} onEdit={setEditing} onDelete={setDeleting} />
           ))}
         </div>
       )}
