@@ -5,8 +5,10 @@ the meeting. Every builder takes the Meeting and reads only its stored fields, s
 whose audio was deleted still exports.
 """
 
+import calendar
 import io
 import json
+from datetime import date, timedelta
 import re
 import zipfile
 from html import escape
@@ -322,5 +324,110 @@ def odt(m):
     return _zip([("META-INF/manifest.xml", manifest), ("content.xml", content)], first_stored=("mimetype", ODT_MIME)), ODT_MIME
 
 
+class NoDates(Exception):
+    """No action item has a due date that resolves to a day: the .ics export answers 404."""
+
+
+WEEKDAYS = {name: i for i, name in enumerate(calendar.day_name)} | {
+    name[:3]: i for i, name in enumerate(calendar.day_name)
+}
+MONTHS = {name.lower(): i for i, name in enumerate(calendar.month_name) if name} | {
+    name.lower(): i for i, name in enumerate(calendar.month_abbr) if name
+}
+_DAY = r"(\d{1,2})(?:st|nd|rd|th)?"
+
+
+def resolve_due(text, anchor):
+    """A due text ("Friday", "tomorrow", "next week", "Oct 30", "30 October", "the 14th") as a
+    date, counted from the meeting's day `anchor`; None when it names no day."""
+    t = (text or "").strip().lower().replace(",", " ")
+    if not t:
+        return None
+    if re.search(r"\btoday\b", t):
+        return anchor
+    if re.search(r"\btomorrow\b", t):
+        return anchor + timedelta(days=1)
+    if re.search(r"\bnext week\b", t):
+        return anchor + timedelta(days=7 - anchor.weekday())  # the Monday after
+    for name, wd in WEEKDAYS.items():
+        if re.search(rf"\b{name.lower()}\b", t):
+            return anchor + timedelta(days=(wd - anchor.weekday() - 1) % 7 + 1)  # strictly after
+    for pat, order in ((rf"\b([a-z]+)\.?\s+{_DAY}\b", "md"), (rf"\b{_DAY}\s+(?:of\s+)?([a-z]+)\b", "dm")):
+        for mt in re.finditer(pat, t):
+            mon, day = (mt.group(1), mt.group(2)) if order == "md" else (mt.group(2), mt.group(1))
+            if mon in MONTHS:
+                for year in (anchor.year, anchor.year + 1):  # the next one on or after the meeting
+                    try:
+                        d = date(year, MONTHS[mon], int(day))
+                    except ValueError:
+                        break
+                    if d >= anchor:
+                        return d
+    mt = re.search(rf"\bthe\s+{_DAY}\b", t)
+    if mt:
+        y, mo = anchor.year, anchor.month
+        for _ in range(13):  # the next month that has that day, from this one
+            try:
+                d = date(y, mo, int(mt.group(1)))
+                if d >= anchor:
+                    return d
+            except ValueError:
+                pass
+            y, mo = (y + 1, 1) if mo == 12 else (y, mo + 1)
+    return None
+
+
+def _ical_text(v):
+    return re.sub(r"([\\;,])", r"\\\1", str(v or "")).replace("\r", "").replace("\n", "\\n")
+
+
+def _fold(line):
+    """RFC 5545: lines of at most 75 octets, continued with a leading space."""
+    b = line.encode()
+    out = []
+    while len(b) > 75:
+        cut = 75 if not out else 74
+        while cut and (b[cut] & 0xC0) == 0x80:  # never split a UTF-8 character
+            cut -= 1
+        out.append(b[:cut].decode())
+        b = b[cut:]
+    out.append(b.decode())
+    return "\r\n ".join(out)
+
+
+def ics(m):
+    """The action items with a resolvable due date as calendar to-dos (VTODO). Raises NoDates
+    when none resolves; returns the skipped count in X-Skipped-Items."""
+    anchor = m.created.date()
+    todos, skipped = [], 0
+    stamp = m.created.strftime("%Y%m%dT%H%M%SZ")
+    for n, item in enumerate(m.action_items):
+        due = resolve_due(item.get("due"), anchor)
+        if not due:
+            skipped += 1
+            continue
+        desc = "\n".join(x for x in (
+            f"Owner: {item['owner']}" if item.get("owner") else "",
+            f"Meeting: {m.title}",
+            f"Due as said: {item.get('due')}",
+        ) if x)
+        todos += [
+            "BEGIN:VTODO",
+            f"UID:{m.id}-{n}@privmeet",
+            f"DTSTAMP:{stamp}",
+            f"SUMMARY:{_ical_text(item.get('task'))}",
+            f"DUE;VALUE=DATE:{due:%Y%m%d}",
+            f"DESCRIPTION:{_ical_text(desc)}",
+            f"STATUS:{'COMPLETED' if item.get('done') else 'NEEDS-ACTION'}",
+            "END:VTODO",
+        ]
+    if not todos:
+        raise NoDates
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//PrivMeet//Action items//EN", "CALSCALE:GREGORIAN",
+             *todos, "END:VCALENDAR"]
+    body = "\r\n".join(_fold(x) for x in lines) + "\r\n"
+    return body.encode(), "text/calendar; charset=utf-8", {"X-Skipped-Items": str(skipped)}
+
+
 # extension -> builder; later commits add the other formats
-BUILDERS = {"md": markdown, "txt": plain_text, "json": as_json, "srt": srt, "vtt": vtt, "html": share_html, "docx": docx, "odt": odt}
+BUILDERS = {"md": markdown, "txt": plain_text, "json": as_json, "srt": srt, "vtt": vtt, "html": share_html, "docx": docx, "odt": odt, "ics": ics}

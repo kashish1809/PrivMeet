@@ -26,7 +26,7 @@ ALLOWED_EXT = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac"
 
 # What this server supports beyond the v1 API; GET /api/system/ returns it so the frontend
 # shows a control only when its endpoint exists (docs/TASKS.md "Feature flags").
-FEATURES = ["settings", "notes", "tags", "filters", "providers", "templates", "models", "exports", "share-page", "exports-office"]
+FEATURES = ["settings", "notes", "tags", "filters", "providers", "templates", "models", "exports", "share-page", "exports-office", "exports-ics"]
 
 MAX_TAGS, MAX_TAG_LEN, MAX_NOTES = 10, 30, 20000
 # ?status= also takes the list page's filter names, so the UI does not have to know the stages.
@@ -336,8 +336,13 @@ def meeting_export(request, pk, fmt="md"):
     build = export.BUILDERS.get(fmt)
     if build is None:
         raise Http404
-    body, ctype = build(m)
+    try:
+        body, ctype, *extra = build(m)
+    except export.NoDates:
+        return bad("No action item has a date.", 404)
     resp = HttpResponse(body, content_type=ctype)
+    for k, v in (extra[0] if extra else {}).items():
+        resp[k] = v
     resp["Content-Disposition"] = f'attachment; filename="{export.filename(m, fmt)}"'
     return resp
 
