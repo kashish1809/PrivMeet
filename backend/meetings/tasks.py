@@ -15,6 +15,7 @@ from django.conf import settings
 from . import hw, note_templates
 from .models import Meeting, Question, Segment
 from .pipeline import audio, diarize, llm
+from .pipeline.names import corrector
 from .pipeline.transcribe import transcribe
 from .search import excerpts
 
@@ -74,6 +75,7 @@ def process_meeting(meeting_id):
     prof = hw.profile()
     names = known_names()
     prof["asr_prompt"] = asr_prompt(names)
+    fix_names = corrector(names) or (lambda t: t)
     m.tier_used, m.error = prof["tier"], ""
     m.save(update_fields=["tier_used", "error"])
     m.segments.all().delete()
@@ -93,7 +95,7 @@ def process_meeting(meeting_id):
         m.save(update_fields=["duration", "language", "device_used"])
         batch, flushed = [], time.monotonic()
         for s in segments:
-            batch.append(Segment(meeting=m, start=s.start, end=s.end, text=s.text.strip()))
+            batch.append(Segment(meeting=m, start=s.start, end=s.end, text=fix_names(s.text.strip())))
             if len(batch) >= PROGRESS_SEGMENTS or time.monotonic() - flushed >= PROGRESS_SECONDS:
                 Segment.objects.bulk_create(batch)
                 batch, flushed = [], time.monotonic()
