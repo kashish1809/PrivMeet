@@ -8,6 +8,9 @@ import { Card, CardHeader, Textarea } from "../ui";
  *
  * Every save goes through the page's onSave, the same PATCH the title and the action items
  * use, so the meeting on screen is the one the server has.
+ *
+ * Leaving the field, switching tab, going to another page or closing the window all save
+ * first: the debounce is a convenience, not the only way the text reaches the server.
  */
 
 // One save per pause in typing, not one per key press.
@@ -39,6 +42,21 @@ export default function NotesTab({ meeting, onSave, features }) {
       setError(e.message || "Could not save the notes.");
     }
   }
+
+  // Saved on the way out through whichever path the browser takes.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    const flush = () => saveRef.current();
+    const onHide = () => document.visibilityState === "hidden" && flush();
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onHide);
+      flush(); // unmounting: another tab, the summary, the list
+    };
+  }, []);
 
   // A poll or another tab may bring new notes in; take them unless this editor is dirty.
   useEffect(() => {
@@ -76,6 +94,7 @@ export default function NotesTab({ meeting, onSave, features }) {
           value={draft}
           disabled={!enabled}
           onChange={(e) => setDraft(e.target.value)}
+          onBlur={save}
           placeholder="Write down what you want to remember, or what to do next…"
           hint={
             enabled
