@@ -276,6 +276,23 @@ html[data-theme="meadow"] {
   .pm-flow { animation: pm-flow 0.9s linear infinite; }
 }
 
+/* A portal's spiral: curved arms (a conic gradient twisted by a radial one) turning. The
+   middle stays clear so the drawn view through the portal shows. Still for reduced motion. */
+@keyframes pm-spin {
+  to { rotate: 360deg; }
+}
+.pm-spin {
+  background:
+    repeating-conic-gradient(from 0deg, rgb(232 200 255 / 0.55) 0deg 14deg, rgb(148 64 245 / 0.15) 14deg 45deg),
+    radial-gradient(circle, transparent 0 14%, rgb(106 31 208 / 0.35) 40%, rgb(60 10 140 / 0.6) 70%);
+  mix-blend-mode: screen;
+  -webkit-mask-image: radial-gradient(circle, transparent 0 12%, black 26%);
+  mask-image: radial-gradient(circle, transparent 0 12%, black 26%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pm-spin { animation: pm-spin 3.2s linear infinite; }
+}
+
 /* Stepping through a portal (PixelScape travel()): a violet swirl opens from the portal over
    the window, holds while the theme switches under it, then clears. */
 @keyframes pm-warp {

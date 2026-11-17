@@ -825,6 +825,7 @@ function render(ctx, w, h, seed, opts, pal) {
       ov.motes.push({ x: Math.round(ix0 + rand() * iw), y: Math.round(iy0 + rand() * ih), tone: "violet", delay: (rand() * 4).toFixed(2) });
     }
     ov.portal = { x: fx0, y: fy0, w: 4 * B, h: 5 * B, to: "nether" };
+    ov.swirls = [{ x: ix0, y: iy0, w: iw, h: ih }];
 
     // the mascot again, here hauling a grass block
     const mx = mascotCol * B + Math.round(B / 2);
@@ -1257,6 +1258,7 @@ function render(ctx, w, h, seed, opts, pal) {
       ov.motes.push({ x: Math.round(ix0 + rand() * iw), y: Math.round(iy0 + rand() * ih), tone: "violet", delay: (rand() * 4).toFixed(2) });
     }
     ov.portal = { x: fx0, y: fy0, w: fw * B, h: fh * B, to: "overworld" };
+    ov.swirls = [{ x: ix0, y: iy0, w: iw, h: ih }];
 
     // ---- the mascot: PrivMeet's speech bubble, two violet eyes, arms up, carrying a block
     const mx = mascotCol * B + Math.round(B / 2);
@@ -2053,6 +2055,17 @@ export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, class
           )}
           style={{ ...at(s, scene), animationDelay: `${s.delay}s` }}
         />
+      ))}
+      {/* A portal's field turns: spiral arms rotate over the drawn swirl, clear in the middle
+          so the other world still shows through. */}
+      {scene?.swirls?.map((sw, i) => (
+        <span
+          key={`sw${i}`}
+          className="absolute overflow-hidden"
+          style={{ ...at(sw, scene), width: `${(sw.w / scene.w) * 100}%`, height: `${(sw.h / scene.h) * 100}%` }}
+        >
+          <span className="pm-spin absolute top-1/2 left-1/2 aspect-square w-[260%] -translate-x-1/2 -translate-y-1/2" />
+        </span>
       ))}
       {scene?.flows?.map((f, i) => (
         <span
