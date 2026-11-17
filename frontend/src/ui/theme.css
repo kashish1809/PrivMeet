@@ -280,23 +280,6 @@ html[data-theme="meadow"] {
   .pm-flow-water { animation-duration: 0.6s; }
 }
 
-/* A portal's spiral: curved arms (a conic gradient twisted by a radial one) turning. The
-   middle stays clear so the drawn view through the portal shows. Still for reduced motion. */
-@keyframes pm-spin {
-  to { rotate: 360deg; }
-}
-.pm-spin {
-  background:
-    repeating-conic-gradient(from 0deg, rgb(232 200 255 / 0.55) 0deg 14deg, rgb(148 64 245 / 0.15) 14deg 45deg),
-    radial-gradient(circle, transparent 0 14%, rgb(106 31 208 / 0.35) 40%, rgb(60 10 140 / 0.6) 70%);
-  mix-blend-mode: screen;
-  -webkit-mask-image: radial-gradient(circle, transparent 0 12%, black 26%);
-  mask-image: radial-gradient(circle, transparent 0 12%, black 26%);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .pm-spin { animation: pm-spin 3.2s linear infinite; }
-}
-
 /* Stepping through a portal (PixelScape travel()): a violet swirl opens from the portal over
    the window, holds while the theme switches under it, then clears. */
 @keyframes pm-warp {
@@ -309,11 +292,27 @@ html[data-theme="meadow"] {
   position: fixed;
   inset: 0;
   z-index: 200;
+  overflow: hidden;
   pointer-events: none;
-  background:
-    repeating-conic-gradient(from 0deg at var(--cx) var(--cy), rgb(192 123 255 / 0.55) 0 12deg, transparent 12deg 30deg),
-    radial-gradient(circle at var(--cx) var(--cy), #e8c8ff 0, #9440f5 18%, #3c0a8c 55%, #12031f 100%);
-  animation: pm-warp 1.2s ease-in-out forwards;
+  background: radial-gradient(circle at var(--cx) var(--cy), #8650de 0, #4c1a96 40%, #1e0838 100%);
+  animation: pm-warp 1.6s ease-in-out forwards;
+}
+/* The warp's spiral (a pixel-art image from PixelScape spiralArt()) turning
+   once, slowly, and growing a little while the warp is open. */
+@keyframes pm-warp-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg) scale(0.7); }
+  to { transform: translate(-50%, -50%) rotate(360deg) scale(1.1); }
+}
+.pm-warp-spiral {
+  position: absolute;
+  left: var(--cx);
+  top: var(--cy);
+  width: 180vmax;
+  height: 180vmax;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  border-radius: 50%;
+  animation: pm-warp-spin 1.6s ease-in-out forwards;
 }
 
 @keyframes pm-drift {

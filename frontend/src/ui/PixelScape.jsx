@@ -825,7 +825,6 @@ function render(ctx, w, h, seed, opts, pal) {
       ov.motes.push({ x: Math.round(ix0 + rand() * iw), y: Math.round(iy0 + rand() * ih), tone: "violet", delay: (rand() * 4).toFixed(2) });
     }
     ov.portal = { x: fx0, y: fy0, w: 4 * B, h: 5 * B, to: "nether" };
-    ov.swirls = [{ x: ix0, y: iy0, w: iw, h: ih }];
 
     // the mascot again, here hauling a grass block
     const mx = mascotCol * B + Math.round(B / 2);
@@ -1286,7 +1285,6 @@ function render(ctx, w, h, seed, opts, pal) {
       ov.motes.push({ x: Math.round(ix0 + rand() * iw), y: Math.round(iy0 + rand() * ih), tone: "violet", delay: (rand() * 4).toFixed(2) });
     }
     ov.portal = { x: fx0, y: fy0, w: fw * B, h: fh * B, to: "overworld" };
-    ov.swirls = [{ x: ix0, y: iy0, w: iw, h: ih }];
 
     // ---- the mascot: PrivMeet's speech bubble, two violet eyes, arms up, carrying a block
     const mx = mascotCol * B + Math.round(B / 2);
@@ -1998,6 +1996,36 @@ export function PixelStars({ className }) {
   );
 }
 
+/** A 96 x 96 pixel spiral: arms curving out from the middle (the angle shifts with the
+ *  log of the radius), in the portal's violets, dithered at the arm edges. A data URL. */
+let spiralCache = "";
+function spiralArt() {
+  if (spiralCache) return spiralCache;
+  const n = 96;
+  const c = document.createElement("canvas");
+  c.width = c.height = n;
+  const g = c.getContext("2d");
+  const img = g.createImageData(n, n);
+  // soft violets, no near-white: a calm swirl, not a flash
+  const tones = [[30, 8, 56], [52, 14, 104], [76, 26, 150], [104, 44, 190], [134, 76, 222], [166, 116, 240]];
+  for (let y = 0; y < n; y += 1) {
+    for (let x = 0; x < n; x += 1) {
+      const dx = x - n / 2 + 0.5;
+      const dy = y - n / 2 + 0.5;
+      const r = Math.hypot(dx, dy) / (n / 2);
+      const arm = Math.sin(3 * Math.atan2(dy, dx) + Math.log(r + 0.02) * 7) * 0.5 + 0.5;
+      const v = arm * (1 - r * 0.35) + (1 - r) * 0.35;
+      const k = Math.max(0, Math.min(5, Math.floor(v * 6 + dither(x, y) - 0.5)));
+      const i = (y * n + x) * 4;
+      [img.data[i], img.data[i + 1], img.data[i + 2]] = tones[k];
+      img.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  spiralCache = c.toDataURL();
+  return spiralCache;
+}
+
 /**
  * Step through a portal: a violet swirl spreads from the portal over the whole window, the
  * theme switches under it at its fullest, then it clears. Reduced motion: switch at once.
@@ -2015,11 +2043,17 @@ function travel(to, rect) {
   const warp = document.createElement("div");
   warp.className = "pm-warp";
   warp.setAttribute("aria-hidden", "true");
+  // the spiral that turns inside the warp as it opens: three curved arms drawn pixel by
+  // pixel on a small canvas, scaled up with crisp edges, so it is blocky like the worlds
+  const spiral = document.createElement("span");
+  spiral.className = "pm-warp-spiral";
+  spiral.style.backgroundImage = `url(${spiralArt()})`;
+  warp.append(spiral);
   warp.style.setProperty("--cx", `${rect.left + rect.width / 2}px`);
   warp.style.setProperty("--cy", `${rect.top + rect.height / 2}px`);
   document.body.append(warp);
-  setTimeout(go, 520);
-  setTimeout(() => warp.remove(), 1200);
+  setTimeout(go, 700);
+  setTimeout(() => warp.remove(), 1600);
 }
 
 /** `scene`: "lake" (with the shore, mast, dock and floating lanterns) or "clouds" (still). */
@@ -2083,17 +2117,6 @@ export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, class
           )}
           style={{ ...at(s, scene), animationDelay: `${s.delay}s` }}
         />
-      ))}
-      {/* A portal's field turns: spiral arms rotate over the drawn swirl, clear in the middle
-          so the other world still shows through. */}
-      {scene?.swirls?.map((sw, i) => (
-        <span
-          key={`sw${i}`}
-          className="absolute overflow-hidden"
-          style={{ ...at(sw, scene), width: `${(sw.w / scene.w) * 100}%`, height: `${(sw.h / scene.h) * 100}%` }}
-        >
-          <span className="pm-spin absolute top-1/2 left-1/2 aspect-square w-[260%] -translate-x-1/2 -translate-y-1/2" />
-        </span>
       ))}
       {scene?.flows?.map((f, i) => (
         <span
