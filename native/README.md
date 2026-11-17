@@ -65,7 +65,9 @@ reference), with the speakers' names in the Settings vocabulary:
 | Rust, whisper.cpp `base` + diarization on this machine, Groq summary | 5.8 % | 16 of 17 | 4 | 3 of 5 |
 
 Q&A answers with `[mm:ss]` citations. Peak memory of the whole server during the local run
-(whisper.cpp `base` and diarization): **515 MB**; 124 MB right after it.
+(whisper.cpp `base` and diarization): **450–515 MB**. Afterwards it settles at **39 MB**
+(it was 99–124 MB before the worker called `malloc_trim` after each job; glibc kept ~70 MB of freed
+heap). Of those 39 MB, ~25 MB are the code pages of `libonnxruntime.so`, sherpa-onnx and the binary.
 
 The pipeline adds no feature flag (Django's list has none for it); `FEATURES` in
 `server/src/web.rs` still lists only what is built, so the app hides the rest.
@@ -75,8 +77,8 @@ The pipeline adds no feature flag (Django's list has none for it); `FEATURES` in
 - sherpa-rs ignores `cpu_threads`.
 - Name correction handles Latin script only.
 - RAM detection is Linux only.
-- After a local run the process stays at ~124 MB instead of returning near its idle 7 MB;
-  not looked into yet (allocator arenas or a model kept alive).
+- After a local run the server stays at 39 MB, not its idle 7 MB: the ONNX and whisper code
+  stays mapped. Running the pipeline in a child process would return it, if ever needed.
 
 ## Checked so far
 
