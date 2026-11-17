@@ -51,9 +51,22 @@ pub fn start(app: Arc<App>) {
                     Job::Meeting(id) => process_meeting(&app, &id),
                     Job::Question(id) => answer_question(&app, id),
                 }
+                release_memory();
             }
         })
         .expect("start the pipeline thread");
+}
+
+/// glibc keeps the heap Whisper and ONNX freed for reuse (~70 MB after a meeting); hand it back
+/// to the OS so the idle server shrinks again.
+fn release_memory() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    unsafe {
+        unsafe extern "C" {
+            fn malloc_trim(pad: usize) -> i32;
+        }
+        malloc_trim(0);
+    }
 }
 
 fn send(job: Job) {
