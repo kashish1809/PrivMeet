@@ -1,10 +1,31 @@
 import { useEffect, useRef, useState } from "react";
+import { Settings } from "lucide-react";
 
 import { navigate } from "../App";
-import { SearchInput } from "../ui";
+import { SearchInput, StatusDot, cx, focusRing } from "../ui";
 
-/** The bar above every page: search now; the AI pill, settings and avatar follow. */
-export default function TopBar() {
+const pillBase =
+  "inline-flex h-9 shrink-0 items-center gap-2 rounded-full border border-zinc-200 bg-white/70 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700/60 dark:bg-zinc-800/70 dark:text-zinc-200 dark:hover:bg-zinc-800";
+
+/** "Local AI": green once /api/system/ answered, grey while it has not. With a cloud provider
+ *  it says so in amber, like the sidebar card, so the bar never claims audio stays local. */
+function AIPill({ system, error }) {
+  const cloud = system?.llm_provider && system.llm_provider !== "ollama" ? system.llm_provider : "";
+  const tone = !system ? "gray" : cloud ? "amber" : "green";
+  const text = cloud ? "Cloud AI" : "Local AI";
+  const tip = !system
+    ? error ? "Backend not reachable" : "Connecting…"
+    : `${cloud ? `${cloud} · ` : ""}${system.llm_model || "no model"}`;
+  return (
+    <a href="#/models" title={tip} aria-label={`${text}: ${tip}`} className={cx(pillBase, focusRing)}>
+      <StatusDot tone={tone} label={tip} />
+      <span className="max-md:hidden">{text}</span>
+    </a>
+  );
+}
+
+/** The bar above every page: search, the AI pill and settings; the avatar follows. */
+export default function TopBar({ system, error }) {
   const [q, setQ] = useState("");
   const input = useRef(null);
 
@@ -41,6 +62,17 @@ export default function TopBar() {
           onChange={(e) => setQ(e.target.value)}
         />
       </form>
+      <div className="ml-auto flex items-center gap-2">
+        <AIPill system={system} error={error} />
+        <a
+          href="#/settings"
+          aria-label="Settings"
+          title="Settings"
+          className={cx(pillBase, "w-9 justify-center px-0", focusRing)}
+        >
+          <Settings className="size-4" aria-hidden="true" />
+        </a>
+      </div>
     </div>
   );
 }

@@ -42,7 +42,7 @@ export default function AppShell({ page, system, error, children }) {
           <Logo />
         </header>
         <header className={`sticky top-0 z-10 hidden h-16 border-b px-4 sm:block sm:px-6 lg:px-8 ${GLASS}`}>
-          <TopBar />
+          <TopBar system={system} error={error} />
         </header>
         {/* Bottom padding lets the last row scroll clear of the landscape. */}
         <main className="flex-1 px-4 pt-6 pb-[30vh] sm:px-6 lg:px-8">{children}</main>
