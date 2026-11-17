@@ -831,6 +831,26 @@ Built; the text below is the specification it was built to.
   - A "Your data" block in Settings → General: Download backup (with or without audio) and Restore from backup.
 - **Done when:** a backup restored into an empty database gives the same meetings, transcripts and notes, and a zip with a `../` path is rejected.
 
+
+#### R1.21 · Idle footprint: memory and CPU
+- **Branch:** `v2/vinayak/R1.21-idle-footprint`
+- **Needs:** R1.13
+- **Files:** `backend/meetings/views.py`, `backend/meetings/tasks.py`, `backend/meetings/pipeline/*.py`, `frontend/src/ui/PixelScape.jsx`, `frontend/src/ui/theme.css`, `docs/BENCHMARKS.md`
+- **Measured on 2026-11-17** (5.7 GB laptop, cloud mode, nothing processing):
+  | Process | Idle | Note |
+  |---|---|---|
+  | Django (runserver child) | 77 MB fresh, ~157 MB after a day of meetings (74 MB resident + 83 MB swapped) | keeps what it imported for past runs; `langchain_core` is loaded before any meeting |
+  | runserver autoreloader parent | 41 MB | dev only |
+  | Vite dev server | 254 MB (mostly swapped) | dev only; production serves the build from Django |
+  | Ollama, no model loaded | 15 MB | fine |
+  | App page in the browser | 16.6 MB JS heap | fine |
+  | App page, idle CPU | Indigo 4–6 %, Nether Gate 18 %, Ancient City 15 % of a core | 39 animated elements on Indigo, 61–65 on the blocky themes |
+- **Do:**
+  - **Backend imports:** import LangChain, the cloud providers, faster-whisper and the diarizer inside the functions that use them, never at module level, so an idle web process stays near its fresh size. Measure `ru_maxrss` after `django.setup()` and after one request to each page's endpoints.
+  - **Web process after work:** with `CELERY_EAGER`, a meeting runs inside the web process and its imports stay. Run the pipeline in a child process (or document `CELERY_EAGER` as dev only) so the web process returns to its idle size after a meeting.
+  - **Scene animations:** pause every PixelScape overlay animation (`pm-rise`, `pm-flow`, `pm-twinkle`, `pm-blink`, `pm-drift`, the lanterns) while the tab is hidden (`visibilitychange`) and after 60 s with no input; resume on input. Cap overlays per scene (about 20 motes in all).
+  - **Measure again** with the same method (CDP `Performance.getMetrics` `TaskDuration` over 5 s, `HeapProfiler.collectGarbage` first) and write the before and after table to `docs/BENCHMARKS.md`.
+- **Done when:** an idle web process stays within 10 % of its fresh size after three meetings; idle CPU on Nether Gate and Ancient City is under 5 % of a core, and 0 % with the tab hidden; nothing changes visually while the user is active.
 ---
 
 ## v2 track: Kashish (R2.1 – R2.20)
