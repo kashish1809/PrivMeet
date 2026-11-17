@@ -5,6 +5,7 @@
 
 mod config;
 mod csrf;
+mod db;
 mod hw;
 mod settings;
 mod web;
