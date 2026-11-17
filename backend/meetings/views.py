@@ -106,6 +106,7 @@ def meeting_json(m, full=False):
         d.update(
             notes=m.notes, language=m.language, summary=m.summary, decisions=m.decisions,
             action_items=m.action_items, speaker_names=m.speaker_names, tier_used=m.tier_used,
+            template=m.template,
             device_used=m.device_used,
             segments=[
                 {"start": s.start, "end": s.end, "speaker": s.speaker, "text": s.text}
@@ -194,9 +195,15 @@ def create_meeting(request):
     try:
         notes = clean_notes(request.POST.get("notes", ""))
         tags = clean_tags(request.POST.get("tags", ""))
+        template = request.POST.get("template", "").strip()
+        if template and not note_templates.get(template):
+            raise Invalid(f"No template with id {template!r}.")
     except Invalid as e:
         return bad(str(e))
-    m = Meeting.objects.create(title=title, file=f, notes=notes, tags=tags)
+    # the template is fixed at upload: changing the default later does not rewrite old notes
+    m = Meeting.objects.create(
+        title=title, file=f, notes=notes, tags=tags, template=template or note_templates.default_id()
+    )
     duration = audio.probe(m.file.path)
     if duration is None:
         m.file.delete(save=False)
