@@ -1,11 +1,12 @@
 import { cx } from "./cx";
 
-// Matches the mockup's participant colors; kept as full class strings so Tailwind can see them.
+// The mockup's participant colors in its order (indigo, cyan, pink, violet), then two more.
+// Kept as full class strings so Tailwind can see them.
 const COLORS = [
-  "bg-violet-200 text-violet-800 dark:bg-violet-900 dark:text-violet-200",
-  "bg-blue-200 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  "bg-teal-200 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
+  "bg-indigo-200 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
+  "bg-cyan-200 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
   "bg-pink-200 text-pink-800 dark:bg-pink-900 dark:text-pink-200",
+  "bg-violet-200 text-violet-800 dark:bg-violet-900 dark:text-violet-200",
   "bg-amber-200 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   "bg-emerald-200 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
 ];

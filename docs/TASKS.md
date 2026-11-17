@@ -41,6 +41,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.7** settings store, flags, API reference | Vinayak | merged with U1.4 (#33), which needs it | `settings_store.py`, `FEATURES`, `docs/API.md` |
 | **R2.8** audio player | Kashish | `feat/link-llm-accounts` | `frontend/src/components/Player.jsx`, used by `TranscriptPanel.jsx` |
 | **R1.1** theme presets | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | the four mockup presets plus six more and Custom; `--pm-grad-from`/`--pm-grad-to` (mockup stops on indigo, teal, amber); every light preset's muted text and links pass WCAG AA |
+| **R1.2** UI kit re-skin | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | 16 px flat cards, "Summary Ready" and `processed` badges, filled active tab, filled fields, v2 menus/dialogs/chips, gradient progress, the mockup's avatar colours. **Deviation:** buttons keep the pixel style (approved beyond the task list) instead of the flat gradient. |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
 **Partly done, still open:** R1.3 (`docs/ui/logo.svg`, `Logo.jsx` with `TAGLINE` and `SUBLINE`, the favicon; the four logo
@@ -567,7 +568,7 @@ Look and shell first, then backend features. None of these needs a Kashish task.
   - Export `THEMES`: `[{id, name, caption, dark}]` with the mockup's names and captions.
 - **Done when:** setting `data-theme` in DevTools re-colors the sidebar and the Meetings page with no page edits, and body text passes WCAG AA contrast in all four.
 
-#### R1.2 · UI kit re-skin
+#### R1.2 · UI kit re-skin — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.2-ui-reskin`
 - **Needs:** R1.1
 - **Files:** `frontend/src/ui/*`
