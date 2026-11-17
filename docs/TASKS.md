@@ -40,10 +40,10 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.4** sidebar v2 + routes | Vinayak | `feat/link-llm-accounts` | the five v2 items, no group heading on them, Meetings active for `record` and `m/<id>`. **Deviation:** History and the four Tools entries are kept under a "Planned" heading instead of being deleted, each a stub naming the task that replaces it (R2.11, R2.10, R2.12, U1.4, R2.5). Remove them when those tasks land. |
 | **R1.7** settings store, flags, API reference | Vinayak | merged with U1.4 (#33), which needs it | `settings_store.py`, `FEATURES`, `docs/API.md` |
 | **R2.8** audio player | Kashish | `feat/link-llm-accounts` | `frontend/src/components/Player.jsx`, used by `TranscriptPanel.jsx` |
+| **R1.1** theme presets | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | the four mockup presets plus six more and Custom; `--pm-grad-from`/`--pm-grad-to` (mockup stops on indigo, teal, amber); every light preset's muted text and links pass WCAG AA |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
-**Partly done, still open:** R1.1 (the four theme presets, `useTheme` and `THEMES` exist) and
-R1.3 (`docs/ui/logo.svg`, `Logo.jsx` with `TAGLINE` and `SUBLINE`, the favicon; the four logo
+**Partly done, still open:** R1.3 (`docs/ui/logo.svg`, `Logo.jsx` with `TAGLINE` and `SUBLINE`, the favicon; the four logo
 variants are still missing). Everything else in R1.x and R2.x that is not in the table above is
 open.
 
@@ -554,7 +554,7 @@ on its own.
 ## v2 track: Vinayak (R1.1 – R1.20)
 Look and shell first, then backend features. None of these needs a Kashish task.
 
-#### R1.1 · Theme presets
+#### R1.1 · Theme presets — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.1-theme-presets`
 - **Needs:** none
 - **Files:** `frontend/src/ui/theme.css`, `frontend/src/ui/useTheme.js`, `frontend/src/ui/index.js`
