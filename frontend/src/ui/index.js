@@ -34,3 +34,4 @@ export { HERO_DEFAULT, HERO_LIMITS, heroTitle, useHeroText } from "./heroText";
 export { Logo, LogoMark, TAGLINE, SUBLINE } from "./Logo";
 export { toast, dismissToast, Toaster } from "./Toast";
 export { Skeleton } from "./Skeleton";
+export { Checkbox } from "./Checkbox";
