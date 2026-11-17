@@ -40,6 +40,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.4** sidebar v2 + routes | Vinayak | `feat/link-llm-accounts` | the five v2 items, no group heading on them, Meetings active for `record` and `m/<id>`. **Deviation:** History and the four Tools entries are kept under a "Planned" heading instead of being deleted, each a stub naming the task that replaces it (R2.11, R2.10, R2.12, U1.4, R2.5). Remove them when those tasks land. |
 | **R1.7** settings store, flags, API reference | Vinayak | merged with U1.4 (#33), which needs it | `settings_store.py`, `FEATURES`, `docs/API.md` |
 | **R2.8** audio player | Kashish | `feat/link-llm-accounts` | `frontend/src/components/Player.jsx`, used by `TranscriptPanel.jsx` |
+| **R2.1** API helpers v2 + feature flags | Kashish | `v2/kashish/R2.1-api-v2` | `getSystem()` shares one promise, `hasFeature()` / `useFeatures()`; one helper per v2 endpoint; `format.js` gains `minutes`, `shortDate`, `participants`, `statusBadge` |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
 **Partly done, still open:** R1.1 (the four theme presets, `useTheme` and `THEMES` exist) and
@@ -821,8 +822,9 @@ Built; the text below is the specification it was built to.
 ## v2 track: Kashish (R2.1 – R2.20)
 Meeting pages first, then the desktop app. None of these needs a Vinayak task. Where a task uses a v2 API, it follows "Working independently": hide the control until the flag is there.
 
-#### R2.1 · API helpers v2 + feature flags
-- **Branch:** `v2/kashish/R2.1-api-v2`
+#### R2.1 · API helpers v2 + feature flags — **DONE** (see "Finished tasks")
+Built; the text below is the specification it was built to.
+- **Branch:** `v2/kashish/R2.1-api-v2` (unused)
 - **Needs:** none
 - **Files:** `frontend/src/api.js`, `frontend/src/format.js`
 - **Do:**

@@ -2,43 +2,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Download, Share2, Trash2 } from "lucide-react";
 
 import { meetingExportUrl } from "../api";
+import { minutes, participants as participantCount, shortDate, statusBadge } from "../format";
 import { Badge, LogoMark, Menu, cx, focusRing } from "../ui";
-
-/** "Oct 28, 2026" — local date, no time. R2.1 moves this into format.js as shortDate(). */
-export function shortDate(iso) {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
-/** 42 min, 0 min for a meeting we have no length for yet. R2.1: format.js minutes(). */
-export function minutes(seconds = 0) {
-  return `${Math.max(0, Math.round(seconds / 60))} min`;
-}
-
-/**
- * How many people were in the meeting: the distinct speakers in the transcript, the same
- * people the Participants card lists, so the two never disagree. Without segments (a list
- * row) it is the server's `speakers` count. R2.1: format.js participants().
- */
-export function participantCount(meeting) {
-  const segments = meeting?.segments || [];
-  if (segments.length) {
-    return new Set(segments.map((s) => s.speaker).filter((s) => s !== null && s !== undefined)).size;
-  }
-  return typeof meeting?.speakers === "number" ? meeting.speakers : 0;
-}
-
-/** The status pill from docs/TASKS.md "Status pill": done without a summary is "Processed". */
-export function StatusPill({ meeting }) {
-  if (meeting.status === "done" && meeting.has_summary === false) {
-    return (
-      <Badge tone="blue" dot>
-        Processed
-      </Badge>
-    );
-  }
-  return <Badge status={meeting.status} />;
-}
 
 const outline =
   "inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 " +
@@ -251,7 +216,7 @@ export default function MeetingHeader({ meeting, onRename, onDelete }) {
                 .filter(Boolean)
                 .join(" · ")}
             </p>
-            <StatusPill meeting={meeting} />
+            <Badge {...statusBadge(meeting)} />
           </div>
         </div>
       </div>
