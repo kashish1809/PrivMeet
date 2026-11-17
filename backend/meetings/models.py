@@ -47,6 +47,8 @@ class Meeting(models.Model):
     speaker_names = models.JSONField(default=dict)  # {"0": "Alice"}
     notes = models.TextField(blank=True, default="")  # the user's own notes, not the AI summary
     tags = models.JSONField(default=list, blank=True)  # ["Development", "API"]: max 10, 30 chars each
+    # The note template it was summarized with: a built-in slug or "u<pk>" (note_templates.py).
+    template = models.CharField(max_length=40, blank=True, default="")
     tier_used = models.CharField(max_length=8, blank=True)
     # The device transcription really ran on ("cuda" or "cpu"), which is not always the one
     # hw.profile() planned: a CUDA run can fall back to the CPU mid-job (bug B1).
@@ -113,3 +115,19 @@ class Question(models.Model):
     answer = models.TextField(blank=True)
     status = models.CharField(max_length=8, default="pending")  # pending | done | failed
     created = models.DateTimeField(auto_now_add=True)
+
+
+class NoteTemplate(models.Model):
+    """A user's own note template; the built-ins live in note_templates.py."""
+
+    name = models.CharField(max_length=60)
+    description = models.CharField(max_length=200, blank=True, default="")
+    instructions = models.TextField(max_length=2000)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    @property
+    def key(self):
+        return f"u{self.pk}"
