@@ -484,10 +484,8 @@ def action_items(request):
 
 def _ollama_models(prof):
     """Installed Ollama models as [{name, size}], or None when Ollama does not answer."""
-    from .pipeline import llm
-
     try:
-        with urllib.request.urlopen(f"{llm.ollama_url(prof).rstrip('/')}/api/tags", timeout=5) as r:
+        with urllib.request.urlopen(f"{hw.ollama_url(prof).rstrip('/')}/api/tags", timeout=5) as r:
             data = json.load(r)
     except (urllib.error.URLError, OSError, ValueError):
         return None
@@ -557,8 +555,6 @@ def models_pull(request):
 @require_http_methods(["DELETE"])
 def models_delete(request, name):
     """Remove an installed Ollama model. Refuses the one notes are written with."""
-    from .pipeline import llm
-
     if not settings_store.MODEL_NAME.match(name) or len(name) > 100:
         return bad("That is not a valid model name.")
     prof = _profile()
@@ -568,7 +564,7 @@ def models_delete(request, name):
     if prof.get("llm_provider", "ollama") == "ollama" and same(name, current):
         return bad(f"{name} writes your notes now. Pick another model first.", 409)
     req = urllib.request.Request(
-        f"{llm.ollama_url(prof).rstrip('/')}/api/delete", data=json.dumps({"model": name}).encode(),
+        f"{hw.ollama_url(prof).rstrip('/')}/api/delete", data=json.dumps({"model": name}).encode(),
         headers={"Content-Type": "application/json"}, method="DELETE",
     )
     try:

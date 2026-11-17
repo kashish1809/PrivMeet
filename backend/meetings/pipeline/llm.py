@@ -125,8 +125,10 @@ VERIFY_PROMPT = ChatPromptTemplate.from_messages(
 
 
 def ollama_url(prof):
-    """The server set in Settings, else OLLAMA_URL from the environment."""
-    return prof.get("ollama_url") or settings.OLLAMA_URL
+    """The server set in Settings, else OLLAMA_URL from the environment (hw.ollama_url)."""
+    from .. import hw
+
+    return hw.ollama_url(prof)
 
 
 def chat(prof, json_mode=False, num_predict=None):

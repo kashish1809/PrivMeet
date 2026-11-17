@@ -14,10 +14,12 @@ from django.conf import settings
 
 from . import hw, note_templates
 from .models import Meeting, Question, Segment
-from .pipeline import audio, diarize, llm
+from .pipeline import audio
 from .pipeline.names import corrector, infer_speakers
-from .pipeline.transcribe import transcribe
-from .search import excerpts
+
+# The heavy pipeline (LangChain, faster-whisper, the diarizer) is imported inside the tasks
+# that use it, not here: views import this module, and a module-level import loaded LangChain
+# into the idle web process before any meeting ran (R1.21).
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +73,9 @@ def asr_prompt(names):
 
 @shared_task
 def process_meeting(meeting_id):
+    from .pipeline import diarize, llm
+    from .pipeline.transcribe import transcribe
+
     m = Meeting.objects.get(pk=meeting_id)
     prof = hw.profile()
     names = known_names()
@@ -138,6 +143,9 @@ def process_meeting(meeting_id):
 
 @shared_task
 def answer_question(question_id):
+    from .pipeline import llm
+    from .search import excerpts
+
     q = Question.objects.select_related("meeting").get(pk=question_id)
     prof = hw.profile()
     try:
@@ -179,7 +187,7 @@ def pull_model(name):
     """Stream Ollama's /api/pull for `name`, writing {model, percent, status} as it goes."""
     import urllib.request
 
-    url = llm.ollama_url(hw.profile()).rstrip("/")
+    url = hw.ollama_url(hw.profile()).rstrip("/")
     _write_pull({"model": name, "percent": 0, "status": "starting"})
     percent, last = 0, 0.0
     layers = {}  # digest -> (completed, total): Ollama reports each layer from 0 again

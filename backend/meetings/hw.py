@@ -252,3 +252,11 @@ def recommended(tier):
     """The tier's own Whisper and Ollama model: what the Models page calls recommended."""
     t = TIERS.get(tier, TIERS["low"])
     return {"whisper_model": t["whisper_model"], "llm_model": t["llm_model"]}
+
+
+def ollama_url(prof):
+    """The Ollama server in the settings, else OLLAMA_URL from the environment. Lives here, not
+    in pipeline/llm.py, so asking for it does not load LangChain."""
+    from django.conf import settings
+
+    return prof.get("ollama_url") or settings.OLLAMA_URL
