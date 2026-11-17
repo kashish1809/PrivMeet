@@ -15,6 +15,7 @@ import { cx } from "./cx";
  *   <Logo />                       mark on a theme tile (sidebar, phone header)
  *   <Logo tile={false} size={48} />  mark alone
  *   <Logo wordmark />              mark + "PrivMeet"
+ *   <Logo variant="gradient" />    one of the mockup's fixed variations (see VARIANT_TILES)
  */
 const CELLS = [
   ["fill-zinc-950", "M11 3h10v1h-10zM9 4h2v1h-2zM21 4h2v1h-2zM8 5h1v1h-1zM23 5h1v1h-1zM7 6h1v1h-1zM24 6h1v1h-1zM6 7h1v1h-1zM25 7h1v1h-1zM5 8h1v1h-1zM26 8h1v1h-1zM5 9h1v1h-1zM26 9h1v1h-1zM4 10h1v1h-1zM27 10h1v1h-1zM4 11h1v1h-1zM27 11h1v1h-1zM4 12h1v1h-1zM27 12h1v1h-1zM4 13h1v1h-1zM27 13h1v1h-1zM4 14h1v1h-1zM27 14h1v1h-1zM4 15h1v1h-1zM27 15h1v1h-1zM4 16h1v1h-1zM27 16h1v1h-1zM4 17h1v1h-1zM27 17h1v1h-1zM4 18h1v1h-1zM27 18h1v1h-1zM5 19h1v1h-1zM26 19h1v1h-1zM5 20h1v1h-1zM26 20h1v1h-1zM6 21h1v1h-1zM25 21h1v1h-1zM7 22h1v1h-1zM24 22h1v1h-1zM8 23h1v1h-1zM23 23h1v1h-1zM8 24h1v1h-1zM21 24h2v1h-2zM8 25h1v1h-1zM18 25h3v1h-3zM8 26h1v1h-1zM13 26h5v1h-5zM8 27h5v1h-5z"],
@@ -37,7 +38,15 @@ const CELLS = [
 export const TAGLINE = "Your meetings. Your data. Your control.";
 export const SUBLINE = "Self-hosted AI meeting notes";
 
-export function LogoMark({ size = 36, tile = true, animated = true, className, title }) {
+// The mockup's "Logo Variations", each a fixed tile that ignores the theme. No variant keeps
+// the tile that follows the theme, as the sidebar uses.
+const VARIANT_TILES = {
+  gradient: ["fill-[#1e2550]", "fill-[#0e0f2a]"], // gradient mark on a dark tile (docs/ui/logo.svg)
+  light: ["fill-white", "fill-zinc-100"], // gradient mark on a white tile
+};
+
+export function LogoMark({ size = 36, tile = true, animated = true, variant, className, title }) {
+  const fixed = VARIANT_TILES[variant];
   return (
     <svg
       viewBox={tile ? "0 0 32 32" : "3 2.5 26 26"}
@@ -50,9 +59,11 @@ export function LogoMark({ size = 36, tile = true, animated = true, className, t
     >
       {title && <title>{title}</title>}
       {tile && (
-        <rect width="32" height="32" rx="7" className="fill-primary-100 dark:fill-primary-950" />
+        <rect width="32" height="32" rx="7" className={fixed ? fixed[0] : "fill-primary-100 dark:fill-primary-950"} />
       )}
-      {tile && <rect y="16" width="32" height="16" rx="7" className="fill-primary-200/60 dark:fill-zinc-950/50" />}
+      {tile && (
+        <rect y="16" width="32" height="16" rx="7" className={fixed ? fixed[1] : "fill-primary-200/60 dark:fill-zinc-950/50"} />
+      )}
       {CELLS.filter(([, , part]) => !part).map(([fill, d]) => (
         <path key={fill + d.length} d={d} className={fill} />
       ))}
@@ -77,11 +88,12 @@ export function LogoMark({ size = 36, tile = true, animated = true, className, t
 }
 
 /** Mark plus the "PrivMeet" wordmark (and optionally the sub-line). */
-export function Logo({ size = 36, tile = true, animated = true, wordmark = false, subline = false, className }) {
-  if (!wordmark) return <LogoMark size={size} tile={tile} animated={animated} className={className} title="PrivMeet" />;
+export function Logo({ size = 36, tile = true, animated = true, variant, wordmark = false, subline = false, className }) {
+  const mark = { size, tile, animated, variant };
+  if (!wordmark) return <LogoMark {...mark} className={className} title="PrivMeet" />;
   return (
     <span className={cx("inline-flex items-center gap-2.5", className)}>
-      <LogoMark size={size} tile={tile} animated={animated} />
+      <LogoMark {...mark} />
       <span className="leading-tight">
         <span className="block text-base font-semibold text-zinc-900 dark:text-zinc-100">PrivMeet</span>
         {subline && <span className="block text-[11px] text-zinc-500 dark:text-zinc-400">{SUBLINE}</span>}
