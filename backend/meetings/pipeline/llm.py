@@ -337,6 +337,11 @@ def ground(notes, transcript, language=""):
         log.info("dropping %d action_items: nobody in this recording took on work",
                  len(notes["action_items"]))
         notes["action_items"] = []
+    if not (language or "en").lower().startswith("en"):
+        # The notes come back in English while the transcript is in Hindi, Kannada, Tamil...:
+        # every word check below would find nothing in common and drop every key point,
+        # action item, owner and due date. Like _has_commitment, other languages are not tested.
+        return notes
     for kind, key in (("decisions", str), ("action_items", lambda i: i["task"])):
         kept = [v for v in notes[kind] if _on_topic(key(v), source)]
         if len(kept) < len(notes[kind]):
@@ -397,13 +402,36 @@ def _key(text):
     return " ".join(re.findall(r"\w+", text.lower()))[:60]
 
 
+# Words that do not tell two tasks apart ("Fix the crash" is "fix crash").
+_FILLER = {"a", "an", "the", "and", "or", "to", "of", "for", "on", "in", "by", "with", "it", "its", "be", "new"}
+
+
+def _content_words(text):
+    """Content words, lower case, ordinals as numbers ("28th" -> "28")."""
+    return {re.sub(r"^(\d+)(st|nd|rd|th)$", r"\1", w) for w in re.findall(r"\w+", str(text).lower())} - _FILLER
+
+
+def _same(a, b):
+    """Two lines say the same thing when 75 % of the shorter one's content words are in the
+    other. Exact matching let a re-worded copy through: on a short meeting the reduce call's
+    "Fix the scanner crash and ship a new beta build" sat under the map step's "fix scanner
+    crash and ship beta build", and every action item showed twice."""
+    if not a or not b:
+        return False
+    return len(a & b) / min(len(a), len(b)) >= 0.75
+
+
 def dedupe(values, key):
-    seen, out = set(), []
+    """Drop repeats, exact or re-worded, keeping the first (the map step's line, which is
+    nearer the transcript than the reduce call's re-telling)."""
+    kept, out = [], []
     for v in values:
         k = _key(key(v))
-        if k and k not in seen:
-            seen.add(k)
-            out.append(v)
+        words = _content_words(key(v))
+        if not k or any(k == kk or _same(words, ww) for kk, ww in kept):
+            continue
+        kept.append((k, words))
+        out.append(v)
     return out
 
 
