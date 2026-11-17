@@ -1,3 +1,5 @@
+import os
+
 from django.apps import AppConfig
 from django.conf import settings
 from django.db.utils import DatabaseError, OperationalError, ProgrammingError
@@ -8,7 +10,9 @@ class MeetingsConfig(AppConfig):
     name = "meetings"
 
     def ready(self):
-        if settings.CELERY_TASK_ALWAYS_EAGER:
+        # A task child (tasks.enqueue) starts while its parent and other children are working:
+        # reaping there would fail meetings that are still being processed.
+        if settings.CELERY_TASK_ALWAYS_EAGER and not os.environ.get("PRIVMEET_TASK_CHILD"):
             reap_interrupted()
 
 

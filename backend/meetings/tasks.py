@@ -40,6 +40,23 @@ def publish_profile(**kwargs):
     WORKER_PROFILE.write_text(json.dumps(hw.base_profile()))
 
 
+def enqueue(task, *args):
+    """Queue `task` for the worker. With CELERY_EAGER (no worker, local dev and the desktop
+    app's single process) it runs now, but in a child process (manage.py runtask): its
+    imports and models leave with it, instead of staying in the web process for good
+    (R1.21). The call still returns when the task is done, as an eager call did."""
+    if not settings.CELERY_TASK_ALWAYS_EAGER:
+        return task.delay(*args)
+    import subprocess
+    import sys
+
+    env = {**os.environ, "PRIVMEET_TASK_CHILD": "1"}  # the child must not run the startup reaper
+    subprocess.run(
+        [sys.executable, "manage.py", "runtask", task.name.rsplit(".", 1)[-1], *map(str, args)],
+        cwd=settings.BASE_DIR, env=env, check=False,
+    )
+
+
 def known_names():
     """Names and terms to spell right: the user's own name, the speaker names saved on recent
     meetings and the Settings vocabulary, first spelling wins."""
