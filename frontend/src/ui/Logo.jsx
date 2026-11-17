@@ -47,9 +47,16 @@ const VARIANT_TILES = {
 
 export function LogoMark({ size = 36, tile = true, animated = true, variant, className, title }) {
   const fixed = VARIANT_TILES[variant];
+  const mono = variant === "mono";
+  // mono is the outline alone in the current text colour: the rim and the pane frames are
+  // the zinc-950 cells, every other cell is dropped.
+  const paint = (fill) => (mono ? (fill === "fill-zinc-950" ? "fill-current" : null) : fill);
+  const cells = (part) => CELLS.filter(([fill, , p]) => p === part && paint(fill));
+  const hasTile = tile && !mono;
+  const live = animated && !mono;
   return (
     <svg
-      viewBox={tile ? "0 0 32 32" : "3 2.5 26 26"}
+      viewBox={hasTile ? "0 0 32 32" : "3 2.5 26 26"}
       width={size}
       height={size}
       shapeRendering="crispEdges"
@@ -58,26 +65,26 @@ export function LogoMark({ size = 36, tile = true, animated = true, variant, cla
       className={cx("shrink-0", className)}
     >
       {title && <title>{title}</title>}
-      {tile && (
+      {hasTile && (
         <rect width="32" height="32" rx="7" className={fixed ? fixed[0] : "fill-primary-100 dark:fill-primary-950"} />
       )}
-      {tile && (
+      {hasTile && (
         <rect y="16" width="32" height="16" rx="7" className={fixed ? fixed[1] : "fill-primary-200/60 dark:fill-zinc-950/50"} />
       )}
-      {CELLS.filter(([, , part]) => !part).map(([fill, d]) => (
-        <path key={fill + d.length} d={d} className={fill} />
+      {cells(undefined).map(([fill, d]) => (
+        <path key={fill + d.length} d={d} className={paint(fill)} />
       ))}
       {/* The panes blink and the highlight twinkles: CSS transform/opacity only (theme.css). */}
-      <g className={animated ? "pm-eyes" : undefined}>
-        {CELLS.filter(([, , part]) => part === "eyes").map(([fill, d]) => (
-          <path key={fill} d={d} className={fill} />
+      <g className={live ? "pm-eyes" : undefined}>
+        {cells("eyes").map(([fill, d]) => (
+          <path key={fill} d={d} className={paint(fill)} />
         ))}
       </g>
-      {CELLS.filter(([, , part]) => part === "glint").map(([fill, d]) => (
-        <path key={fill} d={d} className={cx(fill, animated && "pm-twinkle")} />
+      {cells("glint").map(([fill, d]) => (
+        <path key={fill} d={d} className={cx(paint(fill), live && "pm-twinkle")} />
       ))}
       {/* A pixel sparkle that pops on the top-right corner now and then (CSS only). */}
-      {animated && (
+      {live && (
         <path
           d="M25 1h1v1h-1zM25 3h1v1h-1zM24 2h1v1h-1zM26 2h1v1h-1zM25 2h1v1h-1z"
           className="pm-sparkle fill-white dark:fill-primary-100"
