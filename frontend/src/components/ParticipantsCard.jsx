@@ -1,5 +1,5 @@
 import { useId, useMemo, useState } from "react";
-import { Users } from "lucide-react";
+import { Check, Users, X } from "lucide-react";
 
 import { Avatar, Card, CardHeader, cx, focusRing } from "../ui";
 
@@ -10,6 +10,10 @@ import { Avatar, Card, CardHeader, cx, focusRing } from "../ui";
  * Clicking a name renames that speaker in place: Enter or leaving the field saves, Escape
  * throws the edit away. The name is saved through the page's onSave, so the transcript,
  * the header and the exports all agree at once.
+ *
+ * `suggestions` arrives with R1.18: when the summary pass guessed a speaker's name, the
+ * card offers "Rename to <name>?" with a yes and a no. Until that flag is in
+ * GET /api/system/, the meeting JSON has no `speaker_suggestions` and nothing is offered.
  */
 
 /** Everyone who spoke, in order of first appearance, with talking time and share of it. */
@@ -37,14 +41,16 @@ function talkTime(seconds) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export default function ParticipantsCard({ meeting, onSave }) {
+export default function ParticipantsCard({ meeting, onSave, features }) {
   const [editing, setEditing] = useState(null); // speaker key being renamed
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [dismissed, setDismissed] = useState(() => new Set());
   const id = useId();
 
   const people = useMemo(() => speakers(meeting), [meeting]);
+  const suggestions = meeting?.speaker_suggestions || {};
   const canRename = typeof onSave === "function";
 
   function startRename(person) {
@@ -54,9 +60,9 @@ export default function ParticipantsCard({ meeting, onSave }) {
     setError("");
   }
 
-  async function saveName(person) {
+  async function saveName(person, next = draft) {
     if (saving) return;
-    const name = draft.trim().slice(0, 60);
+    const name = next.trim().slice(0, 60);
     if (!name || name === person.name) {
       setEditing(null);
       return;
@@ -75,67 +81,99 @@ export default function ParticipantsCard({ meeting, onSave }) {
     }
   }
 
+  /** The model's guess, when it has one, the flag is on, and it is not the current name. */
+  function suggestionFor(person) {
+    if (!features?.has?.("suggestions") || dismissed.has(person.key)) return "";
+    const guess = (suggestions[person.key] || "").trim();
+    return guess && guess !== person.name ? guess : "";
+  }
+
   return (
     <Card>
       <CardHeader title="Participants" icon={Users} />
       {people.length ? (
         <ul className="grid grid-cols-2 gap-x-3 gap-y-3 px-5 pt-3 pb-5">
-          {people.map((person) => (
-            <li key={person.key} className="flex min-w-0 items-center gap-2">
-              <Avatar name={person.name} colorKey={person.key} size="sm" />
-              <div className="min-w-0 flex-1">
-                {editing === person.key ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      saveName(person);
-                    }}
-                  >
-                    <label htmlFor={`${id}-${person.key}`} className="sr-only">
-                      Name for {person.name}
-                    </label>
-                    <input
-                      id={`${id}-${person.key}`}
-                      autoFocus
-                      value={draft}
-                      maxLength={60}
-                      disabled={saving}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onBlur={() => saveName(person)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") {
+          {people.map((person) => {
+            const guess = suggestionFor(person);
+            return (
+              <li key={person.key} className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Avatar name={person.name} colorKey={person.key} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    {editing === person.key ? (
+                      <form
+                        onSubmit={(e) => {
                           e.preventDefault();
-                          setEditing(null);
-                        }
-                      }}
-                      className={cx(
-                        "w-full min-w-0 rounded border border-zinc-300 bg-white px-1 py-0.5 text-sm text-zinc-900",
-                        "dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100",
-                        focusRing,
-                      )}
-                    />
-                  </form>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => startRename(person)}
-                    disabled={!canRename}
-                    title={canRename ? `Rename ${person.name}` : undefined}
-                    className={cx(
-                      "block max-w-full truncate rounded text-left text-sm text-zinc-700 dark:text-zinc-300",
-                      canRename && "hover:text-primary-700 dark:hover:text-primary-300",
-                      focusRing,
+                          saveName(person);
+                        }}
+                      >
+                        <label htmlFor={`${id}-${person.key}`} className="sr-only">
+                          Name for {person.name}
+                        </label>
+                        <input
+                          id={`${id}-${person.key}`}
+                          autoFocus
+                          value={draft}
+                          maxLength={60}
+                          disabled={saving}
+                          onChange={(e) => setDraft(e.target.value)}
+                          onBlur={() => saveName(person)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              setEditing(null);
+                            }
+                          }}
+                          className={cx(
+                            "w-full min-w-0 rounded border border-zinc-300 bg-white px-1 py-0.5 text-sm text-zinc-900",
+                            "dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100",
+                            focusRing,
+                          )}
+                        />
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startRename(person)}
+                        disabled={!canRename}
+                        title={canRename ? `Rename ${person.name}` : undefined}
+                        className={cx(
+                          "block max-w-full truncate rounded text-left text-sm text-zinc-700 dark:text-zinc-300",
+                          canRename && "hover:text-primary-700 dark:hover:text-primary-300",
+                          focusRing,
+                        )}
+                      >
+                        {person.name}
+                      </button>
                     )}
-                  >
-                    {person.name}
-                  </button>
+                    <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400">
+                      {person.share}% · {talkTime(person.seconds)}
+                    </p>
+                  </div>
+                </div>
+
+                {guess && (
+                  <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Rename to {guess}?
+                    <button
+                      type="button"
+                      onClick={() => saveName(person, guess)}
+                      className={cx("inline-flex items-center gap-0.5 rounded text-primary-700 dark:text-primary-300", focusRing)}
+                    >
+                      <Check className="size-3" aria-hidden="true" /> Yes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDismissed((d) => new Set(d).add(person.key))}
+                      className={cx("inline-flex items-center gap-0.5 rounded text-zinc-500 dark:text-zinc-400", focusRing)}
+                    >
+                      <X className="size-3" aria-hidden="true" /> No
+                    </button>
+                  </p>
                 )}
-                <p className="truncate text-[11px] text-zinc-500 dark:text-zinc-400">
-                  {person.share}% · {talkTime(person.seconds)}
-                </p>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="px-5 pt-3 pb-5 text-sm text-zinc-500 dark:text-zinc-400">
