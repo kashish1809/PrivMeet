@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 
-import { IconButton, PixelScape, PixelStars } from "../ui";
+import { IconButton, PixelScape, PixelStars, Toaster } from "../ui";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 
@@ -44,6 +44,9 @@ export default function AppShell({ page, system, error, children }) {
         {/* Bottom padding lets the last row scroll clear of the landscape. */}
         <main className="flex-1 px-4 pt-6 pb-[30vh] sm:px-6 lg:px-8">{children}</main>
       </div>
+
+      {/* toast() messages from any page land here. */}
+      <Toaster />
 
       {/* Native modal <dialog>: focus trap, Esc to close and an inert page behind it for free. */}
       <dialog
