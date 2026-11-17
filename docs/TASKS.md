@@ -45,6 +45,8 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.3** logo + brand | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | `docs/ui/logo.svg`, `TAGLINE`/`SUBLINE`, favicon, and `<Logo variant="gradient|light|mono|solid" size wordmark />`; theme-color for dark and light systems. **Deviation:** the mark is the approved pixel speech bubble, not the gradient "P". |
 | **R1.5** top bar | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | `frontend/src/layout/TopBar.jsx`: search (Enter to `#/meetings?q=`, Ctrl/Cmd+K), the AI pill (amber "Cloud AI" with a cloud provider, like the sidebar card), gear, initials avatar, the Recording pill; on phones the drawer button, logo and a collapsible search. |
 | **R1.6** feedback components | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | in `src/ui`: `toast()`/`dismissToast()`/`<Toaster />` (mounted in AppShell), `Skeleton`, `Checkbox`, `Breadcrumb`, `Tooltip`. Pages can swap their plain-Tailwind versions in their next task. |
+| **R2.1** API helpers v2 + feature flags | Kashish | `v2/kashish/R2.1-api-v2` | `getSystem()` shares one promise, `hasFeature()` / `useFeatures()`; one helper per v2 endpoint; `format.js` gains `minutes`, `shortDate`, `participants`, `statusBadge` |
+| **R2.2** Meetings list v2 | Kashish | `v2/kashish/R2.2-list-v2` | rows per the mockup (icon tile, `Oct 28, 2026 · 42 min · 4 participants`, pill, kebab); `q` read from the route and written back with `replaceState` |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
 Everything in R1.x and R2.x that is not in the table above is open.
@@ -823,8 +825,9 @@ Built; the text below is the specification it was built to.
 ## v2 track: Kashish (R2.1 – R2.20)
 Meeting pages first, then the desktop app. None of these needs a Vinayak task. Where a task uses a v2 API, it follows "Working independently": hide the control until the flag is there.
 
-#### R2.1 · API helpers v2 + feature flags
-- **Branch:** `v2/kashish/R2.1-api-v2`
+#### R2.1 · API helpers v2 + feature flags — **DONE** (see "Finished tasks")
+Built; the text below is the specification it was built to.
+- **Branch:** `v2/kashish/R2.1-api-v2` (unused)
 - **Needs:** none
 - **Files:** `frontend/src/api.js`, `frontend/src/format.js`
 - **Do:**
@@ -834,8 +837,9 @@ Meeting pages first, then the desktop app. None of these needs a Vinayak task. W
   - `format.js`: `minutes(seconds)` → "42 min", `shortDate(iso)` → "Oct 28, 2026", `participants(meeting)` (uses `speakers`, else `speaker_names`, else the segments), and `statusBadge(meeting)` → the Badge props from the "Status pill" contract.
 - **Done when:** `npm run build` passes, and against today's backend `useFeatures()` is empty and nothing breaks.
 
-#### R2.2 · Meetings list v2
-- **Branch:** `v2/kashish/R2.2-list-v2`
+#### R2.2 · Meetings list v2 — **DONE** (see "Finished tasks")
+Built; the text below is the specification it was built to.
+- **Branch:** `v2/kashish/R2.2-list-v2` (unused)
 - **Needs:** R2.1
 - **Files:** `frontend/src/pages/MeetingList.jsx`, `frontend/src/components/MeetingRow.jsx`, `frontend/src/components/meetingGroups.js`
 - **Do:**

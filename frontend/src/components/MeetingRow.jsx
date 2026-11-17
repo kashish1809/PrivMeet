@@ -1,9 +1,8 @@
-import { Download, ExternalLink, FileText, Trash2 } from "lucide-react";
+import { Download, ExternalLink, FileText, Trash2, Users } from "lucide-react";
 
 import { meetingExportUrl } from "../api";
 import { Badge, Card, Menu, ProgressBar } from "../ui";
-import { duration, isProcessing } from "../format";
-import { dayAndTime, timeOfDay } from "./meetingGroups";
+import { duration, isProcessing, minutes, participants, shortDate, statusBadge } from "../format";
 
 /** Matches shown per row in search results (the API returns up to 100 across meetings). */
 const MAX_HITS = 3;
@@ -18,26 +17,28 @@ function exportMeeting(meeting) {
   a.remove();
 }
 
+/** Five or more people reads as a group call rather than a document. */
+const GROUP_SIZE = 5;
+
 /**
- * One meeting row: title, duration/participants/time, status badge with the progress
- * percentage, and a kebab menu. The title is the link, so the menu button is never
- * nested inside an anchor.
+ * One meeting row, as "Recent Meetings" in the mockup: an icon tile, the title, the
+ * "Oct 28, 2026 · 42 min · 4 participants" line, the status pill and a kebab. The title is
+ * the link, so the menu button is never nested inside an anchor.
  */
-export default function MeetingRow({ meeting, group, onDelete }) {
-  // shortcut: the list endpoint returns no speaker count, so participants only shows once
-  // names were saved; upgrade when the API returns a per-meeting speaker count (U1.4).
-  const participants = Object.keys(meeting.speaker_names || {}).length;
-  // "Today" and "Yesterday" sections show the clock time; longer buckets need the date,
-  // otherwise every row in "Last week" would read like the same day.
-  const when = group === "Today" || group === "Yesterday" ? timeOfDay(meeting.created) : dayAndTime(meeting.created);
+export default function MeetingRow({ meeting, onDelete }) {
+  const people = participants(meeting);
   const processing = isProcessing(meeting);
+  const TileIcon = people >= GROUP_SIZE ? Users : FileText;
+  const meta = [shortDate(meeting.created), minutes(meeting.duration), people ? `${people} participants` : ""]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <Card className="px-4 py-3 sm:px-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-950 dark:text-primary-400">
-            <FileText className="size-4" aria-hidden="true" />
+          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-950 dark:text-primary-400">
+            <TileIcon className="size-4" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
             <a
@@ -46,11 +47,7 @@ export default function MeetingRow({ meeting, group, onDelete }) {
             >
               {meeting.title}
             </a>
-            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-              {duration(meeting.duration)}
-              {participants > 0 && ` · ${participants} participant${participants === 1 ? "" : "s"}`}
-              {` · ${when}`}
-            </p>
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{meta}</p>
           </div>
         </div>
 
@@ -60,7 +57,7 @@ export default function MeetingRow({ meeting, group, onDelete }) {
               {meeting.progress}%
             </span>
           )}
-          <Badge status={meeting.status} />
+          <Badge {...statusBadge(meeting)} />
           <Menu
             label={`Actions for ${meeting.title}`}
             items={[

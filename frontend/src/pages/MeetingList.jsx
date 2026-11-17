@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Plus, SearchX } from "lucide-react";
 
 import { deleteMeeting, listMeetings } from "../api";
+import { navigate, useRoute } from "../App";
 import MeetingRow from "../components/MeetingRow";
 import { groupByDay } from "../components/meetingGroups";
 import { isProcessing } from "../format";
@@ -12,19 +13,46 @@ const POLL_MS = 2000;
 /**
  * "Meetings" screen: search box, rows grouped by day, status badge with progress, kebab
  * actions and a 2 s poll while anything is still processing.
+ *
+ * The search lives in the URL (`#/meetings?q=budget`), because the top bar's field (R1.5)
+ * navigates here with `q` instead of reaching into this page: a search from any screen lands
+ * here with the box already filled in.
  */
 export default function MeetingList() {
+  const { query: route } = useRoute();
+  const urlQuery = route.get("q") || "";
+
   const [meetings, setMeetings] = useState(null);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [search, setSearch] = useState(""); // debounced query actually sent to the API
+  const [text, setText] = useState(urlQuery);
+  const [search, setSearch] = useState(urlQuery.trim()); // debounced query actually sent to the API
   const [pendingDelete, setPendingDelete] = useState(null);
+
+  // The URL is the source of truth when it changes from outside this page (the top bar, a
+  // bookmark, back/forward). Typing here changes the box first and the URL second.
+  const lastUrl = useRef(urlQuery);
+  useEffect(() => {
+    if (urlQuery === lastUrl.current) return;
+    lastUrl.current = urlQuery;
+    setText(urlQuery);
+  }, [urlQuery]);
+
+  // Typing writes the query into the URL so the page can be bookmarked or reloaded, with
+  // replaceState: one history entry per keystroke would make the back button useless.
+  function updateText(next) {
+    setText(next);
+    const trimmed = next.trim();
+    const hash = trimmed ? `#/meetings?q=${encodeURIComponent(trimmed)}` : "#/meetings";
+    if (window.location.hash === hash) return;
+    lastUrl.current = trimmed; // our own write, so the effect above leaves the box alone
+    window.history.replaceState(null, "", hash);
+  }
 
   // 300 ms debounce: one request per pause, not one per key press.
   useEffect(() => {
-    const timer = setTimeout(() => setSearch(query.trim()), 300);
+    const timer = setTimeout(() => setSearch(text.trim()), 300);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [text]);
 
   const load = useCallback(
     () =>
@@ -66,14 +94,14 @@ export default function MeetingList() {
     <section className="mx-auto flex max-w-4xl flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Meetings</h1>
-        <Button icon={Plus} onClick={() => (window.location.hash = "/new")}>New Meeting</Button>
+        <Button icon={Plus} onClick={() => navigate("/new")}>New Meeting</Button>
       </div>
 
       <SearchInput
         label="Search meetings"
         placeholder="Search meetings and transcripts…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        value={text}
+        onChange={(e) => updateText(e.target.value)}
         className="w-full max-w-md"
       />
 
@@ -92,7 +120,7 @@ export default function MeetingList() {
           <EmptyState
             icon={Mic}
             title="No meetings yet"
-            action={<Button onClick={() => (window.location.hash = "/new")}>Add your first meeting</Button>}
+            action={<Button onClick={() => navigate("/new")}>Add your first meeting</Button>}
           >
             Upload an audio or video file to get a transcript, speaker labels and notes.
           </EmptyState>
@@ -113,7 +141,7 @@ export default function MeetingList() {
             {label}
           </h2>
           {items.map((m) => (
-            <MeetingRow key={m.id} meeting={m} group={label} onDelete={setPendingDelete} />
+            <MeetingRow key={m.id} meeting={m} onDelete={setPendingDelete} />
           ))}
         </div>
       ))}
