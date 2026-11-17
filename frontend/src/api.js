@@ -4,6 +4,8 @@
  * on load) is what makes Django set that cookie.
  */
 
+import { useEffect, useState } from "react";
+
 const CSRF_COOKIE = "csrftoken";
 
 /** Read the csrftoken cookie. Returns "" when the cookie is missing (first load). */
@@ -72,8 +74,57 @@ export function upload(path, formData, onProgress = () => {}) {
   });
 }
 
+// ---------------------------------------------------------------- system + feature flags
+
+// One promise for /api/system/, shared by the whole page: the top bar, the Home page and
+// every useFeatures() want the same answer, and asking once keeps one request per load.
+let system = null;
+// null until the answer arrives. An empty Set once it has: a server with no `features` list
+// is an older server, which supports none of the v2 endpoints.
+let features = null;
+const watchers = new Set();
+
+function offerFeatures(list) {
+  features = new Set(Array.isArray(list) ? list : []);
+  for (const watcher of watchers) watcher(features);
+}
+
+/** GET /api/system/, asked once. A failed request clears the promise so a retry can work. */
+export function getSystem() {
+  if (!system) {
+    system = api("/api/system/").then(
+      (data) => {
+        offerFeatures(data?.features);
+        return data;
+      },
+      (err) => {
+        system = null;
+        throw err;
+      },
+    );
+  }
+  return system;
+}
+
+/** Does this server support a v2 feature? False until /api/system/ has answered. */
+export function hasFeature(key) {
+  return features ? features.has(key) : false;
+}
+
+/** The feature flags as a Set that fills in when /api/system/ answers. Empty when it never does. */
+export function useFeatures() {
+  const [current, setCurrent] = useState(() => features ?? new Set());
+
+  useEffect(() => {
+    watchers.add(setCurrent);
+    getSystem().catch(() => offerFeatures([])); // an older server: no list, no features
+    return () => watchers.delete(setCurrent);
+  }, []);
+
+  return current;
+}
+
 // Thin wrappers so pages never hand-write a path. See backend/meetings/urls.py.
-export const getSystem = () => api("/api/system/");
 export const listMeetings = (q = "") => api(`/api/meetings/${q ? `?q=${encodeURIComponent(q)}` : ""}`);
 export const getMeeting = (id) => api(`/api/meetings/${id}/`);
 export const patchMeeting = (id, patch) => api(`/api/meetings/${id}/`, { method: "PATCH", body: patch });
