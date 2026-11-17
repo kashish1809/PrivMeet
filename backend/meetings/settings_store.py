@@ -90,6 +90,8 @@ SCHEMA = {
     "diarize": _bool,
     "cpu_threads": _int(1, 256),
     "default_template": _template,  # used when an upload names no template (R1.9)
+    # Names and terms Whisper should spell right ("Meera, Priya, PrivMeet"): sent as its prompt.
+    "vocabulary": _text(500),
     # Cloud LLM providers (opt-in; Ollama is the default and the only fully local one).
     "llm_provider": _choice("ollama", "openai", "openrouter", "anthropic", "groq", "gemini", "custom"),
     "api_base_url": _url,  # only for "custom"

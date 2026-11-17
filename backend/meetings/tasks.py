@@ -4,6 +4,7 @@ so only one heavy model is in RAM at a time and it is freed when the task ends."
 import json
 import logging
 import os
+import re
 import tempfile
 import time
 
@@ -36,10 +37,43 @@ def publish_profile(**kwargs):
     WORKER_PROFILE.write_text(json.dumps(hw.base_profile()))
 
 
+def known_names():
+    """Names and terms to spell right: the user's own name, the speaker names saved on recent
+    meetings and the Settings vocabulary, first spelling wins."""
+    from . import settings_store
+
+    saved = settings_store.load()
+    names = []
+
+    def add(word):
+        word = str(word or "").strip()
+        if word and not word.lower().startswith("speaker") and word.lower() not in (n.lower() for n in names):
+            names.append(word)
+
+    add(saved.get("display_name"))
+    for m in Meeting.objects.exclude(speaker_names={}).only("speaker_names")[:30]:
+        for name in m.speaker_names.values():
+            add(name)
+    for word in re.split(r"[,;\n]+", saved.get("vocabulary", "")):
+        add(word)
+    return names
+
+
+def asr_prompt(names):
+    """A hint for Whisper with those names: it copies the spelling of words in its prompt (it
+    helped whisper-large-v3-turbo on Groq; names.py fixes what is still wrong afterwards)."""
+    # shortcut: a flat comma list capped at 400 characters (Whisper reads ~224 tokens of prompt);
+    # upgrade to a ranked list if users keep long glossaries.
+    text = ", ".join(names)[:400].rsplit(",", 1)[0] if len(", ".join(names)) > 400 else ", ".join(names)
+    return f"Names and terms: {text}." if text else ""
+
+
 @shared_task
 def process_meeting(meeting_id):
     m = Meeting.objects.get(pk=meeting_id)
     prof = hw.profile()
+    names = known_names()
+    prof["asr_prompt"] = asr_prompt(names)
     m.tier_used, m.error = prof["tier"], ""
     m.save(update_fields=["tier_used", "error"])
     m.segments.all().delete()

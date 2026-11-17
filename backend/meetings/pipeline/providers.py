@@ -112,13 +112,13 @@ def _multipart(fields, filename, blob):
     return bytes(out), "multipart/form-data; boundary=" + boundary
 
 
-def transcribe_chunk(prof, blob, filename, model, language=None, timeout=TIMEOUT):
-    """One /audio/transcriptions call. Returns the provider's verbose_json dict."""
-    body, content_type = _multipart(
-        {"model": model, "response_format": "verbose_json", "language": language or "",
-          "temperature": "0"},
-        filename, blob,
-    )
+def transcribe_chunk(prof, blob, filename, model, language=None, timeout=TIMEOUT, prompt=""):
+    """One /audio/transcriptions call. Returns the provider's verbose_json dict. `prompt` is
+    the OpenAI-style hint of names and terms to spell right."""
+    fields = {"model": model, "response_format": "verbose_json", "language": language or "", "temperature": "0"}
+    if prompt:
+        fields["prompt"] = prompt
+    body, content_type = _multipart(fields, filename, blob)
     headers = {k: v for k, v in _headers(prof).items() if k != "content-type"}
     headers["content-type"] = content_type
     req = urllib.request.Request(base_url(prof) + "/audio/transcriptions", data=body, headers=headers)
