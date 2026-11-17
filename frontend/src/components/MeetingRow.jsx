@@ -1,21 +1,12 @@
-import { Download, ExternalLink, FileText, Trash2, Users } from "lucide-react";
+import { ExternalLink, FileText, MoreVertical, Trash2, Users } from "lucide-react";
 
-import { meetingExportUrl } from "../api";
-import { Badge, Card, Menu, ProgressBar } from "../ui";
+import { useFeatures } from "../api";
+import { Badge, Card, ProgressBar } from "../ui";
+import DownloadMenu from "./DownloadMenu";
 import { duration, isProcessing, minutes, participants, shortDate, statusBadge } from "../format";
 
 /** Matches shown per row in search results (the API returns up to 100 across meetings). */
 const MAX_HITS = 3;
-
-/** The export endpoint sends Content-Disposition, so a plain anchor download works. */
-function exportMeeting(meeting) {
-  const a = document.createElement("a");
-  a.href = meetingExportUrl(meeting.id);
-  a.download = `${meeting.title}.md`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
 
 /** Five or more people reads as a group call rather than a document. */
 const GROUP_SIZE = 5;
@@ -26,6 +17,7 @@ const GROUP_SIZE = 5;
  * the link, so the menu button is never nested inside an anchor.
  */
 export default function MeetingRow({ meeting, onDelete }) {
+  const features = useFeatures();
   const people = participants(meeting);
   const processing = isProcessing(meeting);
   const TileIcon = people >= GROUP_SIZE ? Users : FileText;
@@ -58,9 +50,13 @@ export default function MeetingRow({ meeting, onDelete }) {
             </span>
           )}
           <Badge {...statusBadge(meeting)} />
-          <Menu
+          <DownloadMenu
+            variant="kebab"
             label={`Actions for ${meeting.title}`}
-            items={[
+            icon={MoreVertical}
+            meeting={meeting}
+            features={features}
+            leading={[
               {
                 label: "Open",
                 icon: ExternalLink,
@@ -68,9 +64,8 @@ export default function MeetingRow({ meeting, onDelete }) {
                   window.location.hash = `/m/${meeting.id}`;
                 },
               },
-              { label: "Export", icon: Download, onSelect: () => exportMeeting(meeting) },
-              { label: "Delete", icon: Trash2, danger: true, onSelect: () => onDelete(meeting) },
             ]}
+            trailing={[{ label: "Delete", icon: Trash2, danger: true, onSelect: () => onDelete(meeting) }]}
           />
         </div>
       </div>
