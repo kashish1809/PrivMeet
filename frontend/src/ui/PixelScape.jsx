@@ -1002,6 +1002,34 @@ function render(ctx, w, h, seed, opts, pal) {
         }
       });
     });
+    // waterfalls: thin blue sheets pouring from the roof (or from high in the side walls in
+    // the footer) into a pool on the floor, with flowing light over them (CSS overlay)
+    const WATERF = [0x1e3fa8, 0x2c56c8, 0x3f74e4, 0x7fb0ff].map(hex);
+    ov.flows = ov.flows || [];
+    // the hero fades out on the left under its text, so its one fall pours just left of the
+    // centrepiece
+    const fallsAt = lake ? [0.06, 0.95] : [(gx0 - B * 2) / w];
+    fallsAt.forEach((f, n) => {
+      const fx = Math.round(w * f);
+      const fwid = Math.max(2, Math.round(B * 0.8));
+      const top = lake ? Math.round(h * 0.42) : 0;
+      if (fx + fwid >= w) return;
+      for (let y = top; y < floor; y += 1) {
+        for (let xx = 0; xx < fwid; xx += 1) {
+          const st = hash(fx + xx, Math.floor((y + xx * 4) / Math.max(3, B)), 111 + n);
+          const k = xx === 0 || xx === fwid - 1 ? 0 : st > 0.7 ? 3 : st > 0.35 ? 2 : 1;
+          put(fx + xx, y, WATERF[k]);
+        }
+      }
+      // the pool and its foam where it lands
+      for (let dx = -fwid * 2; dx < fwid * 3; dx += 1) {
+        put(fx + dx, floor - 1, hash(fx + dx, 0, 113) < 0.5 ? WATERF[3] : [200, 225, 255]);
+        put(fx + dx, floor, WATERF[1]);
+      }
+      glowAt(fx + fwid / 2, floor - B, B * 3, [70, 120, 255], 0.18);
+      ov.flows.push({ x: fx, y: top, w: fwid, h: floor - top, tone: "water" });
+    });
+
     // the floor: deepslate tiles, with sculk spreading over patches of it
     const sculkAt = (c) => hash(Math.floor(c / 3), 0, 77) > 0.45 || Math.abs(c - gateCol) <= Math.floor(gw / 2) + 1;
     for (let c = 0; c < cols; c += 1) {
@@ -2070,7 +2098,7 @@ export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, class
       {scene?.flows?.map((f, i) => (
         <span
           key={`fl${i}`}
-          className="pm-flow absolute"
+          className={cx("pm-flow absolute", f.tone === "water" && "pm-flow-water")}
           style={{ ...at(f, scene), width: `${(f.w / scene.w) * 100}%`, height: `${(f.h / scene.h) * 100}%` }}
         />
       ))}

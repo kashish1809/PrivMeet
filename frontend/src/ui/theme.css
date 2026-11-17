@@ -272,8 +272,12 @@ html[data-theme="meadow"] {
   background-image: repeating-linear-gradient(to bottom, rgb(255 226 122 / 0.55) 0 3px, transparent 3px 12px);
   mix-blend-mode: screen;
 }
+.pm-flow-water {
+  background-image: repeating-linear-gradient(to bottom, rgb(200 225 255 / 0.5) 0 2px, transparent 2px 10px);
+}
 @media (prefers-reduced-motion: no-preference) {
   .pm-flow { animation: pm-flow 0.9s linear infinite; }
+  .pm-flow-water { animation-duration: 0.6s; }
 }
 
 /* A portal's spiral: curved arms (a conic gradient twisted by a radial one) turning. The
