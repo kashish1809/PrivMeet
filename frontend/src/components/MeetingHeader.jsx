@@ -98,7 +98,7 @@ export default function MeetingHeader({ meeting, onRename, onDelete }) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <ShareMenu meeting={meeting} />
+          <ShareMenu meeting={meeting} features={features} />
           <DownloadMenu meeting={meeting} features={features} />
           {onDelete && (
             <Menu

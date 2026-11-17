@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, ChevronDown, Link2, Share2 } from "lucide-react";
+import { Check, ChevronDown, Download, Link2, Share2 } from "lucide-react";
 
+import { exportUrl } from "../api";
 import { toast, cx, focusRing } from "../ui";
+import { fileName, saveBlob } from "./exportCsv";
 
 /**
  * The Share menu of the meeting header.
@@ -9,6 +11,7 @@ import { toast, cx, focusRing } from "../ui";
  * "Copy summary" puts the notes into the clipboard as plain text, ready to paste into an
  * email; "Copy link" is the page's address, which only opens on this computer; "Share..."
  * hands the same text to the system share sheet where the browser has one (phones mostly).
+ * The single-file .html share page is offered only when GET /api/system/ lists `share-page`.
  */
 
 const outline =
@@ -71,7 +74,7 @@ export async function copyText(text) {
   if (!ok) throw new Error("copy was refused");
 }
 
-export default function ShareMenu({ meeting, className }) {
+export default function ShareMenu({ meeting, features, className }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState("");
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
@@ -113,6 +116,28 @@ export default function ShareMenu({ meeting, className }) {
           .share({ title: meeting.title, text: summaryText(meeting), url: window.location.href })
           // Closing the sheet rejects with AbortError; that is not a failure to report.
           .catch(() => {}),
+    });
+  }
+
+  if (features?.has?.("share-page")) {
+    items.push({
+      label: "Download share page (.html)",
+      icon: Download,
+      hint: "One file, opens anywhere",
+      onSelect: async () => {
+        const res = await fetch(exportUrl(meeting.id, "html"), { credentials: "same-origin" });
+        if (!res.ok) {
+          let message = "Could not make the share page.";
+          try {
+            const data = await res.json();
+            if (data?.error) message = data.error;
+          } catch {
+            // an HTML or empty error body: keep the generic message
+          }
+          throw new Error(message);
+        }
+        saveBlob(await res.blob(), fileName(meeting.title, "html"));
+      },
     });
   }
 
