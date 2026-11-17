@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 
-import { IconButton, PixelScape, PixelStars, Toaster } from "../ui";
+import { IconButton, PixelScape, PixelStars, Toaster, useStillness } from "../ui";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 
@@ -17,6 +17,7 @@ const GLASS = "border-zinc-200/80 bg-white/85 dark:border-zinc-800/80 dark:bg-zi
  */
 export default function AppShell({ page, system, error, children }) {
   const drawer = useRef(null);
+  useStillness(); // pause the scenery while the tab is hidden or idle (R1.21)
   const close = () => drawer.current?.close();
 
   // Any navigation (link click, back button) closes the phone drawer.

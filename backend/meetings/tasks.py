@@ -4,6 +4,7 @@ so only one heavy model is in RAM at a time and it is freed when the task ends."
 import json
 import logging
 import os
+import re
 import tempfile
 import time
 
@@ -13,9 +14,12 @@ from django.conf import settings
 
 from . import hw, note_templates
 from .models import Meeting, Question, Segment
-from .pipeline import audio, diarize, llm
-from .pipeline.transcribe import transcribe
-from .search import excerpts
+from .pipeline import audio
+from .pipeline.names import corrector, infer_speakers
+
+# The heavy pipeline (LangChain, faster-whisper, the diarizer) is imported inside the tasks
+# that use it, not here: views import this module, and a module-level import loaded LangChain
+# into the idle web process before any meeting ran (R1.21).
 
 log = logging.getLogger(__name__)
 
@@ -36,10 +40,64 @@ def publish_profile(**kwargs):
     WORKER_PROFILE.write_text(json.dumps(hw.base_profile()))
 
 
+def enqueue(task, *args):
+    """Queue `task` for the worker. With CELERY_EAGER (no worker, local dev and the desktop
+    app's single process) it runs now, but in a child process (manage.py runtask): its
+    imports and models leave with it, instead of staying in the web process for good
+    (R1.21). The call still returns when the task is done, as an eager call did."""
+    if not settings.CELERY_TASK_ALWAYS_EAGER:
+        return task.delay(*args)
+    import subprocess
+    import sys
+
+    env = {**os.environ, "PRIVMEET_TASK_CHILD": "1"}  # the child must not run the startup reaper
+    subprocess.run(
+        [sys.executable, "manage.py", "runtask", task.name.rsplit(".", 1)[-1], *map(str, args)],
+        cwd=settings.BASE_DIR, env=env, check=False,
+    )
+
+
+def known_names():
+    """Names and terms to spell right: the user's own name, the speaker names saved on recent
+    meetings and the Settings vocabulary, first spelling wins."""
+    from . import settings_store
+
+    saved = settings_store.load()
+    names = []
+
+    def add(word):
+        word = str(word or "").strip()
+        if word and not word.lower().startswith("speaker") and word.lower() not in (n.lower() for n in names):
+            names.append(word)
+
+    add(saved.get("display_name"))
+    for m in Meeting.objects.exclude(speaker_names={}).only("speaker_names")[:30]:
+        for name in m.speaker_names.values():
+            add(name)
+    for word in re.split(r"[,;\n]+", saved.get("vocabulary", "")):
+        add(word)
+    return names
+
+
+def asr_prompt(names):
+    """A hint for Whisper with those names: it copies the spelling of words in its prompt (it
+    helped whisper-large-v3-turbo on Groq; names.py fixes what is still wrong afterwards)."""
+    # shortcut: a flat comma list capped at 400 characters (Whisper reads ~224 tokens of prompt);
+    # upgrade to a ranked list if users keep long glossaries.
+    text = ", ".join(names)[:400].rsplit(",", 1)[0] if len(", ".join(names)) > 400 else ", ".join(names)
+    return f"Names and terms: {text}." if text else ""
+
+
 @shared_task
 def process_meeting(meeting_id):
+    from .pipeline import diarize, llm
+    from .pipeline.transcribe import transcribe
+
     m = Meeting.objects.get(pk=meeting_id)
     prof = hw.profile()
+    names = known_names()
+    prof["asr_prompt"] = asr_prompt(names)
+    fix_names = corrector(names) or (lambda t: t)
     m.tier_used, m.error = prof["tier"], ""
     m.save(update_fields=["tier_used", "error"])
     m.segments.all().delete()
@@ -59,7 +117,7 @@ def process_meeting(meeting_id):
         m.save(update_fields=["duration", "language", "device_used"])
         batch, flushed = [], time.monotonic()
         for s in segments:
-            batch.append(Segment(meeting=m, start=s.start, end=s.end, text=s.text.strip()))
+            batch.append(Segment(meeting=m, start=s.start, end=s.end, text=fix_names(s.text.strip())))
             if len(batch) >= PROGRESS_SEGMENTS or time.monotonic() - flushed >= PROGRESS_SECONDS:
                 Segment.objects.bulk_create(batch)
                 batch, flushed = [], time.monotonic()
@@ -77,8 +135,12 @@ def process_meeting(meeting_id):
 
         m.set_status(Meeting.Status.SUMMARIZING, 80)
         llm.ensure_model(prof)
+        # who is which speaker, from the conversation, so "I'll do it" gets the right owner
+        guessed = infer_speakers(list(m.segments.all()), names)
+        if guessed:
+            log.info("meeting %s: speakers guessed for the summary: %s", meeting_id, guessed)
         notes = llm.summarize(
-            m.transcript(), prof,
+            m.transcript(guessed=guessed), prof,
             on_progress=lambda f: m.set_status(Meeting.Status.SUMMARIZING, 80 + int(15 * f)),
             language=m.language,
             focus=note_templates.instructions(m.template),
@@ -98,6 +160,9 @@ def process_meeting(meeting_id):
 
 @shared_task
 def answer_question(question_id):
+    from .pipeline import llm
+    from .search import excerpts
+
     q = Question.objects.select_related("meeting").get(pk=question_id)
     prof = hw.profile()
     try:
@@ -139,7 +204,7 @@ def pull_model(name):
     """Stream Ollama's /api/pull for `name`, writing {model, percent, status} as it goes."""
     import urllib.request
 
-    url = llm.ollama_url(hw.profile()).rstrip("/")
+    url = hw.ollama_url(hw.profile()).rstrip("/")
     _write_pull({"model": name, "percent": 0, "status": "starting"})
     percent, last = 0, 0.0
     layers = {}  # digest -> (completed, total): Ollama reports each layer from 0 again

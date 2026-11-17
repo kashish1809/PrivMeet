@@ -37,3 +37,4 @@ export { Skeleton } from "./Skeleton";
 export { Checkbox } from "./Checkbox";
 export { Breadcrumb } from "./Breadcrumb";
 export { Tooltip } from "./Tooltip";
+export { IDLE_MS, useStillness } from "./stillness";

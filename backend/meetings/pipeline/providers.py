@@ -13,8 +13,9 @@ import json
 import urllib.error
 import urllib.request
 
-from langchain_core.messages import AIMessage
-from langchain_core.runnables import RunnableLambda
+# LangChain is imported in chat(), the one place that needs it: hw.apply_overrides() reaches
+# this module (through transcribe.uses_cloud) on every /api/system/ call, and a module-level
+# import loaded LangChain into the idle web process (R1.21).
 
 # Where each provider lives; "custom" takes api_base_url from Settings.
 BASE_URLS = {
@@ -112,13 +113,13 @@ def _multipart(fields, filename, blob):
     return bytes(out), "multipart/form-data; boundary=" + boundary
 
 
-def transcribe_chunk(prof, blob, filename, model, language=None, timeout=TIMEOUT):
-    """One /audio/transcriptions call. Returns the provider's verbose_json dict."""
-    body, content_type = _multipart(
-        {"model": model, "response_format": "verbose_json", "language": language or "",
-          "temperature": "0"},
-        filename, blob,
-    )
+def transcribe_chunk(prof, blob, filename, model, language=None, timeout=TIMEOUT, prompt=""):
+    """One /audio/transcriptions call. Returns the provider's verbose_json dict. `prompt` is
+    the OpenAI-style hint of names and terms to spell right."""
+    fields = {"model": model, "response_format": "verbose_json", "language": language or "", "temperature": "0"}
+    if prompt:
+        fields["prompt"] = prompt
+    body, content_type = _multipart(fields, filename, blob)
     headers = {k: v for k, v in _headers(prof).items() if k != "content-type"}
     headers["content-type"] = content_type
     req = urllib.request.Request(base_url(prof) + "/audio/transcriptions", data=body, headers=headers)
@@ -178,6 +179,9 @@ def complete(prof, messages, json_mode=False, max_tokens=None, temperature=0.1):
 
 def chat(prof, json_mode=False, num_predict=None):
     """A Runnable with the same role as ChatOllama in llm.chat()."""
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
     return RunnableLambda(
         lambda prompt: AIMessage(content=complete(prof, prompt.to_messages(), json_mode, num_predict))
     )

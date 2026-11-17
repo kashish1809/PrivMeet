@@ -74,15 +74,31 @@ export default function ActionItemsPanel({ meeting, onSave, compact }) {
           {items.map((item, i) => (
             <li key={i} className="flex items-start gap-2 rounded-lg px-2 py-1.5">
               <span className="flex h-6 items-center">{checkbox(i)}</span>
-              <input
+              {/* A textarea so a long task wraps instead of running off the card; it grows to
+                  its text (field-sizing; rows is the fallback where that is unsupported). Enter
+                  still saves, as in the one-line field it replaces. min-w-0 lets it shrink, so
+                  the owner beside it stays visible. */}
+              <textarea
                 aria-label={`Task ${i + 1}`}
                 placeholder="Task"
+                rows={Math.max(1, Math.ceil((item.task || "").length / 30))}
                 {...field(i, "task")}
-                className={cx(cell, "flex-1", item.done && "text-zinc-400 line-through dark:text-zinc-500")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                }}
+                className={cx(
+                  cell,
+                  "min-w-0 flex-1 resize-none [field-sizing:content]",
+                  item.done && "text-zinc-400 line-through dark:text-zinc-500",
+                )}
               />
               <input
                 aria-label={`Owner ${i + 1}`}
                 placeholder="Owner"
+                title={item.owner || undefined}
                 {...field(i, "owner")}
                 className={cx(cell, "w-20 shrink-0 text-right text-zinc-500 dark:text-zinc-400")}
               />

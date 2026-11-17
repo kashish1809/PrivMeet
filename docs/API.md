@@ -37,6 +37,8 @@ Merges the keys you send into the saved settings and returns them all. Sending `
 | Key | Type | Rule |
 |---|---|---|
 | `display_name` | string | at most 60 chars; shown on Home and as the avatar initials |
+| `vocabulary` | string | at most 500 chars, comma separated: names and terms transcripts should spell right. Together with `display_name` and the speaker names saved on recent meetings they are sent to Whisper as a hint, and near-miss spellings of them are corrected after transcription |
+| `default_template` | string | a template id (R1.9); `general` when unset |
 | `llm_model` | string | Ollama model name, `^[\w.\-/:]+$` |
 | `ollama_url` | string | `http://` or `https://` URL |
 | `whisper_model` | string | faster-whisper size or repo, `^[\w.\-/:]+$` |

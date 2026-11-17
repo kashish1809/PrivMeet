@@ -483,3 +483,11 @@ html[data-font="normal"] {
   html[data-font="normal"] .pm-btn-ghost:hover:not(:disabled) { --face: var(--color-zinc-100); box-shadow: none; }
   html.dark[data-font="normal"] .pm-btn-ghost:hover:not(:disabled) { --face: var(--color-zinc-800); }
 }
+
+/* Nobody looking (ui/stillness.js: tab hidden, or a minute with no input): every scenery
+   animation holds its frame, so an idle tab costs no CPU. Any input starts them again. */
+html[data-still] [class*="pm-"],
+html[data-still] [class*="pm-"]::before,
+html[data-still] [class*="pm-"]::after {
+  animation-play-state: paused !important;
+}

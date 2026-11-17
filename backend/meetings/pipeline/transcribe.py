@@ -22,7 +22,10 @@ def _start(prof, samples):
     None for silence. Decoding one segment here makes a CUDA failure happen now, inside the
     retry below, and not later halfway through the meeting."""
     model = _load(prof)
-    segments, info = model.transcribe(samples, beam_size=prof["beam_size"], vad_filter=True)
+    segments, info = model.transcribe(
+        samples, beam_size=prof["beam_size"], vad_filter=True,
+        initial_prompt=prof.get("asr_prompt") or None,  # names to spell right (tasks.asr_prompt)
+    )
     it = iter(segments)
     return next(it, None), it, info
 
@@ -108,7 +111,7 @@ def _cloud(wav, prof):
     model, language = asr_model(prof), prof.get("language_hint") or None
     out, detected, end = [], "", 0.0
     for offset, blob in audio.flac_chunks(wav, providers.CHUNK_SECONDS, providers.MAX_UPLOAD_BYTES):
-        data = providers.transcribe_chunk(prof, blob, "audio.flac", model, language)
+        data = providers.transcribe_chunk(prof, blob, "audio.flac", model, language, prompt=prof.get("asr_prompt", ""))
         detected = detected or (data.get("language") or "")
         pieces = data.get("segments") or []
         if not pieces and (data.get("text") or "").strip():

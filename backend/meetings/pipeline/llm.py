@@ -125,8 +125,10 @@ VERIFY_PROMPT = ChatPromptTemplate.from_messages(
 
 
 def ollama_url(prof):
-    """The server set in Settings, else OLLAMA_URL from the environment."""
-    return prof.get("ollama_url") or settings.OLLAMA_URL
+    """The server set in Settings, else OLLAMA_URL from the environment (hw.ollama_url)."""
+    from .. import hw
+
+    return hw.ollama_url(prof)
 
 
 def chat(prof, json_mode=False, num_predict=None):
@@ -406,9 +408,22 @@ def _key(text):
 _FILLER = {"a", "an", "the", "and", "or", "to", "of", "for", "on", "in", "by", "with", "it", "its", "be", "new"}
 
 
+# Verbs a model swaps freely when it re-tells the same task or decision: each maps to one
+# word, so "Move to the new mail provider" and "Switch to the new mail provider" are one line.
+_SYNONYM = {
+    "move": "switch", "change": "switch", "migrate": "switch", "replace": "switch",
+    "install": "setup", "set": "setup", "add": "setup", "configure": "setup",
+    "share": "send", "email": "send", "forward": "send", "mail": "mail",
+    "repair": "fix", "resolve": "fix", "patch": "fix",
+    "release": "launch", "ship": "launch", "publish": "launch",
+    "update": "rewrite", "revise": "rewrite",
+}
+
+
 def _content_words(text):
-    """Content words, lower case, ordinals as numbers ("28th" -> "28")."""
-    return {re.sub(r"^(\d+)(st|nd|rd|th)$", r"\1", w) for w in re.findall(r"\w+", str(text).lower())} - _FILLER
+    """Content words, lower case, ordinals as numbers ("28th" -> "28"), synonyms folded."""
+    words = {re.sub(r"^(\d+)(st|nd|rd|th)$", r"\1", w) for w in re.findall(r"\w+", str(text).lower())}
+    return {_SYNONYM.get(w, w) for w in words} - _FILLER - {"up"}
 
 
 def _same(a, b):

@@ -213,7 +213,7 @@ def create_meeting(request):
         return bad("No audio stream found in this file.")
     m.duration = duration
     m.save(update_fields=["duration"])
-    tasks.process_meeting.delay(str(m.id))
+    tasks.enqueue(tasks.process_meeting, str(m.id))
     return JsonResponse(meeting_json(m), status=201)
 
 
@@ -267,7 +267,7 @@ def meeting_retry(request, pk):
     if m.is_stale():
         log.warning("retry takes over meeting %s, stale in %s since %s", m.pk, m.status, m.heartbeat)
     m.set_status(Meeting.Status.QUEUED, 0)
-    tasks.process_meeting.delay(str(m.id))
+    tasks.enqueue(tasks.process_meeting, str(m.id))
     return JsonResponse(meeting_json(m))
 
 
@@ -318,7 +318,7 @@ def meeting_ask(request, pk):
     if not question:
         return bad("Question is empty.")
     q = Question.objects.create(meeting=m, question=question[:1000])
-    tasks.answer_question.delay(q.id)
+    tasks.enqueue(tasks.answer_question, q.id)
     return JsonResponse(question_json(q), status=201)
 
 
@@ -484,10 +484,8 @@ def action_items(request):
 
 def _ollama_models(prof):
     """Installed Ollama models as [{name, size}], or None when Ollama does not answer."""
-    from .pipeline import llm
-
     try:
-        with urllib.request.urlopen(f"{llm.ollama_url(prof).rstrip('/')}/api/tags", timeout=5) as r:
+        with urllib.request.urlopen(f"{hw.ollama_url(prof).rstrip('/')}/api/tags", timeout=5) as r:
             data = json.load(r)
     except (urllib.error.URLError, OSError, ValueError):
         return None
@@ -550,15 +548,13 @@ def models_pull(request):
         return bad(f"Already downloading {state['model']}. Wait for it to finish.", 409)
     # shortcut: with CELERY_EAGER the pull runs inside this request and it returns when done;
     # the page still works (it polls from another request). A real worker returns at once.
-    tasks.pull_model.delay(name.strip())
+    tasks.enqueue(tasks.pull_model, name.strip())
     return JsonResponse({"pull": tasks.pull_state()}, status=202)
 
 
 @require_http_methods(["DELETE"])
 def models_delete(request, name):
     """Remove an installed Ollama model. Refuses the one notes are written with."""
-    from .pipeline import llm
-
     if not settings_store.MODEL_NAME.match(name) or len(name) > 100:
         return bad("That is not a valid model name.")
     prof = _profile()
@@ -568,7 +564,7 @@ def models_delete(request, name):
     if prof.get("llm_provider", "ollama") == "ollama" and same(name, current):
         return bad(f"{name} writes your notes now. Pick another model first.", 409)
     req = urllib.request.Request(
-        f"{llm.ollama_url(prof).rstrip('/')}/api/delete", data=json.dumps({"model": name}).encode(),
+        f"{hw.ollama_url(prof).rstrip('/')}/api/delete", data=json.dumps({"model": name}).encode(),
         headers={"Content-Type": "application/json"}, method="DELETE",
     )
     try:

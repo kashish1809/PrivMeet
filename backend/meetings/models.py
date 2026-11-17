@@ -77,16 +77,17 @@ class Meeting(models.Model):
             after = max(STALE_AFTER, self.duration or 0)
         return self.status in PROCESSING and (timezone.now() - self.heartbeat).total_seconds() > after
 
-    def speaker_label(self, speaker):
+    def speaker_label(self, speaker, guessed=None):
+        """The saved name, else a guessed one (summary only, never saved), else "Speaker N"."""
         if speaker is None:
             return ""
-        return self.speaker_names.get(str(speaker)) or f"Speaker {speaker + 1}"
+        return self.speaker_names.get(str(speaker)) or (guessed or {}).get(speaker) or f"Speaker {speaker + 1}"
 
-    def transcript(self, timestamps=False, segments=None):
+    def transcript(self, timestamps=False, segments=None, guessed=None):
         lines = []
         for s in self.segments.all() if segments is None else segments:
             prefix = f"[{mmss(s.start)}] " if timestamps else ""
-            who = self.speaker_label(s.speaker)
+            who = self.speaker_label(s.speaker, guessed)
             lines.append(f"{prefix}{who + ': ' if who else ''}{s.text}")
         return "\n".join(lines)
 

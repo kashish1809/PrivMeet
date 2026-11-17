@@ -44,6 +44,7 @@ import {
   StatusDot,
   tabPanelProps,
   Tabs,
+  Textarea,
   THEMES,
   Toggle,
   useCustomTheme,
@@ -185,6 +186,7 @@ function SaveRow({ state, onSave, disabled, why }) {
 
 function General({ settings, onSaved }) {
   const [name, setName] = useState(settings.display_name || "");
+  const [vocabulary, setVocabulary] = useState(settings.vocabulary || "");
   const [titleFormat, setTitleFormat] = useState(readPrefs().titleFormat);
   const [state, save] = useSaver();
 
@@ -200,6 +202,15 @@ function General({ settings, onSaved }) {
           hint="Shown on Home and as the initials of your avatar."
           onChange={(e) => setName(e.target.value)}
         />
+        <Textarea
+          label="Names and terms"
+          value={vocabulary}
+          maxLength={500}
+          rows={2}
+          placeholder="Priya, Arjun, Meera, PrivMeet"
+          hint="Separated by commas. Transcripts spell these right, along with your name and the speaker names you have saved."
+          onChange={(e) => setVocabulary(e.target.value)}
+        />
         <Select
           label="Default title for new recordings"
           value={titleFormat}
@@ -212,7 +223,7 @@ function General({ settings, onSaved }) {
           onSave={() =>
             save(async () => {
               writePref(KEYS.titleFormat, titleFormat);
-              onSaved(await api("/api/settings/", { method: "PATCH", body: { display_name: name.trim() || null } }));
+              onSaved(await api("/api/settings/", { method: "PATCH", body: { display_name: name.trim() || null, vocabulary: vocabulary.trim() || null } }));
             })
           }
         />
