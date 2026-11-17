@@ -1,52 +1,141 @@
-//! HTTP layer: the router, the Host check, the built React app and the JSON error shape.
+//! HTTP layer: shared state, the router, the Host check, the built React app and JSON errors.
 
-use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use axum::{
-    body::Body,
+    body::{Body, Bytes},
     extract::{Request, State},
-    http::{header, HeaderValue, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
-use serde_json::json;
+use serde_json::{json, Value};
 use tower_http::services::ServeDir;
 
 use crate::config::Config;
-use crate::csrf;
+use crate::{csrf, db, hw, settings};
 
-pub type AppState = Arc<Config>;
+/// What every request can reach: configuration, the database and the hardware (read once).
+pub struct App {
+    pub cfg: Config,
+    pub db: Mutex<rusqlite::Connection>,
+    /// RAM GB, usable CUDA, CPU cores, VRAM GB: hw::detected(), at startup.
+    pub hardware: (f64, bool, usize, Option<f64>),
+}
+
+pub type AppState = Arc<App>;
+
+/// What this server supports beyond the v1 API (docs/TASKS.md "Feature flags"). Only what is
+/// built: the React app shows a control only when its flag is here.
+pub const FEATURES: &[&str] = &["settings", "providers"];
+
+/// Built-in note template ids (backend/meetings/note_templates.py); own ones are "u<pk>".
+pub const BUILTIN_TEMPLATES: &[&str] = &["general", "standup", "one-on-one", "client-call", "interview", "lecture"];
 
 /// The error body every endpoint uses, as Django's bad(): {"error": "..."}; api.js shows it.
 pub fn error(status: StatusCode, msg: impl Into<String>) -> Response {
     (status, Json(json!({ "error": msg.into() }))).into_response()
 }
 
-pub fn router(cfg: Config) -> Router {
-    let state: AppState = Arc::new(cfg);
+impl App {
+    pub fn new(cfg: Config) -> Result<Self, String> {
+        let conn = db::open(&cfg.data_dir.join("privmeet.sqlite3")).map_err(|e| format!("database: {e}"))?;
+        let hardware = hw::detected(&cfg.data_dir);
+        Ok(App { cfg, db: Mutex::new(conn), hardware })
+    }
+
+    /// Whether a note template id exists: a built-in, or an own template "u<pk>".
+    pub fn template_exists(&self, id: &str) -> bool {
+        if BUILTIN_TEMPLATES.contains(&id) {
+            return true;
+        }
+        let Some(pk) = id.strip_prefix('u').and_then(|n| n.parse::<i64>().ok()) else { return false };
+        let db = self.db.lock().unwrap_or_else(|p| p.into_inner());
+        db.query_row("SELECT 1 FROM note_templates WHERE id = ?1", [pk], |_| Ok(())).is_ok()
+    }
+
+    pub fn settings(&self) -> settings::Settings {
+        settings::load(&self.cfg.data_dir, &|id| self.template_exists(id))
+    }
+
+    /// Tier + env + saved settings, as hw.profile().
+    pub fn profile(&self) -> hw::Profile {
+        let (ram, cuda, cpus, vram) = self.hardware;
+        let base = hw::build_profile(&hw::env_map(), ram, cuda, cpus, vram);
+        hw::apply_overrides(&base, &self.settings())
+    }
+}
+
+pub fn router(app: App) -> Router {
+    let state: AppState = Arc::new(app);
     let api = Router::new()
+        .route("/system/", get(system))
+        .route("/settings/", get(settings_get).patch(settings_patch))
         .fallback(|| async { error(StatusCode::NOT_FOUND, "Not found.") })
         .layer(middleware::from_fn_with_state(state.clone(), csrf::protect));
     Router::new()
         .nest("/api", api)
-        .nest_service("/static", ServeDir::new(&state.frontend_dist))
+        .nest_service("/static", ServeDir::new(&state.cfg.frontend_dist))
         .fallback(get(spa))
         .layer(middleware::from_fn_with_state(state.clone(), allowed_host))
         .with_state(state)
 }
 
+/// GET /api/system/: the profile the next meeting will use, and the feature flags. Sets the
+/// CSRF cookie, as Django's ensure_csrf_cookie does: the app calls this first.
+async fn system(State(app): State<AppState>, headers: HeaderMap) -> Response {
+    let p = app.profile();
+    let mut data = json!({
+        "tier": p.tier, "whisper_model": p.whisper_model, "llm_model": p.llm_model,
+        "device": p.device, "diarize": p.diarize, "llm_provider": p.llm_provider,
+        "features": FEATURES,
+    });
+    if p.llm_provider != "ollama" {
+        data["llm_model"] = json!(p.api_model.unwrap_or_default()); // the model that writes the notes
+    }
+    let cuda_error = hw::cuda_error(&app.cfg.data_dir);
+    if !cuda_error.is_empty() {
+        data["device"] = json!("cpu");
+        data["cuda_error"] = json!(cuda_error);
+    }
+    let mut resp = Json(data).into_response();
+    csrf::ensure_cookie(&headers, &mut resp);
+    resp
+}
+
+async fn settings_get(State(app): State<AppState>) -> Response {
+    Json(Value::Object(settings::public(&app.settings()))).into_response()
+}
+
+/// PATCH /api/settings/: merge; a key set to null goes back to the tier default.
+async fn settings_patch(State(app): State<AppState>, body: Bytes) -> Response {
+    let patch: Value = if body.is_empty() {
+        json!({})
+    } else {
+        match serde_json::from_slice(&body) {
+            Ok(v) => v,
+            Err(_) => return error(StatusCode::BAD_REQUEST, "Invalid JSON."),
+        }
+    };
+    match settings::save(&app.cfg.data_dir, &patch, &|id| app.template_exists(id)) {
+        Ok(saved) => Json(Value::Object(settings::public(&saved))).into_response(),
+        Err(e) => error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
 /// Refuse requests whose Host is not ours (Django's ALLOWED_HOSTS): a web page on another
 /// site could otherwise reach this unauthenticated server through DNS rebinding.
-async fn allowed_host(State(cfg): State<AppState>, req: Request, next: Next) -> Response {
+async fn allowed_host(State(app): State<AppState>, req: Request, next: Next) -> Response {
     let host = req
         .headers()
         .get(header::HOST)
         .and_then(|h| h.to_str().ok())
         .map(|h| h.rsplit_once(':').map_or(h, |(name, port)| if port.chars().all(|c| c.is_ascii_digit()) { name } else { h }))
         .unwrap_or("");
-    if !cfg.allowed_hosts.iter().any(|a| a.eq_ignore_ascii_case(host)) {
+    if !app.cfg.allowed_hosts.iter().any(|a| a.eq_ignore_ascii_case(host)) {
         return error(StatusCode::BAD_REQUEST, "Invalid Host header.");
     }
     next.run(req).await
@@ -54,8 +143,9 @@ async fn allowed_host(State(cfg): State<AppState>, req: Request, next: Next) -> 
 
 /// Every non-API path gets the React app's index.html (hash routing does the rest), with the
 /// CSRF cookie set, as Django's spa view does.
-async fn spa(State(cfg): State<AppState>, req: Request) -> Response {
-    match tokio::fs::read(cfg.frontend_dist.join("index.html")).await {
+async fn spa(State(app): State<AppState>, req: Request) -> Response {
+    let index: PathBuf = app.cfg.frontend_dist.join("index.html");
+    match tokio::fs::read(index).await {
         Ok(html) => {
             let mut r = Response::new(Body::from(html));
             r.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8"));

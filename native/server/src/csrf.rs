@@ -55,7 +55,7 @@ fn safe(method: &Method) -> bool {
 
 /// Middleware for /api/: unsafe methods need a matching X-CSRFToken, and an Origin, when
 /// present, must be this server or a trusted one (CSRF_TRUSTED_ORIGINS, e.g. Vite's port).
-pub async fn protect(State(cfg): State<AppState>, req: Request, next: Next) -> Response {
+pub async fn protect(State(app): State<AppState>, req: Request, next: Next) -> Response {
     if safe(req.method()) {
         return next.run(req).await;
     }
@@ -63,7 +63,7 @@ pub async fn protect(State(cfg): State<AppState>, req: Request, next: Next) -> R
     if let Some(origin) = headers.get(header::ORIGIN).and_then(|o| o.to_str().ok()) {
         let host = headers.get(header::HOST).and_then(|h| h.to_str().ok()).unwrap_or("");
         let own = origin == format!("http://{host}") || origin == format!("https://{host}");
-        if !own && !cfg.trusted_origins.iter().any(|t| t == origin) {
+        if !own && !app.cfg.trusted_origins.iter().any(|t| t == origin) {
             return error(StatusCode::FORBIDDEN, "CSRF check failed: the request came from another site.");
         }
     }

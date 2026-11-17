@@ -26,7 +26,13 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    let app = web::router(cfg.clone());
+    let app = match web::App::new(cfg.clone()) {
+        Ok(a) => web::router(a),
+        Err(e) => {
+            eprintln!("privmeet-server: {e}");
+            std::process::exit(1);
+        }
+    };
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,
         Err(e) => {
