@@ -47,6 +47,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.6** feedback components | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | in `src/ui`: `toast()`/`dismissToast()`/`<Toaster />` (mounted in AppShell), `Skeleton`, `Checkbox`, `Breadcrumb`, `Tooltip`. Pages can swap their plain-Tailwind versions in their next task. |
 | **R2.1** API helpers v2 + feature flags | Kashish | `v2/kashish/R2.1-api-v2` | `getSystem()` shares one promise, `hasFeature()` / `useFeatures()`; one helper per v2 endpoint; `format.js` gains `minutes`, `shortDate`, `participants`, `statusBadge` |
 | **R2.2** Meetings list v2 | Kashish | `v2/kashish/R2.2-list-v2` | rows per the mockup (icon tile, `Oct 28, 2026 · 42 min · 4 participants`, pill, kebab); `q` read from the route and written back with `replaceState` |
+| **R2.3** Participants card | Kashish | `v2/kashish/R2.3-participants` | `ParticipantsCard.jsx`: two columns of avatar + name, talking time as a percentage, rename in place (PATCH `speaker_names`); suggestions behind `suggestions`, merge behind `speaker-merge` |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
 Everything in R1.x and R2.x that is not in the table above is open.
@@ -848,8 +849,9 @@ Built; the text below is the specification it was built to.
   - Keep the day groups, the 2 s poll, the transcript hits and the empty states.
 - **Done when:** opening `#/meetings?q=budget` shows the filtered list with "budget" in the box, and rows match the mockup.
 
-#### R2.3 · Participants card
-- **Branch:** `v2/kashish/R2.3-participants`
+#### R2.3 · Participants card — **DONE** (see "Finished tasks")
+Built; the text below is the specification it was built to.
+- **Branch:** `v2/kashish/R2.3-participants` (unused)
 - **Needs:** T2.4
 - **Files:** `frontend/src/components/ParticipantsCard.jsx` (new), `frontend/src/pages/MeetingDetail.jsx`
 - **Do:**

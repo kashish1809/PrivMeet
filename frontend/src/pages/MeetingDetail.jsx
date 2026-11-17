@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useId, useState } from "react";
-import { NotebookPen, Users } from "lucide-react";
+import { NotebookPen } from "lucide-react";
 
-import { deleteMeeting, getMeeting, patchMeeting, retryMeeting } from "../api";
+import { deleteMeeting, getMeeting, patchMeeting, retryMeeting, useFeatures } from "../api";
 import { isProcessing } from "../format";
-import { Avatar, Button, Card, CardHeader, ConfirmDialog, EmptyState, Tabs, tabPanelProps } from "../ui";
+import { Button, Card, ConfirmDialog, EmptyState, Tabs, tabPanelProps } from "../ui";
 import { navigate, useRoute } from "../App";
 import ActionItemsPanel from "../components/ActionItemsPanel";
 import MeetingHeader from "../components/MeetingHeader";
+import ParticipantsCard from "../components/ParticipantsCard";
 import ProcessingStatus from "../components/ProcessingStatus";
 import SummaryPanel from "../components/SummaryPanel";
 import TranscriptPanel from "../components/TranscriptPanel";
@@ -20,26 +21,17 @@ const TABS = [
   { value: "notes", label: "Notes" },
 ];
 
-/** Everyone the transcript mentions, in speaking order, with the saved name when there is one. */
-function participants(meeting) {
-  const seen = new Map();
-  for (const s of meeting.segments || []) {
-    if (s.speaker === null || s.speaker === undefined || seen.has(s.speaker)) continue;
-    seen.set(s.speaker, meeting.speaker_names?.[s.speaker] || `Speaker ${s.speaker + 1}`);
-  }
-  return [...seen.entries()].map(([key, name]) => ({ key, name }));
-}
-
 /**
  * Meeting detail, laid out like docs/ui/mockup.webp: breadcrumb and Share/Download, the
  * logo tile and title, then Summary | Transcript | Action Items | Notes with the compact
  * action items and the participants in the right column.
  *
  * The page polls every 2 s while the pipeline works. `?t=<seconds>` opens the Transcript
- * tab and seeks there. R2.3 replaces the participants list, R2.4 fills in the Notes tab.
+ * tab and seeks there. R2.4 fills in the Notes tab.
  */
 export default function MeetingDetail({ id }) {
   const { query } = useRoute();
+  const features = useFeatures();
   const [meeting, setMeeting] = useState(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("summary");
@@ -107,9 +99,6 @@ export default function MeetingDetail({ id }) {
 
   if (!meeting) return <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading meeting…</p>;
 
-  const people = participants(meeting);
-  const busy = isProcessing(meeting);
-
   return (
     <section className="mx-auto flex w-full max-w-6xl flex-col gap-5">
       <MeetingHeader
@@ -169,23 +158,7 @@ export default function MeetingDetail({ id }) {
         <aside className="flex flex-col gap-4">
           <ActionItemsPanel meeting={meeting} onSave={onSave} compact />
 
-          <Card>
-            <CardHeader title="Participants" icon={Users} />
-            {people.length ? (
-              <ul className="grid grid-cols-2 gap-3 px-5 pt-3 pb-5">
-                {people.map((person) => (
-                  <li key={person.key} className="flex items-center gap-2">
-                    <Avatar name={person.name} colorKey={person.key} size="sm" />
-                    <span className="truncate text-sm text-zinc-700 dark:text-zinc-300">{person.name}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="px-5 pt-3 pb-5 text-sm text-zinc-500 dark:text-zinc-400">
-                {busy ? "Speakers appear after the transcript is ready." : "No speakers were detected."}
-              </p>
-            )}
-          </Card>
+          <ParticipantsCard meeting={meeting} onSave={onSave} features={features} />
         </aside>
       </div>
 
