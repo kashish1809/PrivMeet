@@ -5,9 +5,12 @@ the meeting. Every builder takes the Meeting and reads only its stored fields, s
 whose audio was deleted still exports.
 """
 
+import io
 import json
 import re
+import zipfile
 from html import escape
+from xml.sax.saxutils import escape as xml_escape
 
 from .models import mmss
 
@@ -157,5 +160,167 @@ def share_html(m):
     return "".join(parts).encode(), "text/html; charset=utf-8"
 
 
+# characters XML 1.0 forbids: one in a transcript would make Word refuse the whole file
+_XML_BAD = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+
+
+def _x(text):
+    return xml_escape(_XML_BAD.sub("", str(text or "")))
+
+
+def _blocks(m):
+    """The notes as neutral blocks, shared by the Word and OpenDocument builders:
+    ("title", text), ("meta", text), ("h", text), ("p", text), ("li", text), ("table", rows)."""
+    who = participants(m)
+    out = [("title", m.title), ("meta", f"{m.created:%B %-d, %Y} · {mmss(m.duration)}"
+                                + (f" · Participants: {', '.join(who)}" if who else ""))]
+    out += [("h", "Summary"), ("p", m.summary or "No summary.")]
+    if m.decisions:
+        out += [("h", "Key points")] + [("li", d) for d in m.decisions]
+    if m.action_items:
+        rows = [["Done", "Task", "Owner", "Due"]] + [
+            ["Yes" if i.get("done") else "", i.get("task", ""), i.get("owner", ""), i.get("due", "")]
+            for i in m.action_items
+        ]
+        out += [("h", "Action items"), ("table", rows)]
+    if m.notes:
+        out += [("h", "Notes")] + [("p", line) for line in m.notes.splitlines() if line.strip()]
+    out.append(("h", "Transcript"))
+    for s in m.segments.all():
+        who = m.speaker_label(s.speaker)
+        out.append(("p", f"[{mmss(s.start)}] {who + ': ' if who else ''}{s.text}"))
+    return out
+
+
+def _zip(files, first_stored=None):
+    """A zip from [(name, text)]; `first_stored` is written first and uncompressed (ODF needs
+    its mimetype that way)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        if first_stored:
+            z.writestr(zipfile.ZipInfo(first_stored[0]), first_stored[1], compress_type=zipfile.ZIP_STORED)
+        for name, text in files:
+            z.writestr(name, text)
+    return buf.getvalue()
+
+
+def docx(m):
+    """A minimal valid Word file: content types, the package relationship and one document."""
+    x = _x
+
+    def para(text, size=None, bold=False, color=None, bullet=False):
+        rpr = "".join([
+            "<w:b/>" if bold else "",
+            f'<w:color w:val="{color}"/>' if color else "",
+            f'<w:sz w:val="{size}"/>' if size else "",
+        ])
+        ppr = '<w:pPr><w:ind w:left="360" w:hanging="240"/></w:pPr>' if bullet else ""
+        text = ("• " if bullet else "") + text
+        return f'<w:p>{ppr}<w:r>{f"<w:rPr>{rpr}</w:rPr>" if rpr else ""}<w:t xml:space="preserve">{x(text)}</w:t></w:r></w:p>'
+
+    body = []
+    for kind, v in _blocks(m):
+        if kind == "title":
+            body.append(para(v, size=40, bold=True))
+        elif kind == "meta":
+            body.append(para(v, color="5C6487"))
+        elif kind == "h":
+            body.append(para(v, size=28, bold=True, color="3A33C4"))
+        elif kind == "li":
+            body.append(para(v, bullet=True))
+        elif kind == "p":
+            body.append(para(v))
+        elif kind == "table":
+            border = "".join(f'<w:{e} w:val="single" w:sz="4" w:color="DEE0F1"/>' for e in ("top", "left", "bottom", "right", "insideH", "insideV"))
+            rows = "".join(
+                "<w:tr>" + "".join(
+                    f'<w:tc><w:p><w:r>{"<w:rPr><w:b/></w:rPr>" if r == 0 else ""}<w:t xml:space="preserve">{x(c)}</w:t></w:r></w:p></w:tc>'
+                    for c in row
+                ) + "</w:tr>"
+                for r, row in enumerate(v)
+            )
+            body.append(f'<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders>{border}</w:tblBorders></w:tblPr>{rows}</w:tbl>')
+            body.append("<w:p/>")
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+        + "".join(body)
+        + '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr>'
+        "</w:body></w:document>"
+    )
+    files = [
+        ("[Content_Types].xml",
+         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+         '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+         '<Default Extension="xml" ContentType="application/xml"/>'
+         '<Override PartName="/word/document.xml" '
+         'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>'),
+        ("_rels/.rels",
+         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+         'Target="word/document.xml"/></Relationships>'),
+        ("word/document.xml", document),
+    ]
+    return _zip(files), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+ODT_MIME = "application/vnd.oasis.opendocument.text"
+
+
+def odt(m):
+    """A minimal valid OpenDocument Text file: mimetype (stored, first), manifest, content."""
+    x = _x
+    body = []
+    for kind, v in _blocks(m):
+        if kind == "title":
+            body.append(f'<text:h text:outline-level="1" text:style-name="Title">{x(v)}</text:h>')
+        elif kind == "meta":
+            body.append(f'<text:p text:style-name="Meta">{x(v)}</text:p>')
+        elif kind == "h":
+            body.append(f'<text:h text:outline-level="2" text:style-name="Heading">{x(v)}</text:h>')
+        elif kind == "li":
+            body.append(f"<text:list><text:list-item><text:p>{x(v)}</text:p></text:list-item></text:list>")
+        elif kind == "p":
+            body.append(f"<text:p>{x(v)}</text:p>")
+        elif kind == "table":
+            cols = len(v[0])
+            rows = "".join(
+                "<table:table-row>" + "".join(
+                    f'<table:table-cell table:style-name="Cell" office:value-type="string"><text:p{" text:style-name=\"Bold\"" if r == 0 else ""}>{x(c)}</text:p></table:table-cell>'
+                    for c in row
+                ) + "</table:table-row>"
+                for r, row in enumerate(v)
+            )
+            body.append(f'<table:table table:name="ActionItems"><table:table-column table:number-columns-repeated="{cols}"/>{rows}</table:table>')
+    content = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+        'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+        'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
+        'xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" '
+        'xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" office:version="1.2">'
+        "<office:automatic-styles>"
+        '<style:style style:name="Title" style:family="paragraph"><style:text-properties fo:font-size="20pt" fo:font-weight="bold"/></style:style>'
+        '<style:style style:name="Heading" style:family="paragraph"><style:paragraph-properties fo:margin-top="0.4cm"/>'
+        '<style:text-properties fo:font-size="14pt" fo:font-weight="bold" fo:color="#3a33c4"/></style:style>'
+        '<style:style style:name="Meta" style:family="paragraph"><style:text-properties fo:color="#5c6487"/></style:style>'
+        '<style:style style:name="Bold" style:family="paragraph"><style:text-properties fo:font-weight="bold"/></style:style>'
+        '<style:style style:name="Cell" style:family="table-cell"><style:table-cell-properties fo:border="0.5pt solid #dee0f1" fo:padding="0.1cm"/></style:style>'
+        "</office:automatic-styles><office:body><office:text>"
+        + "".join(body)
+        + "</office:text></office:body></office:document-content>"
+    )
+    manifest = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">'
+        f'<manifest:file-entry manifest:full-path="/" manifest:version="1.2" manifest:media-type="{ODT_MIME}"/>'
+        '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'
+        "</manifest:manifest>"
+    )
+    return _zip([("META-INF/manifest.xml", manifest), ("content.xml", content)], first_stored=("mimetype", ODT_MIME)), ODT_MIME
+
+
 # extension -> builder; later commits add the other formats
-BUILDERS = {"md": markdown, "txt": plain_text, "json": as_json, "srt": srt, "vtt": vtt, "html": share_html}
+BUILDERS = {"md": markdown, "txt": plain_text, "json": as_json, "srt": srt, "vtt": vtt, "html": share_html, "docx": docx, "odt": odt}
