@@ -12,7 +12,7 @@ export function ProgressBar({ value = 0, label = "Progress", className }) {
       aria-valuenow={v}
       className={cx("h-1.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800", className)}
     >
-      <div className="h-full rounded-full bg-primary-600 transition-[width] duration-500" style={{ width: `${v}%` }} />
+      <div className="h-full rounded-full bg-primary-600 bg-linear-to-r from-(--pm-grad-from) to-(--pm-grad-to) transition-[width] duration-500" style={{ width: `${v}%` }} />
     </div>
   );
 }

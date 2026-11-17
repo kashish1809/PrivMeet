@@ -5,7 +5,7 @@ export function EmptyState({ icon: Icon, title, children, action, className }) {
   return (
     <div className={cx("flex flex-col items-center justify-center gap-3 px-6 py-14 text-center", className)}>
       {Icon && (
-        <div className="flex size-12 items-center justify-center rounded-xl bg-primary-50 text-primary-600 dark:bg-primary-950 dark:text-primary-400">
+        <div className="flex size-12 items-center justify-center rounded-2xl bg-primary-50 text-primary-600 dark:bg-primary-950 dark:text-primary-400">
           <Icon className="size-6" aria-hidden="true" />
         </div>
       )}

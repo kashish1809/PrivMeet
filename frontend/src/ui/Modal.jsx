@@ -24,7 +24,7 @@ export function Modal({ open, onClose, title, children, footer, className }) {
       onClose={() => open && onClose()}
       onClick={(e) => e.target === ref.current && onClose()} // backdrop click
       className={cx(
-        "m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-black/50",
+        "m-auto w-[min(28rem,calc(100vw-2rem))] rounded-2xl border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-black/60 backdrop:backdrop-blur-sm",
         "dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100",
         className,
       )}

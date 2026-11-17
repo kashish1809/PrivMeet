@@ -59,7 +59,7 @@ export function Menu({ items, label = "More actions", icon = MoreVertical, align
           role="menu"
           aria-label={label}
           className={cx(
-            "absolute z-30 mt-1 min-w-44 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900",
+            "absolute z-30 mt-1 min-w-44 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900",
             align === "right" ? "right-0" : "left-0",
           )}
         >
@@ -75,7 +75,7 @@ export function Menu({ items, label = "More actions", icon = MoreVertical, align
                 item.onSelect();
               }}
               className={cx(
-                "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm",
+                "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm",
                 item.danger
                   ? "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
                   : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800",
