@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Share2, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 
 import { useFeatures } from "../api";
 import { minutes, participants as participantCount, shortDate, statusBadge } from "../format";
 import { Badge, LogoMark, Menu, cx, focusRing } from "../ui";
 import DownloadMenu from "./DownloadMenu";
+import ShareMenu from "./ShareMenu";
 
 const outline =
   "inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 " +
@@ -14,8 +15,9 @@ const outline =
  * Detail page header: the breadcrumb and Share / Download at the top, then the logo tile,
  * title, date · length · participants and the status pill.
  *
- * Share copies the page URL (R2.6 turns this into a menu with "Copy summary"). Download
- * is the DownloadMenu: Markdown always, and every other format the server's flags allow.
+ * Share is the ShareMenu: the summary as text, the link, the system share sheet and, when
+ * the server has it, the single-file share page. Download is the DownloadMenu: Markdown
+ * always, and every other format the server's flags allow.
  *
  * The title is a button: click it (or press Enter on it) to rename the meeting in place.
  * Enter or leaving the field saves, Escape throws the edit away.
@@ -26,7 +28,6 @@ const outline =
  */
 export default function MeetingHeader({ meeting, onRename, onDelete }) {
   const features = useFeatures();
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
 
   const titleId = useId();
@@ -74,32 +75,6 @@ export default function MeetingHeader({ meeting, onRename, onDelete }) {
     }
   }
 
-  async function share() {
-    setError("");
-    const url = window.location.href;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-      } else {
-        // http://127.0.0.1 is not a secure context on every browser, so clipboard may be absent.
-        const box = document.createElement("textarea");
-        box.value = url;
-        box.setAttribute("readonly", "");
-        box.style.position = "fixed";
-        box.style.opacity = "0";
-        document.body.appendChild(box);
-        box.select();
-        const ok = document.execCommand("copy");
-        box.remove();
-        if (!ok) throw new Error("copy was refused");
-      }
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2500);
-    } catch {
-      setError("Could not copy the link. Copy it from the address bar instead.");
-    }
-  }
-
   const people = participantCount(meeting);
 
   return (
@@ -123,10 +98,7 @@ export default function MeetingHeader({ meeting, onRename, onDelete }) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <button type="button" onClick={share} className={cx(outline, focusRing)}>
-            {copied ? <Check className="size-4" aria-hidden="true" /> : <Share2 className="size-4" aria-hidden="true" />}
-            {copied ? "Link copied" : "Share"}
-          </button>
+          <ShareMenu meeting={meeting} />
           <DownloadMenu meeting={meeting} features={features} />
           {onDelete && (
             <Menu
@@ -142,11 +114,6 @@ export default function MeetingHeader({ meeting, onRename, onDelete }) {
           {error}
         </p>
       )}
-      {/* Announce the copy for screen readers, since the button label changes back after 2.5 s. */}
-      <p aria-live="polite" className="sr-only">
-        {copied ? "Meeting link copied to the clipboard" : ""}
-      </p>
-
       <div className="flex items-start gap-4">
         <LogoMark size={48} />
         <div className="min-w-0 flex-1">
