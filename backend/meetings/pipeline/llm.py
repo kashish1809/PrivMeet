@@ -401,7 +401,7 @@ def _key(text):
 _FILLER = {"a", "an", "the", "and", "or", "to", "of", "for", "on", "in", "by", "with", "it", "its", "be", "new"}
 
 
-def _words(text):
+def _content_words(text):
     """Content words, lower case, ordinals as numbers ("28th" -> "28")."""
     return {re.sub(r"^(\d+)(st|nd|rd|th)$", r"\1", w) for w in re.findall(r"\w+", str(text).lower())} - _FILLER
 
@@ -422,7 +422,7 @@ def dedupe(values, key):
     kept, out = [], []
     for v in values:
         k = _key(key(v))
-        words = _words(key(v))
+        words = _content_words(key(v))
         if not k or any(k == kk or _same(words, ww) for kk, ww in kept):
             continue
         kept.append((k, words))
