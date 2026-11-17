@@ -3,6 +3,7 @@ import { Menu, X } from "lucide-react";
 
 import { IconButton, PixelScape, PixelStars } from "../ui";
 import Sidebar, { Logo } from "./Sidebar";
+import TopBar from "./TopBar";
 
 const BORDER = "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900";
 // The phone bar sits over the scenery: slightly see-through, text still on a near-solid surface.
@@ -39,6 +40,9 @@ export default function AppShell({ page, system, error, children }) {
         <header className={`sticky top-0 z-10 flex h-14 items-center gap-2 border-b px-3 sm:hidden ${GLASS}`}>
           <IconButton icon={Menu} label="Open menu" onClick={() => drawer.current?.showModal()} />
           <Logo />
+        </header>
+        <header className={`sticky top-0 z-10 hidden h-16 border-b px-4 sm:block sm:px-6 lg:px-8 ${GLASS}`}>
+          <TopBar />
         </header>
         {/* Bottom padding lets the last row scroll clear of the landscape. */}
         <main className="flex-1 px-4 pt-6 pb-[30vh] sm:px-6 lg:px-8">{children}</main>
