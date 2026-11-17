@@ -3,10 +3,14 @@
 //! It answers the same /api/ as the Django backend, so the React app works unchanged, and
 //! serves the built app itself. Configuration: config.rs (same env names as Django).
 
+mod api;
+mod audio;
 mod config;
 mod csrf;
 mod db;
 mod hw;
+mod meetings;
+mod pipeline;
 mod settings;
 mod web;
 

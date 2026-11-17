@@ -118,6 +118,35 @@ pub fn iso_from_unix(secs: i64, micros: u32) -> String {
     )
 }
 
+/// Seconds since the epoch for an ISO 8601 UTC timestamp as now_iso() writes it (also
+/// accepts "Z" and no fraction). None when it is not one.
+pub fn unix_from_iso(s: &str) -> Option<f64> {
+    let (date, rest) = s.split_once('T')?;
+    let mut d = date.split('-').map(|p| p.parse::<i64>());
+    let (y, m, day) = (d.next()?.ok()?, d.next()?.ok()?, d.next()?.ok()?);
+    let time = rest.trim_end_matches("+00:00").trim_end_matches('Z');
+    let mut t = time.split(':');
+    let (hh, mm) = (t.next()?.parse::<i64>().ok()?, t.next()?.parse::<i64>().ok()?);
+    let ss = t.next()?.parse::<f64>().ok()?;
+    Some((days_from_civil(y, m as u32, day as u32) * 86_400 + hh * 3600 + mm * 60) as f64 + ss)
+}
+
+/// (year, month, day) to days since 1970-01-01, the inverse of civil_from_days.
+pub fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let mp = if m > 2 { m - 3 } else { m + 9 } as i64;
+    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+/// Seconds since the epoch, now.
+pub fn now_unix() -> f64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0)
+}
+
 /// Days since 1970-01-01 to (year, month, day), proleptic Gregorian (Howard Hinnant's method).
 pub fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let z = z + 719_468;
@@ -170,6 +199,10 @@ mod tests {
         // Python: datetime.fromtimestamp(1794900696.818574, timezone.utc).isoformat()
         assert_eq!(iso_from_unix(1_794_900_696, 818_574), "2026-11-17T07:31:36.818574+00:00");
         assert_eq!(civil_from_days(-1), (1969, 12, 31));
+        assert_eq!(unix_from_iso("2026-11-17T07:31:36.818574+00:00"), Some(1_794_900_696.818574));
+        assert_eq!(unix_from_iso("1970-01-01T00:00:00Z"), Some(0.0));
+        assert_eq!(days_from_civil(2000, 2, 29), 11_016);
+        assert_eq!(unix_from_iso("nonsense"), None);
         assert_eq!(civil_from_days(11_016), (2000, 2, 29));
     }
 }

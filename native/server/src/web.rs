@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use tower_http::services::ServeDir;
 
 use crate::config::Config;
-use crate::{csrf, db, hw, settings};
+use crate::{api, csrf, db, hw, pipeline, settings};
 
 /// What every request can reach: configuration, the database and the hardware (read once).
 pub struct App {
@@ -30,7 +30,7 @@ pub type AppState = Arc<App>;
 
 /// What this server supports beyond the v1 API (docs/TASKS.md "Feature flags"). Only what is
 /// built: the React app shows a control only when its flag is here.
-pub const FEATURES: &[&str] = &["settings", "providers"];
+pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters"];
 
 /// Built-in note template ids (backend/meetings/note_templates.py); own ones are "u<pk>".
 pub const BUILTIN_TEMPLATES: &[&str] = &["general", "standup", "one-on-one", "client-call", "interview", "lecture"];
@@ -53,8 +53,22 @@ impl App {
             return true;
         }
         let Some(pk) = id.strip_prefix('u').and_then(|n| n.parse::<i64>().ok()) else { return false };
-        let db = self.db.lock().unwrap_or_else(|p| p.into_inner());
-        db.query_row("SELECT 1 FROM note_templates WHERE id = ?1", [pk], |_| Ok(())).is_ok()
+        self.db().query_row("SELECT 1 FROM note_templates WHERE id = ?1", [pk], |_| Ok(())).is_ok()
+    }
+
+    /// The database. One connection behind a mutex: a single-user app, and every query is short.
+    pub fn db(&self) -> std::sync::MutexGuard<'_, rusqlite::Connection> {
+        self.db.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// The template an upload gets when it names none (note_templates.default_id).
+    pub fn default_template(&self) -> String {
+        self.settings()
+            .get("default_template")
+            .and_then(Value::as_str)
+            .filter(|id| self.template_exists(id))
+            .unwrap_or("general")
+            .to_string()
     }
 
     pub fn settings(&self) -> settings::Settings {
@@ -71,9 +85,22 @@ impl App {
 
 pub fn router(app: App) -> Router {
     let state: AppState = Arc::new(app);
+    pipeline::start(state.clone());
+    let upload_limit = (state.cfg.max_upload_mb as usize + 1) * 1024 * 1024; // + multipart overhead
     let api = Router::new()
         .route("/system/", get(system))
         .route("/settings/", get(settings_get).patch(settings_patch))
+        .route(
+            "/meetings/",
+            get(api::list).post(api::create).layer(axum::extract::DefaultBodyLimit::max(upload_limit)),
+        )
+        .route("/meetings/{id}/", get(api::detail).patch(api::patch).delete(api::delete))
+        .route("/meetings/{id}/audio", get(api::audio))
+        .route("/meetings/{id}/retry", axum::routing::post(api::retry))
+        .route("/meetings/{id}/ask", axum::routing::post(api::ask))
+        .route("/questions/{id}/", get(api::question))
+        .route("/tags/", get(api::tags))
+        .route("/action-items/", get(api::action_items))
         .fallback(|| async { error(StatusCode::NOT_FOUND, "Not found.") })
         .layer(middleware::from_fn_with_state(state.clone(), csrf::protect));
     Router::new()
