@@ -37,9 +37,10 @@ export function Tabs({ id: idProp, tabs, value, onChange, label, className }) {
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(t.value)}
             className={cx(
-              "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+              "-mb-px rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+              // v2: the active tab is filled as well as underlined, like "Summary" in the mockup.
               active
-                ? "border-primary-600 text-primary-700 dark:border-primary-400 dark:text-primary-300"
+                ? "border-primary-600 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-950/60 dark:text-primary-300"
                 : "border-transparent text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200",
               focusRing,
             )}

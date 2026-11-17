@@ -2,10 +2,11 @@ import { useId } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { cx, focusRing } from "./cx";
 
+// v2: filled fields with a subtle border (the mockup's search field is #191E3A on indigo).
 const box =
-  "w-full rounded-lg border border-zinc-200 bg-white text-sm text-zinc-900 placeholder:text-zinc-400 transition-colors " +
+  "w-full rounded-lg border border-zinc-200 bg-zinc-50 text-sm text-zinc-900 placeholder:text-zinc-400 transition-colors " +
   "focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 disabled:opacity-50 " +
-  "dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500";
+  "dark:border-zinc-700/60 dark:bg-zinc-800/70 dark:text-zinc-100 dark:placeholder:text-zinc-500";
 
 /** Label + control + optional hint/error. Children get the generated id via render prop. */
 export function Field({ label, hint, error, className, children }) {

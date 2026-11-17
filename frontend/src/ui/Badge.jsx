@@ -24,7 +24,9 @@ const STATUS = {
   transcribing: ["blue", "Transcribing"],
   diarizing: ["amber", "Finding speakers"],
   summarizing: ["primary", "Summarizing"],
-  done: ["green", "Done"],
+  done: ["green", "Summary Ready"],
+  // A done meeting with no summary (has_summary === false): pass status="processed".
+  processed: ["blue", "Processed"],
   failed: ["red", "Failed"],
   recording: ["red", "Recording"],
 };

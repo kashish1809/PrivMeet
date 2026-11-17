@@ -28,6 +28,10 @@
 @layer base {
   html {
     color-scheme: light;
+    /* The hero wave and the active nav pill. Follows the accent, so the custom theme (whose
+       primary-* scale is written inline on <html>) gets a matching gradient with no extra code. */
+    --pm-grad-from: var(--color-primary-500);
+    --pm-grad-to: var(--color-primary-700);
   }
   html.dark {
     color-scheme: dark;
@@ -85,8 +89,10 @@
 /* ---- Theme presets (Settings -> Appearance): <html data-theme="indigo|teal|amber|slate|...">.
    A preset only re-maps the primary-* (accent) and zinc-* (neutral) scales, so every page
    re-colors with no edit. indigo, teal and amber are dark (useTheme adds .dark); slate is light.
-   Values from docs/TASKS.md "UI v2 spec". */
+   Values from docs/TASKS.md "UI v2 spec". The gradient runs from the accent to the
+   mockup's active-item colour; slate keeps the primary-500 to 700 default. */
 html[data-theme="indigo"] {
+  --pm-grad-from: #5b3cdd; --pm-grad-to: #4942e3;
   --color-primary-50: #eeeefd; --color-primary-100: #dfddfc; --color-primary-200: #c4c0fa;
   --color-primary-300: #afa1fc; --color-primary-400: #8579f0; --color-primary-500: #5b52e8;
   --color-primary-600: #4942e3; --color-primary-700: #3a33c4; --color-primary-800: #2e2899;
@@ -97,6 +103,7 @@ html[data-theme="indigo"] {
   --color-zinc-900: #121831; --color-zinc-950: #080c1a;
 }
 html[data-theme="teal"] {
+  --pm-grad-from: #14b8a6; --pm-grad-to: #085e56;
   --color-primary-50: #f0fdfa; --color-primary-100: #ccfbf1; --color-primary-200: #99f6e4;
   --color-primary-300: #5eead4; --color-primary-400: #2dd4bf; --color-primary-500: #14b8a6;
   --color-primary-600: #0d9488; --color-primary-700: #0f766e; --color-primary-800: #115e59;
@@ -107,6 +114,7 @@ html[data-theme="teal"] {
   --color-zinc-900: #12242d; --color-zinc-950: #0b171e;
 }
 html[data-theme="amber"] {
+  --pm-grad-from: #f59e0b; --pm-grad-to: #6c441f;
   --color-primary-50: #fffbeb; --color-primary-100: #fef3c7; --color-primary-200: #fde68a;
   --color-primary-300: #fcd34d; --color-primary-400: #fbbf24; --color-primary-500: #f59e0b;
   --color-primary-600: #d97706; --color-primary-700: #b45309; --color-primary-800: #92400e;
@@ -122,7 +130,7 @@ html[data-theme="slate"] {
   --color-primary-600: #5551db; --color-primary-700: #4541bd; --color-primary-800: #383599;
   --color-primary-900: #2f2d7a; --color-primary-950: #1c1a4a;
   --color-zinc-50: #eaecfc; --color-zinc-100: #dfe2f5; --color-zinc-200: #cdd1ea;
-  --color-zinc-300: #b2b7d6; --color-zinc-400: #8a90b3; --color-zinc-500: #666c8f;
+  --color-zinc-300: #b2b7d6; --color-zinc-400: #8a90b3; --color-zinc-500: #62688b;
   --color-zinc-600: #4c5274; --color-zinc-700: #393e5c; --color-zinc-800: #262a45;
   --color-zinc-900: #171a2e; --color-zinc-950: #0c0e1c;
 }
@@ -153,20 +161,20 @@ html[data-theme="forest"] {
 html[data-theme="dawn"] {
   --color-primary-50: #fff4ef; --color-primary-100: #ffe6db; --color-primary-200: #ffcab4;
   --color-primary-300: #ffa685; --color-primary-400: #fb7a52; --color-primary-500: #f05a33;
-  --color-primary-600: #d9431f; --color-primary-700: #b3341a; --color-primary-800: #8f2b1b;
+  --color-primary-600: #cb3d1d; --color-primary-700: #b3341a; --color-primary-800: #8f2b1b;
   --color-primary-900: #73261b; --color-primary-950: #3f100a;
   --color-zinc-50: #fdf5ee; --color-zinc-100: #f8eadf; --color-zinc-200: #efdacb;
-  --color-zinc-300: #dcc0ab; --color-zinc-400: #b89982; --color-zinc-500: #8d715d;
+  --color-zinc-300: #dcc0ab; --color-zinc-400: #b89982; --color-zinc-500: #856a57;
   --color-zinc-600: #6a5343; --color-zinc-700: #513e32; --color-zinc-800: #372921;
   --color-zinc-900: #241a15; --color-zinc-950: #140e0b;
 }
 html[data-theme="glacier"] {
   --color-primary-50: #f0f9ff; --color-primary-100: #e0f2fe; --color-primary-200: #bae6fd;
   --color-primary-300: #7dd3fc; --color-primary-400: #38bdf8; --color-primary-500: #0ea5e9;
-  --color-primary-600: #0284c7; --color-primary-700: #0369a1; --color-primary-800: #075985;
+  --color-primary-600: #0374b1; --color-primary-700: #0369a1; --color-primary-800: #075985;
   --color-primary-900: #0c4a6e; --color-primary-950: #082f49;
   --color-zinc-50: #edf5fa; --color-zinc-100: #e1edf5; --color-zinc-200: #cde0eb;
-  --color-zinc-300: #aec8d8; --color-zinc-400: #86a5b9; --color-zinc-500: #617e92;
+  --color-zinc-300: #aec8d8; --color-zinc-400: #86a5b9; --color-zinc-500: #567184;
   --color-zinc-600: #455e70; --color-zinc-700: #334756; --color-zinc-800: #22303c;
   --color-zinc-900: #151f28; --color-zinc-950: #0b131a;
 }
@@ -187,10 +195,10 @@ html[data-theme="neon"] {
 html[data-theme="meadow"] {
   --color-primary-50: #effcf1; --color-primary-100: #d9f7de; --color-primary-200: #b4eebf;
   --color-primary-300: #7fdf92; --color-primary-400: #49c766; --color-primary-500: #26a947;
-  --color-primary-600: #198b37; --color-primary-700: #176d2f; --color-primary-800: #17562a;
+  --color-primary-600: #188235; --color-primary-700: #176d2f; --color-primary-800: #17562a;
   --color-primary-900: #144725; --color-primary-950: #072812;
   --color-zinc-50: #f6f9f2; --color-zinc-100: #edf3e6; --color-zinc-200: #dde8d2;
-  --color-zinc-300: #c2d3b3; --color-zinc-400: #9db18b; --color-zinc-500: #788c67;
+  --color-zinc-300: #c2d3b3; --color-zinc-400: #9db18b; --color-zinc-500: #647656;
   --color-zinc-600: #58694b; --color-zinc-700: #435039; --color-zinc-800: #2d3727;
   --color-zinc-900: #1c2318; --color-zinc-950: #0e130c;
 }

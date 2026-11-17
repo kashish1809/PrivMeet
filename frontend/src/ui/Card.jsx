@@ -5,8 +5,8 @@ export function Card({ as: Tag = "div", className, children, ...props }) {
   return (
     <Tag
       className={cx(
-        // 88% opaque: the scenery behind the app shows through a little, text stays crisp.
-        "rounded-xl border border-zinc-200 bg-white/[0.88] shadow-sm dark:border-zinc-800 dark:bg-zinc-900/[0.88]",
+        // v2: 16 px radius, 1 px border, no shadow on dark. 88% opaque: the scenery shows through a little.
+        "rounded-2xl border border-zinc-200 bg-white/[0.88] shadow-sm dark:border-zinc-800 dark:bg-zinc-900/[0.88] dark:shadow-none",
         className,
       )}
       {...props}
