@@ -5,6 +5,7 @@
 
 mod config;
 mod csrf;
+mod settings;
 mod web;
 
 use std::net::SocketAddr;
