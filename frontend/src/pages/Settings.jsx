@@ -133,6 +133,7 @@ const PREVIEW = {
   neon: ["#0d0619", "#180f2b", "#261b40", "#FF2BC2"],
   meadow: ["#f6f9f2", "#edf3e6", "#ffffff", "#26A947"],
   nether: ["#120a0b", "#1d1213", "#2c1d1e", "#A855F7"],
+  overworld: ["#f2f7fb", "#e6eef5", "#ffffff", "#56A32F"],
 };
 
 function useSaver() {

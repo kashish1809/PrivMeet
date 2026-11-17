@@ -204,6 +204,18 @@ html[data-theme="nether"] {
   --color-zinc-900: #1d1213; --color-zinc-950: #120a0b;
 }
 
+/* ---- Overworld, Nether Gate's daylight twin: grass green on a pale sky. Light. */
+html[data-theme="overworld"] {
+  --color-primary-50: #f1f9ec; --color-primary-100: #e0f2d4; --color-primary-200: #c2e5ab;
+  --color-primary-300: #9bd378; --color-primary-400: #74bd4b; --color-primary-500: #56a32f;
+  --color-primary-600: #3b7d22; --color-primary-700: #33681f; --color-primary-800: #2b521d;
+  --color-primary-900: #25451b; --color-primary-950: #10260a;
+  --color-zinc-50: #f2f7fb; --color-zinc-100: #e6eef5; --color-zinc-200: #d3dee8;
+  --color-zinc-300: #b4c3d0; --color-zinc-400: #8c9cab; --color-zinc-500: #5c6d7e;
+  --color-zinc-600: #4d5d6d; --color-zinc-700: #3a4754; --color-zinc-800: #27313b;
+  --color-zinc-900: #182028; --color-zinc-950: #0c1117;
+}
+
 /* ---- Meadow, the special light theme: leaf green on a warm summer cream. Light. */
 html[data-theme="meadow"] {
   --color-primary-50: #effcf1; --color-primary-100: #d9f7de; --color-primary-200: #b4eebf;

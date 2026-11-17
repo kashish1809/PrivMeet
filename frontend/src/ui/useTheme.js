@@ -18,6 +18,7 @@ export const THEMES = [
   { id: "meadow", name: "Meadow (Light)", caption: "A summer afternoon: big clouds, green hills, wildflowers.", dark: false },
   // Blocky, in the style of a certain sandbox game; every block is drawn from scratch.
   { id: "nether", name: "Nether Gate", caption: "A blocky underworld: lava, glowstone and a portal to the overworld.", dark: true },
+  { id: "overworld", name: "Overworld (Light)", caption: "Its blocky daylight twin: grass hills, oaks, a village and a portal down.", dark: false },
   // Always last: the user's own theme closes the list, after every preset.
   // `dark` here is only a default: the custom theme's own mode decides (see applyTheme()).
   { id: "custom", name: "Custom", caption: "Your colours, your world. Tap the pencil to edit.", dark: true },
@@ -40,6 +41,7 @@ export const SCENES = [
   { id: "neon", name: "Neon Drive" },
   { id: "meadow", name: "Summer meadow" },
   { id: "nether", name: "Nether gate" },
+  { id: "overworld", name: "Blocky overworld" },
 ];
 /** Home's hero text. The presets always use this; the custom theme can change it. */
 export const HERO_DEFAULT = {

@@ -31,7 +31,7 @@ const SWATCHES = [
 // The colour each landscape is known for, for its little marker.
 const SCENE_DOT = {
   indigo: "#6366f1", teal: "#14b8a6", amber: "#f59e0b", slate: "#a5a4f8",
-  rose: "#f43f78", forest: "#10b981", dawn: "#f05a33", glacier: "#38bdf8", neon: "#ff2bc2", meadow: "#26a947", nether: "#a855f7",
+  rose: "#f43f78", forest: "#10b981", dawn: "#f05a33", glacier: "#38bdf8", neon: "#ff2bc2", meadow: "#26a947", nether: "#a855f7", overworld: "#56a32f",
 };
 
 const HUES = "linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)";
