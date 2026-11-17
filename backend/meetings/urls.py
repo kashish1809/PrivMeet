@@ -19,4 +19,5 @@ urlpatterns = [
     path("templates/<str:tid>/", views.template_detail),
     path("models/", views.models),
     path("models/pull", views.models_pull),
+    path("models/<path:name>", views.models_delete),
 ]

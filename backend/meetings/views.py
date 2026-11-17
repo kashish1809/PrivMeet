@@ -532,6 +532,33 @@ def models_pull(request):
     return JsonResponse({"pull": tasks.pull_state()}, status=202)
 
 
+@require_http_methods(["DELETE"])
+def models_delete(request, name):
+    """Remove an installed Ollama model. Refuses the one notes are written with."""
+    from .pipeline import llm
+
+    if not settings_store.MODEL_NAME.match(name) or len(name) > 100:
+        return bad("That is not a valid model name.")
+    prof = _profile()
+    current = prof["llm_model"]
+    # "qwen2.5:1.5b" and "qwen2.5:1.5b:latest" style names: compare without a ":latest" tail
+    same = lambda a, b: a.removesuffix(":latest") == b.removesuffix(":latest")  # noqa: E731
+    if prof.get("llm_provider", "ollama") == "ollama" and same(name, current):
+        return bad(f"{name} writes your notes now. Pick another model first.", 409)
+    req = urllib.request.Request(
+        f"{llm.ollama_url(prof).rstrip('/')}/api/delete", data=json.dumps({"model": name}).encode(),
+        headers={"Content-Type": "application/json"}, method="DELETE",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30):
+            pass
+    except urllib.error.HTTPError as e:
+        return bad("That model is not installed." if e.code == 404 else f"Ollama refused: {e.code}", 404 if e.code == 404 else 502)
+    except (urllib.error.URLError, OSError) as e:
+        return bad(f"Could not reach Ollama: {getattr(e, 'reason', e)}", 502)
+    return HttpResponse(status=204)
+
+
 TEMPLATE_LIMITS = {"name": 60, "description": 200, "instructions": 2000}
 
 
