@@ -891,27 +891,33 @@ function render(ctx, w, h, seed, opts, pal) {
       return haze ? mix(c, DARK[2], haze) : c;
     };
 
-    // the dark, a faint cyan breath low down
+    // the void of the deep dark: navy black, with darker patches drifting in it
+    const VOID = [0x05060f, 0x080a1a, 0x0b0e24, 0x0f132e].map(hex);
     for (let y = 0; y < h; y += 1) {
-      const f = (y / h) ** 1.4 * (DARK.length - 1);
-      const k = Math.floor(f);
-      for (let x = 0; x < w; x += 1) put(x, y, f - k > dither(x, y) ? DARK[Math.min(DARK.length - 1, k + 1)] : DARK[k]);
-    }
-    // the far city: deepslate towers with battlements and dark arched windows, deep in haze
-    const towers = steps(lake ? 3 : 2, lake ? 9 : 5, 0.45);
-    for (let c = 0; c < cols; c += 1) {
-      const tall = towers[c] + (c % 5 === 2 ? 2 : 0);
-      const top = floor - tall * B;
-      for (let y = top; y < floor; y += 1) {
-        for (let xx = 0; xx < B; xx += 1) {
-          const x = c * B + xx;
-          let col = brick(x, y, SLATE, 0.72);
-          // windows: narrow dark arches every other column
-          if (c % 2 === 0 && xx >= B * 0.3 && xx < B * 0.7 && (y - top) % (B * 2) > B * 0.4 && (y - top) % (B * 2) < B * 1.4) col = DARK[0];
-          put(x, y, col);
-        }
+      const f = (1 - Math.abs(y / h - 0.55) * 1.6) * (VOID.length - 1);
+      for (let x = 0; x < w; x += 1) {
+        const n = hash(x >> 3, y >> 3, 101) * 0.8;
+        const k = Math.max(0, Math.min(VOID.length - 1, Math.floor(f * 0.7 + n)));
+        put(x, y, VOID[k]);
       }
-      if (c % 2 === 0) for (let xx = 0; xx < B / 2; xx += 1) for (let yy = 1; yy <= Math.max(1, B / 3); yy += 1) put(c * B + xx, top - yy, brick(c * B + xx, top - yy, SLATE, 0.72));
+    }
+    // the cave: jagged deepslate hanging from the roof (hero) and closing in at both sides,
+    // lit faintly from below by the sculk
+    const STONE = [0x2a2c33, 0x34363e, 0x41444d, 0x575a64].map(hex);
+    if (!lake) {
+      const roof = steps(1, 3, 0.8);
+      for (let c = 0; c < cols; c += 1) {
+        const depth = roof[c] + (hash(c, 1, 102) < 0.15 ? 2 : 0);
+        for (let k = 0; k < depth; k += 1) cell(c * B, k * B - Math.round(B / 3), STONE, 103 + k, 0.25, VOID[1]);
+      }
+    }
+    const sides = Math.max(2, Math.round(cols * 0.08));
+    for (let c = 0; c < cols; c += 1) {
+      const inFromEdge = Math.min(c, cols - 2 - c);
+      if (inFromEdge >= sides) continue;
+      // a wall that rises higher the closer it is to the edge, ragged at its top
+      const tall = Math.round((h / B) * (1 - inFromEdge / sides) * (0.55 + hash(c, 2, 104) * 0.35));
+      for (let k = 0; k < tall; k += 1) cell(c * B, floor - (k + 1) * B, STONE, 105 + k, 0.35, VOID[1]);
     }
     // the eyes: a tall dark doorway in the far city, and two cyan points that blink
     const doorC = Math.round((w * (lake ? 0.16 : 0.12)) / B);
