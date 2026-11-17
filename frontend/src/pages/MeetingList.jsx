@@ -113,7 +113,7 @@ export default function MeetingList() {
             {label}
           </h2>
           {items.map((m) => (
-            <MeetingRow key={m.id} meeting={m} group={label} onDelete={setPendingDelete} />
+            <MeetingRow key={m.id} meeting={m} onDelete={setPendingDelete} />
           ))}
         </div>
       ))}
