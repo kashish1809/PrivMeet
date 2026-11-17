@@ -12,3 +12,7 @@ tempfile = "3.27.0"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "fs", "signal", "sync", "time"] }
 tower-http = { version = "0.7.1", features = ["fs"] }
 uuid = { version = "1.29.3", features = ["v4"] }
+
+[features]
+# whisper.cpp with CUDA; without it the server reports and uses the CPU only
+cuda = []
