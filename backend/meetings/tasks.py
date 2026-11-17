@@ -142,6 +142,7 @@ def pull_model(name):
     url = llm.ollama_url(hw.profile()).rstrip("/")
     _write_pull({"model": name, "percent": 0, "status": "starting"})
     percent, last = 0, 0.0
+    layers = {}  # digest -> (completed, total): Ollama reports each layer from 0 again
     try:
         req = urllib.request.Request(
             f"{url}/api/pull", data=json.dumps({"model": name, "stream": True}).encode(),
@@ -152,8 +153,12 @@ def pull_model(name):
                 d = json.loads(line or b"{}")
                 if d.get("error"):
                     raise RuntimeError(d["error"])
-                if d.get("total"):
-                    percent = min(99, round(100 * d.get("completed", 0) / d["total"]))
+                if d.get("total") and d.get("digest"):
+                    layers[d["digest"]] = (d.get("completed", 0), d["total"])
+                    # one bar for the whole model: bytes done over bytes known, never backwards
+                    done = sum(c for c, _ in layers.values())
+                    total = sum(t for _, t in layers.values())
+                    percent = max(percent, min(99, round(100 * done / total)))
                 if time.monotonic() - last >= 1:  # at most one write a second
                     _write_pull({"model": name, "percent": percent, "status": d.get("status", "pulling")})
                     last = time.monotonic()
