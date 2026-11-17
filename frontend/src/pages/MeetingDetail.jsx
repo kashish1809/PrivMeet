@@ -133,7 +133,7 @@ export default function MeetingDetail({ id }) {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div {...tabPanelProps(tabsId, tab)} className="min-w-0">
           {tab === "summary" && <SummaryPanel meeting={meeting} onSave={onSave} />}
 
