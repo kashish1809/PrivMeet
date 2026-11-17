@@ -134,6 +134,7 @@ const PREVIEW = {
   meadow: ["#f6f9f2", "#edf3e6", "#ffffff", "#26A947"],
   nether: ["#120a0b", "#1d1213", "#2c1d1e", "#A855F7"],
   overworld: ["#f2f7fb", "#e6eef5", "#ffffff", "#56A32F"],
+  ancient: ["#0b0d11", "#161a20", "#232830", "#06B6D4"],
 };
 
 function useSaver() {

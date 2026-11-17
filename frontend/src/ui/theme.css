@@ -216,6 +216,18 @@ html[data-theme="overworld"] {
   --color-zinc-900: #182028; --color-zinc-950: #0c1117;
 }
 
+/* ---- Ancient City, the deepest of the blocky worlds: sculk cyan on deepslate. Dark. */
+html[data-theme="ancient"] {
+  --color-primary-50: #ecfeff; --color-primary-100: #cffafe; --color-primary-200: #a5f3fc;
+  --color-primary-300: #67e8f9; --color-primary-400: #22d3ee; --color-primary-500: #06b6d4;
+  --color-primary-600: #0b7a95; --color-primary-700: #0e6a80; --color-primary-800: #155e75;
+  --color-primary-900: #164e63; --color-primary-950: #083344;
+  --color-zinc-50: #f4f6f8; --color-zinc-100: #e8ecf0; --color-zinc-200: #d4dae2;
+  --color-zinc-300: #b3bcc8; --color-zinc-400: #8a95a5; --color-zinc-500: #646f80;
+  --color-zinc-600: #48515f; --color-zinc-700: #343b46; --color-zinc-800: #232830;
+  --color-zinc-900: #161a20; --color-zinc-950: #0b0d11;
+}
+
 /* ---- Meadow, the special light theme: leaf green on a warm summer cream. Light. */
 html[data-theme="meadow"] {
   --color-primary-50: #effcf1; --color-primary-100: #d9f7de; --color-primary-200: #b4eebf;
