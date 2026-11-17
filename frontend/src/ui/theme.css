@@ -89,8 +89,10 @@
 /* ---- Theme presets (Settings -> Appearance): <html data-theme="indigo|teal|amber|slate|...">.
    A preset only re-maps the primary-* (accent) and zinc-* (neutral) scales, so every page
    re-colors with no edit. indigo, teal and amber are dark (useTheme adds .dark); slate is light.
-   Values from docs/TASKS.md "UI v2 spec". */
+   Values from docs/TASKS.md "UI v2 spec". The gradient runs from the accent to the
+   mockup's active-item colour; slate keeps the primary-500 to 700 default. */
 html[data-theme="indigo"] {
+  --pm-grad-from: #5b3cdd; --pm-grad-to: #4942e3;
   --color-primary-50: #eeeefd; --color-primary-100: #dfddfc; --color-primary-200: #c4c0fa;
   --color-primary-300: #afa1fc; --color-primary-400: #8579f0; --color-primary-500: #5b52e8;
   --color-primary-600: #4942e3; --color-primary-700: #3a33c4; --color-primary-800: #2e2899;
@@ -101,6 +103,7 @@ html[data-theme="indigo"] {
   --color-zinc-900: #121831; --color-zinc-950: #080c1a;
 }
 html[data-theme="teal"] {
+  --pm-grad-from: #14b8a6; --pm-grad-to: #085e56;
   --color-primary-50: #f0fdfa; --color-primary-100: #ccfbf1; --color-primary-200: #99f6e4;
   --color-primary-300: #5eead4; --color-primary-400: #2dd4bf; --color-primary-500: #14b8a6;
   --color-primary-600: #0d9488; --color-primary-700: #0f766e; --color-primary-800: #115e59;
@@ -111,6 +114,7 @@ html[data-theme="teal"] {
   --color-zinc-900: #12242d; --color-zinc-950: #0b171e;
 }
 html[data-theme="amber"] {
+  --pm-grad-from: #f59e0b; --pm-grad-to: #6c441f;
   --color-primary-50: #fffbeb; --color-primary-100: #fef3c7; --color-primary-200: #fde68a;
   --color-primary-300: #fcd34d; --color-primary-400: #fbbf24; --color-primary-500: #f59e0b;
   --color-primary-600: #d97706; --color-primary-700: #b45309; --color-primary-800: #92400e;
