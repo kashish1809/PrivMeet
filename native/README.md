@@ -35,13 +35,11 @@ and readable by both.
 | 1 | Server core: router, Host check, the React app under `/static/`, CSRF | done |
 | 2 | SQLite and FTS5 schema, settings store, hardware tiers; `/api/system/`, `/api/settings/` | done |
 | 3 | Meetings: upload, list and search, detail, edit, delete, audio with Range, retry, tags, action items, ask | done |
-| 4 | Pipeline: ffmpeg, whisper.cpp or cloud transcription, names, diarization, summary, Q&A | **code written, not yet run end to end** |
+| 4 | Pipeline: ffmpeg, whisper.cpp or cloud transcription, names, diarization, summary, Q&A | done |
 | 5 | Template, models and export endpoints, settings test, demo data, import from Django | |
 | 6 | Measure against Python, side-by-side tests, then hand-over to the desktop app | |
 
-### Where stage 4 stands (resume here)
-
-The code is ported and builds, and `cargo test` passes (25 tests). It has not processed a real meeting yet.
+### Stage 4 (done)
 
 **Modules:**
 - `providers.rs`: Ollama `/api/chat` and the cloud chat and transcription APIs.
@@ -52,26 +50,33 @@ The code is ported and builds, and `cargo test` passes (25 tests). It has not pr
 - `templates.rs`
 - `pipeline.rs`: the worker, `process_meeting`, `answer_question` and the Q&A excerpts.
 
-**Next steps, in order:**
-1. **Fix the runtime library.** `./target/release/privmeet-server` stops at start-up with
-   `error while loading shared libraries: libsherpa-onnx-c-api.so`: sherpa-rs links sherpa-onnx
-   dynamically. Try sherpa-rs's static feature, or set an rpath to the downloaded library folder.
-2. **Run the English test meeting through the Rust server.** It is
-   `scratchpad/sim/Weekly product sync.mp3` from the session that made it; regenerate it if
-   that is gone. Run it twice:
-   - cloud mode (Groq transcription and summary);
-   - whisper.cpp `base` with diarization on this machine.
+sherpa-rs links sherpa-onnx dynamically and copies `libsherpa-onnx-c-api.so` and
+`libonnxruntime.so` next to the binary; `build.rs` sets the rpath to `$ORIGIN`, so ship the
+three files together. Like Django, diarization needs `segmentation.onnx` and `embedding.onnx`
+in `MODELS_DIR/diarize` (or `DIARIZE_MODELS_DIR`); without them it is skipped.
 
-   Compare against the Python result: WER 3.8 %, every name right (17 of 17), 4 speakers,
-   3 of 5 owners right.
-3. **Measure peak memory** during a local run, then add the stage 4 flags to `FEATURES`.
-4. **Known shortcuts:**
-   - Whisper progress is reported only when transcription ends.
-   - sherpa-rs ignores `cpu_threads`.
-   - Name correction handles Latin script only.
-   - RAM detection is Linux only.
+**The English test meeting** (`Weekly product sync.mp3`, 150 s, 4 speakers, a scripted
+reference), with the speakers' names in the Settings vocabulary:
 
-`FEATURES` in `server/src/web.rs` lists only what is built, so the app hides the rest.
+| | WER | Names right | Speakers | Owners right |
+|---|---|---|---|---|
+| Python, cloud (Groq) | 3.8 % | 17 of 17 | 4 | 3 of 5 |
+| Rust, cloud (Groq) | 3.8 % | 17 of 17 | 4 | 3 of 5 |
+| Rust, whisper.cpp `base` + diarization on this machine, Groq summary | 5.8 % | 16 of 17 | 4 | 3 of 5 |
+
+Q&A answers with `[mm:ss]` citations. Peak memory of the whole server during the local run
+(whisper.cpp `base` and diarization): **515 MB**; 124 MB right after it.
+
+The pipeline adds no feature flag (Django's list has none for it); `FEATURES` in
+`server/src/web.rs` still lists only what is built, so the app hides the rest.
+
+**Known shortcuts:**
+- Whisper progress is reported only when transcription ends.
+- sherpa-rs ignores `cpu_threads`.
+- Name correction handles Latin script only.
+- RAM detection is Linux only.
+- After a local run the process stays at ~124 MB instead of returning near its idle 7 MB;
+  not looked into yet (allocator arenas or a model kept alive).
 
 ## Checked so far
 
