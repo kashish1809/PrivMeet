@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useId, useState } from "react";
-import { NotebookPen } from "lucide-react";
-
 import { deleteMeeting, getMeeting, patchMeeting, retryMeeting, useFeatures } from "../api";
 import { isProcessing } from "../format";
-import { Button, Card, ConfirmDialog, EmptyState, Tabs, tabPanelProps } from "../ui";
+import { Button, Card, ConfirmDialog, Tabs, tabPanelProps } from "../ui";
 import { navigate, useRoute } from "../App";
 import ActionItemsPanel from "../components/ActionItemsPanel";
 import MeetingHeader from "../components/MeetingHeader";
+import NotesTab from "../components/NotesTab";
 import ParticipantsCard from "../components/ParticipantsCard";
 import ProcessingStatus from "../components/ProcessingStatus";
 import SummaryPanel from "../components/SummaryPanel";
@@ -27,7 +26,7 @@ const TABS = [
  * action items and the participants in the right column.
  *
  * The page polls every 2 s while the pipeline works. `?t=<seconds>` opens the Transcript
- * tab and seeks there. R2.4 fills in the Notes tab.
+ * tab and seeks there.
  */
 export default function MeetingDetail({ id }) {
   const { query } = useRoute();
@@ -146,13 +145,7 @@ export default function MeetingDetail({ id }) {
 
           {tab === "actions" && <ActionItemsPanel meeting={meeting} onSave={onSave} />}
 
-          {tab === "notes" && (
-            <Card>
-              <EmptyState icon={NotebookPen} title="Notes">
-                Your own notes and tags for this meeting arrive with the next update (R2.4).
-              </EmptyState>
-            </Card>
-          )}
+          {tab === "notes" && <NotesTab meeting={meeting} onSave={onSave} features={features} />}
         </div>
 
         <aside className="flex flex-col gap-4">
