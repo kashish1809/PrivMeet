@@ -11,7 +11,7 @@ from celery import shared_task
 from celery.signals import worker_ready
 from django.conf import settings
 
-from . import hw
+from . import hw, note_templates
 from .models import Meeting, Question, Segment
 from .pipeline import audio, diarize, llm
 from .pipeline.transcribe import transcribe
@@ -81,6 +81,7 @@ def process_meeting(meeting_id):
             m.transcript(), prof,
             on_progress=lambda f: m.set_status(Meeting.Status.SUMMARIZING, 80 + int(15 * f)),
             language=m.language,
+            focus=note_templates.instructions(m.template),
         )
         for k, v in notes.items():
             setattr(m, k, v)

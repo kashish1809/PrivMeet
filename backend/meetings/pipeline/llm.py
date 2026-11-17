@@ -86,6 +86,12 @@ REDUCE_SYSTEM = (
     "Never copy names, tasks or dates from this example."
 )
 REDUCE_PROMPT = ChatPromptTemplate.from_messages([("system", REDUCE_SYSTEM), ("human", "{text}")])
+# The same reduce call with a note template's focus added (R1.9). The focus is a prompt
+# variable, not pasted into the template, so braces in a user's instructions are safe. The
+# JSON shape asked for does not change.
+REDUCE_FOCUS_PROMPT = ChatPromptTemplate.from_messages(
+    [("system", REDUCE_SYSTEM + "\nWhat these notes should focus on: {focus}"), ("human", "{text}")]
+)
 
 QA_SYSTEM = (
     "You answer questions about one meeting using only the transcript excerpts given. "
@@ -494,11 +500,12 @@ def verify(summary, transcript, prof):
     return summary
 
 
-def summarize(transcript, prof, on_progress=lambda frac: None, language=""):
+def summarize(transcript, prof, on_progress=lambda frac: None, language="", focus=""):
     if not transcript.strip():
         return parse_notes("{}")
     chain = MAP_PROMPT | chat(prof, num_predict=MAP_REPLY_TOKENS) | StrOutputParser()
-    reduce_room = input_chars(prof, REDUCE_REPLY_TOKENS)
+    focus = (focus or "").strip()
+    reduce_room = input_chars(prof, REDUCE_REPLY_TOKENS) - len(focus)  # the focus shares the prompt
     notes, found = transcript, None
     # The first map round always runs, even when the transcript fits the reduce call:
     # asked for JSON straight away qwen2.5:3b listed one task of a stand-up's four, while
@@ -523,8 +530,9 @@ def summarize(transcript, prof, on_progress=lambda frac: None, language=""):
         # meeting) rather than letting Ollama drop the start without telling anyone.
         log.warning("notes still %d chars after %d rounds, trimming to %d", len(notes), MAX_ROUNDS, reduce_room)
         notes = trim_to(notes, reduce_room)
-    raw = (REDUCE_PROMPT | chat(prof, json_mode=True, num_predict=REDUCE_REPLY_TOKENS) | StrOutputParser()).invoke(
-        {"text": notes}
+    prompt = REDUCE_FOCUS_PROMPT if focus else REDUCE_PROMPT
+    raw = (prompt | chat(prof, json_mode=True, num_predict=REDUCE_REPLY_TOKENS) | StrOutputParser()).invoke(
+        {"text": notes, **({"focus": focus} if focus else {})}
     )
     result = parse_notes(raw)
     if found is not None:
