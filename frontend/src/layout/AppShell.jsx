@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import { Menu, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import { IconButton, PixelScape, PixelStars } from "../ui";
-import Sidebar, { Logo } from "./Sidebar";
+import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 
 const BORDER = "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900";
@@ -37,12 +37,9 @@ export default function AppShell({ page, system, error, children }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className={`sticky top-0 z-10 flex h-14 items-center gap-2 border-b px-3 sm:hidden ${GLASS}`}>
-          <IconButton icon={Menu} label="Open menu" onClick={() => drawer.current?.showModal()} />
-          <Logo />
-        </header>
-        <header className={`sticky top-0 z-10 hidden h-16 border-b px-4 sm:block sm:px-6 lg:px-8 ${GLASS}`}>
-          <TopBar system={system} error={error} />
+        {/* One bar at every width: on phones it also carries the drawer button and the logo. */}
+        <header className={`sticky top-0 z-10 h-14 border-b px-3 sm:h-16 sm:px-6 lg:px-8 ${GLASS}`}>
+          <TopBar system={system} error={error} onMenu={() => drawer.current?.showModal()} />
         </header>
         {/* Bottom padding lets the last row scroll clear of the landscape. */}
         <main className="flex-1 px-4 pt-6 pb-[30vh] sm:px-6 lg:px-8">{children}</main>

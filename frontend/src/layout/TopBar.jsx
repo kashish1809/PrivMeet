@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Settings, User } from "lucide-react";
+import { Menu, Search, Settings, User, X } from "lucide-react";
 
 import { api } from "../api";
 import { navigate } from "../App";
-import { SearchInput, StatusDot, cx, focusRing } from "../ui";
+import { IconButton, SearchInput, StatusDot, cx, focusRing } from "../ui";
+import { useRecording } from "./recording";
+import { Logo } from "./Sidebar";
 
 const pillBase =
   "inline-flex h-9 shrink-0 items-center gap-2 rounded-full border border-zinc-200 bg-white/70 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700/60 dark:bg-zinc-800/70 dark:text-zinc-200 dark:hover:bg-zinc-800";
@@ -60,10 +62,19 @@ function UserAvatar() {
   );
 }
 
-/** The bar above every page: search, the AI pill, settings and the user's avatar. */
-export default function TopBar({ system, error }) {
+/** The bar above every page: search, the AI pill, settings and the user's avatar. On phones
+ *  (< 640 px) it is also the menu bar: the drawer button and the logo, with search behind an
+ *  icon that opens the field over the bar. */
+export default function TopBar({ system, error, onMenu }) {
   const [q, setQ] = useState("");
+  const [phoneSearch, setPhoneSearch] = useState(false);
   const input = useRef(null);
+  const recording = useRecording();
+
+  // Opening the phone field mounts nothing new (it is only shown), so focus it after paint.
+  useEffect(() => {
+    if (phoneSearch) input.current?.focus();
+  }, [phoneSearch]);
 
   // Ctrl/Cmd+K focuses search from anywhere, even inside a field: the top bar owns this key
   // (R2.13's shortcuts leave it alone).
@@ -71,6 +82,7 @@ export default function TopBar({ system, error }) {
     const onKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
+        setPhoneSearch(true);
         input.current?.focus();
         input.current?.select();
       }
@@ -84,11 +96,27 @@ export default function TopBar({ system, error }) {
     const text = q.trim();
     // The Meetings page reads q from the route (R2.2), so search works from any page.
     navigate(text ? `/meetings?q=${encodeURIComponent(text)}` : "/meetings");
+    setPhoneSearch(false);
   }
 
   return (
-    <div className="flex h-full items-center gap-3">
-      <form role="search" onSubmit={onSubmit} className="w-full max-w-md">
+    <div className="relative flex h-full items-center gap-2 sm:gap-3">
+      <IconButton icon={Menu} label="Open menu" onClick={onMenu} className="sm:hidden" />
+      <span className="sm:hidden">
+        <Logo />
+      </span>
+      <form
+        role="search"
+        onSubmit={onSubmit}
+        className={cx(
+          "w-full max-w-md",
+          // Phones: hidden behind the search icon, then laid over the whole bar.
+          phoneSearch
+            ? "max-sm:absolute max-sm:inset-0 max-sm:z-10 max-sm:flex max-sm:max-w-none max-sm:items-center max-sm:gap-2 max-sm:bg-zinc-50 max-sm:dark:bg-zinc-950"
+            : "max-sm:hidden",
+        )}
+        onKeyDown={(e) => e.key === "Escape" && setPhoneSearch(false)}
+      >
         <SearchInput
           ref={input}
           label="Search meetings and notes"
@@ -96,15 +124,30 @@ export default function TopBar({ system, error }) {
           placeholder="Search meetings, notes..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          className="max-sm:flex-1"
         />
+        <IconButton icon={X} label="Close search" onClick={() => setPhoneSearch(false)} className="sm:hidden" />
       </form>
       <div className="ml-auto flex items-center gap-2">
+        <IconButton icon={Search} label="Search" onClick={() => setPhoneSearch(true)} className="sm:hidden" />
+        {recording && (
+          <a
+            href="#/record"
+            className={cx(
+              "inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-red-600 px-3 text-xs font-semibold text-white hover:bg-red-700",
+              focusRing,
+            )}
+          >
+            <StatusDot tone="red" pulse label="Recording now" className="[&>span]:bg-white" />
+            <span className="max-sm:sr-only">Recording</span>
+          </a>
+        )}
         <AIPill system={system} error={error} />
         <a
           href="#/settings"
           aria-label="Settings"
           title="Settings"
-          className={cx(pillBase, "w-9 justify-center px-0", focusRing)}
+          className={cx(pillBase, "w-9 justify-center px-0 max-sm:hidden", focusRing)}
         >
           <Settings className="size-4" aria-hidden="true" />
         </a>
