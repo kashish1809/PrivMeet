@@ -217,3 +217,38 @@ def profile():
     from . import settings_store
 
     return apply_overrides(base_profile(), settings_store.load())
+
+
+# ---- Models page (R1.11): the Whisper sizes offered, with the RAM each needs on the CPU
+# (int8, GB, measured or from faster-whisper's docs) and the download each is. Recommended
+# names always come from TIERS above; nothing else names a model.
+WHISPER_SIZES = [
+    {"name": "tiny", "ram_gb": 0.5, "download_mb": 75},
+    {"name": "base", "ram_gb": 0.7, "download_mb": 145},
+    {"name": "small", "ram_gb": 1.2, "download_mb": 485},
+    {"name": "medium", "ram_gb": 2.5, "download_mb": 1530},
+    {"name": "large-v3-turbo", "ram_gb": 2.2, "download_mb": 1620},
+    {"name": "large-v3", "ram_gb": 3.8, "download_mb": 3090},
+]
+
+
+def whisper_downloaded(name):
+    """Whether faster-whisper already has this size in MODELS_DIR/whisper (the Hugging Face
+    cache layout it downloads into: models--<org>--<repo>/snapshots/<rev>/model.bin)."""
+    from django.conf import settings
+
+    try:
+        from faster_whisper.utils import _MODELS
+    except ImportError:
+        return False
+    repo = _MODELS.get(name)
+    if not repo:
+        return False
+    snaps = settings.MODELS_DIR / "whisper" / f"models--{repo.replace('/', '--')}" / "snapshots"
+    return any((p / "model.bin").is_file() for p in snaps.glob("*")) if snaps.is_dir() else False
+
+
+def recommended(tier):
+    """The tier's own Whisper and Ollama model: what the Models page calls recommended."""
+    t = TIERS.get(tier, TIERS["low"])
+    return {"whisper_model": t["whisper_model"], "llm_model": t["llm_model"]}
