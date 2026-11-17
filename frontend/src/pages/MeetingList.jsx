@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Plus, SearchX } from "lucide-react";
 
 import { deleteMeeting, listMeetings } from "../api";
+import { useRoute } from "../App";
 import MeetingRow from "../components/MeetingRow";
 import { groupByDay } from "../components/meetingGroups";
 import { isProcessing } from "../format";
@@ -12,19 +13,35 @@ const POLL_MS = 2000;
 /**
  * "Meetings" screen: search box, rows grouped by day, status badge with progress, kebab
  * actions and a 2 s poll while anything is still processing.
+ *
+ * The search lives in the URL (`#/meetings?q=budget`), because the top bar's field (R1.5)
+ * navigates here with `q` instead of reaching into this page: a search from any screen lands
+ * here with the box already filled in.
  */
 export default function MeetingList() {
+  const { query: route } = useRoute();
+  const urlQuery = route.get("q") || "";
+
   const [meetings, setMeetings] = useState(null);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [search, setSearch] = useState(""); // debounced query actually sent to the API
+  const [text, setText] = useState(urlQuery);
+  const [search, setSearch] = useState(urlQuery.trim()); // debounced query actually sent to the API
   const [pendingDelete, setPendingDelete] = useState(null);
+
+  // The URL is the source of truth when it changes from outside this page (the top bar, a
+  // bookmark, back/forward). Typing here changes the box first and the URL second.
+  const lastUrl = useRef(urlQuery);
+  useEffect(() => {
+    if (urlQuery === lastUrl.current) return;
+    lastUrl.current = urlQuery;
+    setText(urlQuery);
+  }, [urlQuery]);
 
   // 300 ms debounce: one request per pause, not one per key press.
   useEffect(() => {
-    const timer = setTimeout(() => setSearch(query.trim()), 300);
+    const timer = setTimeout(() => setSearch(text.trim()), 300);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [text]);
 
   const load = useCallback(
     () =>
@@ -72,8 +89,8 @@ export default function MeetingList() {
       <SearchInput
         label="Search meetings"
         placeholder="Search meetings and transcripts…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
         className="w-full max-w-md"
       />
 
