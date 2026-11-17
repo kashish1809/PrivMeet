@@ -15,7 +15,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from . import hw, note_templates, settings_store, tasks
+from . import export, hw, note_templates, settings_store, tasks
 from .models import PROCESSING, Meeting, NoteTemplate, Question, Segment, mmss
 from .pipeline import audio
 from .search import search_segments
@@ -330,20 +330,15 @@ def question_detail(request, pk):
 
 
 @require_GET
-def meeting_export(request, pk):
+def meeting_export(request, pk, fmt="md"):
+    """GET /api/meetings/<id>/export.<fmt>: the meeting as a download (export.py)."""
     m = get_object_or_404(Meeting, pk=pk)
-    lines = [f"# {m.title}", "", f"_{m.created:%Y-%m-%d %H:%M} · {mmss(m.duration)}_", "", "## Summary", "", m.summary]
-    if m.decisions:
-        lines += ["", "## Decisions", ""] + [f"- {d}" for d in m.decisions]
-    if m.action_items:
-        lines += ["", "## Action items", ""]
-        for i in m.action_items:
-            extra = ", ".join(x for x in (i.get("owner"), i.get("due") and f"due {i['due']}") if x)
-            lines.append(f"- [{'x' if i.get('done') else ' '}] {i.get('task')}{f' ({extra})' if extra else ''}")
-    lines += ["", "## Transcript", "", m.transcript(timestamps=True).replace("\n", "  \n")]
-    resp = HttpResponse("\n".join(lines) + "\n", content_type="text/markdown; charset=utf-8")
-    safe = re.sub(r"[^\w\- ]", "", m.title).strip() or "meeting"
-    resp["Content-Disposition"] = f'attachment; filename="{safe}.md"'
+    build = export.BUILDERS.get(fmt)
+    if build is None:
+        raise Http404
+    body, ctype = build(m)
+    resp = HttpResponse(body, content_type=ctype)
+    resp["Content-Disposition"] = f'attachment; filename="{export.filename(m, fmt)}"'
     return resp
 
 
