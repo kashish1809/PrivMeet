@@ -337,6 +337,11 @@ def ground(notes, transcript, language=""):
         log.info("dropping %d action_items: nobody in this recording took on work",
                  len(notes["action_items"]))
         notes["action_items"] = []
+    if not (language or "en").lower().startswith("en"):
+        # The notes come back in English while the transcript is in Hindi, Kannada, Tamil...:
+        # every word check below would find nothing in common and drop every key point,
+        # action item, owner and due date. Like _has_commitment, other languages are not tested.
+        return notes
     for kind, key in (("decisions", str), ("action_items", lambda i: i["task"])):
         kept = [v for v in notes[kind] if _on_topic(key(v), source)]
         if len(kept) < len(notes[kind]):
