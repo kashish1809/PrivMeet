@@ -49,7 +49,16 @@ function TemplateCard({ t, onEdit, onDelete, onDefault }) {
           </div>
         </div>
       </div>
-      <p className="flex-1 text-sm text-zinc-600 dark:text-zinc-400">{t.description || t.instructions}</p>
+      <p className="text-sm text-zinc-600 dark:text-zinc-400">{t.description || t.instructions}</p>
+      {/* the exact words the summary prompt gets, so nobody has to guess what a template does */}
+      <details className="flex-1 text-sm">
+        <summary className="w-fit cursor-pointer rounded-md text-primary-600 select-none hover:underline focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:outline-none dark:text-primary-400">
+          What it asks the AI
+        </summary>
+        <p className="mt-2 rounded-lg bg-zinc-100 p-3 text-xs whitespace-pre-line text-zinc-700 dark:bg-zinc-800/70 dark:text-zinc-300">
+          {t.instructions}
+        </p>
+      </details>
       <div className="flex flex-wrap items-center gap-2">
         {/* the next upload from New Meeting starts with this template picked */}
         <Button size="sm" icon={ArrowRight} onClick={() => navigate(`/new?template=${encodeURIComponent(t.id)}`)}>
