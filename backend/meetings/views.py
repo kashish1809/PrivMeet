@@ -514,6 +514,24 @@ def models(request):
     })
 
 
+@require_POST
+def models_pull(request):
+    """Start downloading an Ollama model: {model}. One pull at a time (409 otherwise)."""
+    try:
+        name = _body(request).get("model", "")
+    except (Invalid, AttributeError):
+        return bad("Expected a JSON object with a model name.")
+    if not isinstance(name, str) or not settings_store.MODEL_NAME.match(name.strip()) or len(name) > 100:
+        return bad("That is not a valid model name.")
+    state = tasks.pull_state()
+    if state and state["running"]:
+        return bad(f"Already downloading {state['model']}. Wait for it to finish.", 409)
+    # shortcut: with CELERY_EAGER the pull runs inside this request and it returns when done;
+    # the page still works (it polls from another request). A real worker returns at once.
+    tasks.pull_model.delay(name.strip())
+    return JsonResponse({"pull": tasks.pull_state()}, status=202)
+
+
 TEMPLATE_LIMITS = {"name": 60, "description": 200, "instructions": 2000}
 
 
