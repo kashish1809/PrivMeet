@@ -28,6 +28,10 @@
 @layer base {
   html {
     color-scheme: light;
+    /* The hero wave and the active nav pill. Follows the accent, so the custom theme (whose
+       primary-* scale is written inline on <html>) gets a matching gradient with no extra code. */
+    --pm-grad-from: var(--color-primary-500);
+    --pm-grad-to: var(--color-primary-700);
   }
   html.dark {
     color-scheme: dark;
