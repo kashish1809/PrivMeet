@@ -878,7 +878,9 @@ function render(ctx, w, h, seed, opts, pal) {
     const CYAN = hex(0x22e3ee);
     // smaller blocks in the footer than the other worlds, so the whole gate, horns too, fits
     // in the strip below the page's cards
-    const B = Math.max(4, Math.min(8, Math.round(h / (lake ? 19 : 9))));
+    // smaller blocks than the other worlds: the centrepiece is 17 x 9 blocks and must fit whole
+    // in the hero and in the strip of footer below the page's cards
+    const B = Math.max(3, Math.min(8, Math.round(h / (lake ? 23 : 11))));
     const cols = Math.ceil(w / B) + 1;
     const { cell, steps, glowAt } = blockKit(B, cols, DARK[2]);
     const floor = h - B * (lake ? 2 : 1); // top of the floor tiles
@@ -931,10 +933,10 @@ function render(ctx, w, h, seed, opts, pal) {
 
     // pillars in the middle distance, each with a soul lantern on a chain
     // the gate is 9 blocks wide: keep it whole inside the scene
-    const gateCol = Math.min(Math.floor(w / B) - 5, Math.max(5, Math.round((w * (lake ? 0.72 : opts.orbX)) / B)));
+    const gateCol = Math.min(Math.floor(w / B) - 9, Math.max(9, Math.round((w * (lake ? 0.7 : opts.orbX)) / B)));
     const pillarEvery = lake ? 9 : 7;
     for (let c = 2; c < cols; c += pillarEvery) {
-      if (Math.abs(c - gateCol) < 6) continue;
+      if (Math.abs(c - gateCol) < 11) continue;
       const tall = lake ? 6 : 4;
       for (let k = 0; k < tall; k += 1) {
         for (let yy = 0; yy < B; yy += 1) for (let xx = 0; xx < B; xx += 1) put(c * B + xx, floor - (k + 1) * B + yy, brick(c * B + xx, floor - (k + 1) * B + yy, SLATE, 0.25));
@@ -951,35 +953,54 @@ function render(ctx, w, h, seed, opts, pal) {
       ov.motes.push({ x: lx, y: ly - 1, tone: "soul", delay: (rand() * 4).toFixed(2) });
     }
 
-    // the gate: the city's iconic centrepiece, a giant frame of reinforced deepslate with two
-    // horns curving up from its top and wide stepped legs, round a black void. Drawn from a
-    // block mask: # is reinforced deepslate, . is the void.
+    // the centrepiece: a vast rounded mass of deepslate bricks with two lobes rising from its
+    // top, and set across its middle a wide frame of reinforced deepslate round a dark
+    // window. Drawn from a block mask: # deepslate brick, R reinforced rim, . the window.
     const MASK = [
-      "#       #",
-      "##     ##",
-      " ####### ",
-      " #.....# ",
-      "##.....##",
-      "#.......#",
-      "#.......#",
+      "  ####     ####  ",
+      " ######   ###### ",
+      " ############### ",
+      "##RRRRRRRRRRRRR##",
+      "##R...........R##",
+      "##R...........R##",
+      "##RRRRRRRRRRRRR##",
+      " ############### ",
+      "  #############  ",
     ];
     const gw = MASK[0].length;
     const gh = MASK.length;
     const gx0 = (gateCol - Math.floor(gw / 2)) * B;
     const gy0 = floor - gh * B;
-    glowAt(gx0 + (gw * B) / 2, gy0 + (gh * B) * 0.6, B * 5.5, [20, 120, 140], 0.3);
+    glowAt(gx0 + (gw * B) / 2, gy0 + gh * B * 0.45, B * 7, [30, 90, 120], 0.25);
+    const RIM = [0x4a5059, 0x5a616b, 0x6c737d, 0x8e96a0].map(hex);
     MASK.forEach((row, by) => {
       [...row].forEach((ch, bx) => {
         const x0 = gx0 + bx * B;
         const y0 = gy0 + by * B;
-        if (ch === "#") cell(x0, y0, REIN, 37 + bx + by * 3);
-        else if (ch === ".") for (let yy = 0; yy < B; yy += 1) for (let xx = 0; xx < B; xx += 1) put(x0 + xx, y0 + yy, [1, 2, 4]);
+        if (ch === "#") {
+          for (let yy = 0; yy < B; yy += 1) for (let xx = 0; xx < B; xx += 1) {
+            // shade the mass round: darker toward its sides and bottom
+            const side = Math.abs(bx + xx / B - gw / 2) / (gw / 2);
+            put(x0 + xx, y0 + yy, mix(brick(x0 + xx, y0 + yy, SLATE), VOID[0], 0.04 + side * 0.3 + (by / gh) * 0.12));
+          }
+        } else if (ch === "R") {
+          cell(x0, y0, RIM, 37 + bx + by * 3);
+          // the rim's studs: a dotted light line along its inner edge
+          for (let xx = 1; xx < B; xx += 2) {
+            if (by === 3) put(x0 + xx, y0 + B - 2, [168, 178, 190]);
+            if (by === 6) put(x0 + xx, y0 + 1, [168, 178, 190]);
+          }
+        } else if (ch === ".") {
+          for (let yy = 0; yy < B; yy += 1) for (let xx = 0; xx < B; xx += 1) {
+            // through the window: the far cave, a dim blue haze with darker shapes in it
+            const u = (bx - 3) * B + xx;
+            const v = (by - 4) * B + yy;
+            const far = hash(u >> 2, v >> 2, 106) < 0.35 && v > B * 0.6;
+            put(x0 + xx, y0 + yy, far ? [10, 14, 30] : mix([20, 30, 58], [8, 12, 26], v / (2 * B)));
+          }
+        }
       });
     });
-    for (let i = 0; i < (lake ? 7 : 5); i += 1) {
-      ov.motes.push({ x: gx0 + B * 2 + Math.floor(rand() * (gw - 4) * B), y: gy0 + B * 4 + Math.floor(rand() * (gh - 4) * B), tone: "soul", delay: (rand() * 4).toFixed(2) });
-    }
-
     // the floor: deepslate tiles, with sculk spreading over patches of it
     const sculkAt = (c) => hash(Math.floor(c / 3), 0, 77) > 0.45 || Math.abs(c - gateCol) <= Math.floor(gw / 2) + 1;
     for (let c = 0; c < cols; c += 1) {
