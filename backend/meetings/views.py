@@ -26,7 +26,7 @@ ALLOWED_EXT = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac"
 
 # What this server supports beyond the v1 API; GET /api/system/ returns it so the frontend
 # shows a control only when its endpoint exists (docs/TASKS.md "Feature flags").
-FEATURES = ["settings", "notes", "tags", "filters", "providers", "templates", "models"]
+FEATURES = ["settings", "notes", "tags", "filters", "providers", "templates", "models", "exports"]
 
 MAX_TAGS, MAX_TAG_LEN, MAX_NOTES = 10, 30, 20000
 # ?status= also takes the list page's filter names, so the UI does not have to know the stages.
