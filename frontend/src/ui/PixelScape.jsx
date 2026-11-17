@@ -551,6 +551,77 @@ function render(ctx, w, h, seed, opts, pal) {
     return ov;
   }
 
+  // ---- Nether Gate: a blocky underworld in the style of a certain sandbox game, every block
+  // drawn here from noise (no game textures). A cave ceiling of netherrack, far cliffs in the
+  // red haze, a lava sea and stepped shores, and on the main island an obsidian portal.
+  if (pal.biome === "nether") {
+    const ov = { lanterns: [], blinks: [], sparks: [], beams: [], fires: [], kites: [], planes: [], motes: [] };
+    const hex = (v) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    const RACK = [0x4f1a1c, 0x6b2426, 0x7d2e2c, 0x93413a].map(hex);
+    const LAVA = [0xa61c0a, 0xd9420e, 0xff7a1a, 0xffae2e, 0xffe27a].map(hex);
+    const FOG = [0x120406, 0x24090b, 0x3d0f0f, 0x5e1a10, 0x8a2e12].map(hex);
+    // One block is B art pixels: about twelve blocks fill the footer, nine the hero card.
+    const B = Math.max(4, Math.min(8, Math.round(h / (lake ? 12 : 9))));
+    const cols = Math.ceil(w / B) + 1;
+    const lavaTop = h - Math.round(B * (lake ? 2.6 : 1.5));
+
+    /** One textured block with its top-left at (x0, y0): per-pixel noise over the tones,
+     *  a lit top row, a shaded bottom row and right column, then haze toward `fog`. */
+    const cell = (x0, y0, tones, salt, haze = 0, fog = FOG[2]) => {
+      for (let yy = 0; yy < B; yy += 1) {
+        for (let xx = 0; xx < B; xx += 1) {
+          const x = x0 + xx;
+          const y = y0 + yy;
+          const n = hash(x >> (B > 6 ? 1 : 0), y >> (B > 6 ? 1 : 0), salt);
+          let c = tones[Math.min(tones.length - 1, Math.floor(n * n * tones.length * 1.15))];
+          if (yy === 0) c = mix(c, tones[tones.length - 1], 0.45);
+          else if (yy === B - 1 || xx === B - 1) c = mix(c, BLACK, 0.28);
+          put(x, y, haze ? mix(c, fog, haze) : c);
+        }
+      }
+    };
+    /** Stepped heights in blocks per column, from fractal noise. */
+    const steps = (lo, hi, rough) => fractal(rand, cols, rough).map((v) => Math.round(lo + v * (hi - lo)));
+
+    // the cave air: a red haze, darkest at the roof, warming toward the lava's glow
+    for (let y = 0; y < h; y += 1) {
+      const f = (y / h) * (FOG.length - 1);
+      const k = Math.floor(f);
+      for (let x = 0; x < w; x += 1) put(x, y, f - k > dither(x, y) ? FOG[Math.min(FOG.length - 1, k + 1)] : FOG[k]);
+    }
+    // far cliffs, deep in the haze; heights below zero leave gaps of open lava
+    const far = steps(lake ? -4 : -2, lake ? 7 : 5, 0.6);
+    for (let c = 0; c < cols; c += 1) {
+      for (let k = 0; k < far[c]; k += 1) cell(c * B, lavaTop - (k + 1) * B, RACK, 7, 0.72, FOG[2]);
+    }
+    // the ceiling: netherrack hanging in uneven steps, with the odd long stalactite. Only in
+    // the hero: the footer fades out at the top, where a roof would be lost.
+    const roof = steps(1, 2, 0.8);
+    for (let c = 0; c < (lake ? 0 : cols); c += 1) {
+      const depth = roof[c] + (rand() < 0.12 ? 2 : 0);
+      for (let k = 0; k < depth; k += 1) cell(c * B, k * B - Math.round(B / 2), RACK, 3, 0.15, FOG[0]);
+    }
+    // the lava sea: hot noise in block-sized swirls, brightest along the surface
+    for (let y = lavaTop; y < h; y += 1) {
+      const depth = (y - lavaTop) / Math.max(1, h - lavaTop);
+      for (let x = 0; x < w; x += 1) {
+        const n = hash(Math.floor(x / 2), Math.floor((y - lavaTop) / 2), 51) * 0.6 + hash(Math.floor(x / B), Math.floor(y / B), 52) * 0.4;
+        const k = Math.max(0, Math.min(LAVA.length - 1, Math.floor((n * 0.9 + (1 - depth) * 0.35) * LAVA.length) - 1));
+        put(x, y, LAVA[k]);
+      }
+    }
+    for (let x = 0; x < w; x += 1) put(x, lavaTop, LAVA[4]);
+    // near shores: stepped netherrack islands rising out of the lava; the main island is flat
+    // where the portal will stand
+    const portalCol = Math.round((w * (lake ? 0.68 : opts.orbX)) / B);
+    const near = steps(-2, lake ? 4 : 2, 0.65).map((v, c) => (Math.abs(c - portalCol) <= 4 ? (lake ? 3 : 2) : v));
+    for (let c = 0; c < cols; c += 1) {
+      for (let k = 0; k < near[c]; k += 1) cell(c * B, lavaTop - (k + 1) * B + B, RACK, 11 + k);
+    }
+    ctx.putImageData(img, 0, 0);
+    return ov;
+  }
+
   // ---- Neon Drive, the special world. Its own scene, not a recolour of the lake: a synthwave
   // night with a striped sun sinking behind neon mountains, a glowing grid running to the
   // horizon and faint CRT scanlines over everything. (Palms were tried and read as burnt
