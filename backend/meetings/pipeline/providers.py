@@ -13,8 +13,9 @@ import json
 import urllib.error
 import urllib.request
 
-from langchain_core.messages import AIMessage
-from langchain_core.runnables import RunnableLambda
+# LangChain is imported in chat(), the one place that needs it: hw.apply_overrides() reaches
+# this module (through transcribe.uses_cloud) on every /api/system/ call, and a module-level
+# import loaded LangChain into the idle web process (R1.21).
 
 # Where each provider lives; "custom" takes api_base_url from Settings.
 BASE_URLS = {
@@ -178,6 +179,9 @@ def complete(prof, messages, json_mode=False, max_tokens=None, temperature=0.1):
 
 def chat(prof, json_mode=False, num_predict=None):
     """A Runnable with the same role as ChatOllama in llm.chat()."""
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
     return RunnableLambda(
         lambda prompt: AIMessage(content=complete(prof, prompt.to_messages(), json_mode, num_predict))
     )

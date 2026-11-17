@@ -73,6 +73,11 @@ def gpu_vram_gb():
 
 
 def has_cuda():
+    import shutil
+
+    # No NVIDIA driver, no CUDA: skip importing ctranslate2 (~10 MB) just to be told so.
+    if shutil.which("nvidia-smi") is None:
+        return False
     try:
         import ctranslate2
 
@@ -237,15 +242,17 @@ def whisper_downloaded(name):
     cache layout it downloads into: models--<org>--<repo>/snapshots/<rev>/model.bin)."""
     from django.conf import settings
 
-    try:
-        from faster_whisper.utils import _MODELS
-    except ImportError:
+    # By folder name, not through faster_whisper's own table: importing faster_whisper loads
+    # numpy, ctranslate2 and PyAV, 34 MB in the web process for one lookup (R1.21). Its repos
+    # are named "<org>--faster-whisper-<size>", whichever org publishes them.
+    root = settings.MODELS_DIR / "whisper"
+    if not root.is_dir():
         return False
-    repo = _MODELS.get(name)
-    if not repo:
-        return False
-    snaps = settings.MODELS_DIR / "whisper" / f"models--{repo.replace('/', '--')}" / "snapshots"
-    return any((p / "model.bin").is_file() for p in snaps.glob("*")) if snaps.is_dir() else False
+    return any(
+        (snap / "model.bin").is_file()
+        for repo in root.glob(f"models--*--faster-whisper-{name}")
+        for snap in (repo / "snapshots").glob("*")
+    )
 
 
 def recommended(tier):
