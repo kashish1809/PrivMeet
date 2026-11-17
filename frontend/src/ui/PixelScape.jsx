@@ -193,6 +193,8 @@ function themedPalette() {
       metal: p(300),
       bloom: [mix(p(300), [253, 224, 71], 0.6)],
       // teal: a greener aurora over a fjord; sakura: a pink one; pine: a green one
+      // the nether has no sky: the window's "stars" are drifting embers
+      ...(biome === "nether" ? { star: [255, 150, 80] } : {}),
       ...(biome === "teal" ? { aurora: mix(p(300), [110, 255, 170], 0.5) } : {}),
       ...(biome === "rose" ? { aurora: mix(p(300), [255, 150, 210], 0.5), petal: [255, 183, 213], blossom: [[255, 205, 225], [244, 143, 186], [190, 70, 120]] } : {}),
       ...(biome === "forest" ? { aurora: mix(p(300), [130, 255, 160], 0.55), snow: mix(p(100), WHITE, 0.7), pine: [mix(z(950), [10, 45, 30], 0.6), mix(z(900), [20, 70, 45], 0.55)] } : {}),
@@ -1516,6 +1518,18 @@ export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, class
           key={`s${i}`}
           className="pm-twinkle absolute size-1 bg-yellow-200 shadow-[0_0_6px_2px_rgb(253_224_71/0.6)]"
           style={{ ...at(s, scene), animationDelay: `${s.delay}s` }}
+        />
+      ))}
+      {scene?.motes?.map((m, i) => (
+        <span
+          key={`m${i}`}
+          className={cx(
+            "pm-rise absolute size-1",
+            m.tone === "violet"
+              ? "bg-fuchsia-300 shadow-[0_0_6px_2px_rgb(192_132_252/0.7)]"
+              : "bg-orange-300 shadow-[0_0_6px_2px_rgb(251_146_60/0.7)]",
+          )}
+          style={{ ...at(m, scene), animationDelay: `${m.delay}s` }}
         />
       ))}
       {scene?.lanterns.map((l, i) => (

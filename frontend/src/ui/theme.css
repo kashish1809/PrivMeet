@@ -226,6 +226,19 @@ html[data-theme="meadow"] {
   33% { transform: scaleY(0.8); opacity: 0.85; }
   66% { transform: scaleY(1.15); opacity: 0.95; }
 }
+/* Nether Gate: portal motes and lava embers float up and fade (transform/opacity only). */
+@keyframes pm-rise {
+  0% { transform: translateY(0); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateY(-36px); opacity: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pm-rise { animation: pm-rise 4.5s ease-out infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-rise { opacity: 0.6; }
+}
+
 @keyframes pm-drift {
   from { transform: translateX(-10vw); }
   to { transform: translateX(110vw); }
