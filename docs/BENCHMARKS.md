@@ -107,3 +107,44 @@ Steps to check it:
 Two follow-ups for other owners:
 - `docker.yml` (Karthik) tags the GPU image only as `<version>-gpu`. A `latest-gpu` tag would let `compose.gpu.yml` work with the default `PRIVMEET_VERSION`.
 - The desktop app (Kashish) copies `compose.gpu.yml`, but `tauri.conf.json` bundles only `compose.yml`.
+
+## Idle footprint (R1.21, 2026-11-17)
+
+5.7 GB laptop, CPU only, cloud mode (Groq), dev servers. Memory is resident plus swapped.
+
+### Backend web process
+
+| When | Before | After |
+|---|---|---|
+| Fresh, after `django.setup()` and the URLs | 78 MB | 48 MB |
+| After `GET` system, meetings, models, templates, settings | 122 MB | 55 MB |
+| After 3 meetings with `CELERY_EAGER=1` | ~157 MB (one day of use) | 58 MB (57 before them) |
+
+What changed:
+- **Pipeline imports:** LangChain, faster-whisper and the diarizer are imported inside the tasks.
+- **`/api/system/`:** it reached `providers.py`'s module-level LangChain import; that import is now inside `chat()`.
+- **`/api/models/`:** it imported faster-whisper for a repo table; it now finds the cache folders by name.
+- **`has_cuda()`:** it skips importing ctranslate2 when `nvidia-smi` is missing.
+- **Eager tasks:** with `CELERY_EAGER` each one runs as `manage.py runtask` in a child process, so its memory leaves when it exits.
+
+### Whole app, idle
+
+| Process | Memory |
+|---|---|
+| Django web process | 58 MB |
+| Ollama, no model loaded | 19 MB |
+| Browser tab | 16.6 MB JS heap |
+| Django autoreloader (dev only) | 48 MB |
+| Vite dev server (dev only) | ~300 MB |
+
+### Browser CPU (headless Chromium, software compositing, Home at 1440 x 900)
+
+| Theme | Before, idle | After, 60 s without input |
+|---|---|---|
+| Indigo | 4-6 % of a core | paused |
+| Nether Gate | 18.7 % | 1.4 % |
+| Ancient City | 15.4 % | paused |
+
+While the page is in use, the blocky themes still cost about 16-19 % without a GPU. No single animation type dominates: switching any one off saved nothing measurable. With a GPU the compositor carries most of it.
+
+How it was measured: CDP `Performance.getMetrics`, `TaskDuration` over 5 s; `ru_maxrss`; `/proc/<pid>/status` `VmRSS + VmSwap`.
