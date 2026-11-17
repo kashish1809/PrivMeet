@@ -15,6 +15,7 @@ use serde_json::json;
 use tower_http::services::ServeDir;
 
 use crate::config::Config;
+use crate::csrf;
 
 pub type AppState = Arc<Config>;
 
@@ -25,7 +26,9 @@ pub fn error(status: StatusCode, msg: impl Into<String>) -> Response {
 
 pub fn router(cfg: Config) -> Router {
     let state: AppState = Arc::new(cfg);
-    let api = Router::new().fallback(|| async { error(StatusCode::NOT_FOUND, "Not found.") });
+    let api = Router::new()
+        .fallback(|| async { error(StatusCode::NOT_FOUND, "Not found.") })
+        .layer(middleware::from_fn_with_state(state.clone(), csrf::protect));
     Router::new()
         .nest("/api", api)
         .nest_service("/static", ServeDir::new(&state.frontend_dist))
@@ -49,12 +52,14 @@ async fn allowed_host(State(cfg): State<AppState>, req: Request, next: Next) -> 
     next.run(req).await
 }
 
-/// Every non-API path gets the React app's index.html (hash routing does the rest).
-async fn spa(State(cfg): State<AppState>) -> Response {
+/// Every non-API path gets the React app's index.html (hash routing does the rest), with the
+/// CSRF cookie set, as Django's spa view does.
+async fn spa(State(cfg): State<AppState>, req: Request) -> Response {
     match tokio::fs::read(cfg.frontend_dist.join("index.html")).await {
         Ok(html) => {
             let mut r = Response::new(Body::from(html));
             r.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8"));
+            csrf::ensure_cookie(req.headers(), &mut r);
             r
         }
         Err(_) => (

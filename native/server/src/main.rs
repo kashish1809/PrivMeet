@@ -4,6 +4,7 @@
 //! serves the built app itself. Configuration: config.rs (same env names as Django).
 
 mod config;
+mod csrf;
 mod web;
 
 use std::net::SocketAddr;
