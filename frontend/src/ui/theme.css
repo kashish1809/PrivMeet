@@ -164,7 +164,7 @@ html[data-theme="dawn"] {
   --color-primary-600: #d9431f; --color-primary-700: #b3341a; --color-primary-800: #8f2b1b;
   --color-primary-900: #73261b; --color-primary-950: #3f100a;
   --color-zinc-50: #fdf5ee; --color-zinc-100: #f8eadf; --color-zinc-200: #efdacb;
-  --color-zinc-300: #dcc0ab; --color-zinc-400: #b89982; --color-zinc-500: #8d715d;
+  --color-zinc-300: #dcc0ab; --color-zinc-400: #b89982; --color-zinc-500: #856a57;
   --color-zinc-600: #6a5343; --color-zinc-700: #513e32; --color-zinc-800: #372921;
   --color-zinc-900: #241a15; --color-zinc-950: #140e0b;
 }
@@ -174,7 +174,7 @@ html[data-theme="glacier"] {
   --color-primary-600: #0284c7; --color-primary-700: #0369a1; --color-primary-800: #075985;
   --color-primary-900: #0c4a6e; --color-primary-950: #082f49;
   --color-zinc-50: #edf5fa; --color-zinc-100: #e1edf5; --color-zinc-200: #cde0eb;
-  --color-zinc-300: #aec8d8; --color-zinc-400: #86a5b9; --color-zinc-500: #617e92;
+  --color-zinc-300: #aec8d8; --color-zinc-400: #86a5b9; --color-zinc-500: #567184;
   --color-zinc-600: #455e70; --color-zinc-700: #334756; --color-zinc-800: #22303c;
   --color-zinc-900: #151f28; --color-zinc-950: #0b131a;
 }
@@ -198,7 +198,7 @@ html[data-theme="meadow"] {
   --color-primary-600: #198b37; --color-primary-700: #176d2f; --color-primary-800: #17562a;
   --color-primary-900: #144725; --color-primary-950: #072812;
   --color-zinc-50: #f6f9f2; --color-zinc-100: #edf3e6; --color-zinc-200: #dde8d2;
-  --color-zinc-300: #c2d3b3; --color-zinc-400: #9db18b; --color-zinc-500: #788c67;
+  --color-zinc-300: #c2d3b3; --color-zinc-400: #9db18b; --color-zinc-500: #647656;
   --color-zinc-600: #58694b; --color-zinc-700: #435039; --color-zinc-800: #2d3727;
   --color-zinc-900: #1c2318; --color-zinc-950: #0e130c;
 }
