@@ -127,7 +127,9 @@ def chat(prof, json_mode=False, num_predict=None):
     if prof.get("llm_provider", "ollama") != "ollama":
         from . import providers
 
-        return providers.chat(prof, json_mode=json_mode, num_predict=num_predict)
+        # No reply cap: num_predict only keeps Ollama inside num_ctx, and on a reasoning model
+        # (gpt-oss on Groq) hidden reasoning counts against it and cut the summary off.
+        return providers.chat(prof, json_mode=json_mode)
     from langchain_ollama import ChatOllama
 
     return ChatOllama(
