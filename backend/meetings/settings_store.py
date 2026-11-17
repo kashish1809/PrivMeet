@@ -71,7 +71,16 @@ def _bool(key, v):
     return v
 
 
-# Key -> validator. Later tasks add their keys here (default_template, keep_audio, ...).
+def _template(key, v):
+    v = _text(40)(key, v)
+    from . import note_templates
+
+    if not note_templates.get(v):
+        raise SettingsError(f"{key}: no template with id {v!r}.")
+    return v
+
+
+# Key -> validator. Later tasks add their keys here (keep_audio, ...).
 SCHEMA = {
     "display_name": _text(60),
     "llm_model": _model,
@@ -80,6 +89,7 @@ SCHEMA = {
     "num_ctx": _int(512, 131072),
     "diarize": _bool,
     "cpu_threads": _int(1, 256),
+    "default_template": _template,  # used when an upload names no template (R1.9)
     # Cloud LLM providers (opt-in; Ollama is the default and the only fully local one).
     "llm_provider": _choice("ollama", "openai", "openrouter", "anthropic", "groq", "gemini", "custom"),
     "api_base_url": _url,  # only for "custom"

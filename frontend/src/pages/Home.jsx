@@ -74,12 +74,14 @@ function Hero({ name }) {
         orbX={0.84}
         className="absolute inset-0 [mask-image:linear-gradient(to_right,transparent_0%,rgb(0_0_0/0.45)_35%,black_65%)]"
       />
-      <div className="relative flex min-h-60 flex-col justify-center gap-3 p-7 sm:p-9">
+      {/* Clicks pass through the text to the scene (a theme's portal is a door), except on
+          the button. */}
+      <div className="pointer-events-none relative flex min-h-60 flex-col justify-center gap-3 p-7 sm:p-9">
         <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl dark:text-white">
           {heroTitle(text.title, name)}
         </h1>
         <p className="max-w-sm text-sm text-zinc-600 sm:text-base dark:text-zinc-300">{text.line}</p>
-        <div className="mt-3">
+        <div className="pointer-events-auto mt-3 self-start">
           <Button size="lg" icon={Plus} onClick={() => navigate("/new")}>
             New Meeting
           </Button>

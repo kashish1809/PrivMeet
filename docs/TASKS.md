@@ -47,9 +47,16 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.6** feedback components | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | in `src/ui`: `toast()`/`dismissToast()`/`<Toaster />` (mounted in AppShell), `Skeleton`, `Checkbox`, `Breadcrumb`, `Tooltip`. Pages can swap their plain-Tailwind versions in their next task. |
 | **R2.1** API helpers v2 + feature flags | Kashish | `v2/kashish/R2.1-api-v2` | `getSystem()` shares one promise, `hasFeature()` / `useFeatures()`; one helper per v2 endpoint; `format.js` gains `minutes`, `shortDate`, `participants`, `statusBadge` |
 | **R2.2** Meetings list v2 | Kashish | `v2/kashish/R2.2-list-v2` | rows per the mockup (icon tile, `Oct 28, 2026 · 42 min · 4 participants`, pill, kebab); `q` read from the route and written back with `replaceState` |
+| **R1.8** demo data command | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | `python manage.py seed_demo [--reset]`: Project Sync, Design Review, Team Sync ("Processed"), a failed one and one transcribing, with silent audio and the mockup's dates. With `CELERY_EAGER=1` the startup reaper turns the transcribing one into failed on the next start. |
 | **R2.3** Participants card | Kashish | `v2/kashish/R2.3-participants` | `ParticipantsCard.jsx`: two columns of avatar + name, talking time as a percentage, rename in place (PATCH `speaker_names`); suggestions behind `suggestions`, merge behind `speaker-merge` |
 | **R2.4** Notes tab | Kashish | `v2/kashish/R2.4-notes-tab` | `NotesTab.jsx`: autosave 800 ms after typing, also on blur, tab switch and page hide, with "Saving… / Saved"; tags add on Enter and remove on the chip's ×; both disabled without their flag |
 | **R2.5** Download menu | Kashish | `v2/kashish/R2.5-download-menu` | `DownloadMenu.jsx` with Notes / Transcript / Action items / Audio groups, empty ones dropped; `exportCsv.js` builds the two CSVs in the browser (RFC 4180, BOM, formula guard); server formats behind `exports`, `exports-office`, `exports-ics`, `audio-exports`; the list kebab uses it too. **Not built:** the PDF entry, which waits for R2.15's print view. |
+| **R1.9** note templates backend | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | six built-ins in `note_templates.py`, `NoteTemplate` (migration 0005), `/api/templates/` CRUD, upload `template`, `default_template` setting, the template's focus in the summary prompt; flag `templates`. |
+| **R1.10** Templates page | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | grid of template cards (icon, Default pill, Built-in tag, the instructions behind a disclosure), New / Edit dialog, Delete with ConfirmDialog, Set as default, Use to `#/new?template=<id>`. |
+| **R1.11** models backend | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | `GET /api/models/` (hardware, Whisper sizes with RAM and downloaded, Ollama models, diarization, pull), `POST /api/models/pull` (one at a time, progress in `DATA_DIR/model_pull.json`), `DELETE /api/models/<name>` (not the one in use); flag `models`. Recommendations follow the hardware tier. |
+| **R1.12** Models page | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | Hardware, Speech to text (Whisper sizes with RAM, Recommended, Downloaded, a Heavy warning), Summaries (pick, delete, download with a rising progress bar polled every 2 s only while a pull runs; Cloud note), Speakers (diarization switch, models present). |
+| **R1.13** export formats + share page | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | `export.py`: md (moved, unchanged), txt, json, srt, vtt, the html share page, docx and odt (zipfile, no dependency), ics (due dates resolved from the meeting day), audio.mp3 / audio.opus (cached); flags `exports`, `share-page`, `exports-office`, `exports-ics`, `audio-exports`. |
+| Blocky themes (beyond the task list) | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | three themes drawn from scratch in the style of a sandbox game: **Nether Gate** (lava, fortress bridge, glowstone, an obsidian portal showing the overworld), **Overworld (Light)** (grass hills, oaks, a village house, block clouds, a portal showing the nether) and **Ancient City** (a deep-dark cave, the centrepiece with its wide frame, waterfalls, sculk, candles, eyes in a doorway). Clicking the hero's portal travels between Nether and Overworld through a pixel spiral. No game textures or characters; the bubble mascot stands in. |
 | **R2.6** Share menu | Kashish | `v2/kashish/R2.6-share-menu` | `ShareMenu.jsx`: "Copy summary" pastes the title, date, summary, key points and action items as plain text, "Copy link" says it opens only on this computer, "Share…" where `navigator.share` exists, and the `.html` share page behind `share-page`; the trigger confirms with "Copied summary" / "Copied link" for 2.5 s. **Not built:** the copied link is a localhost address, so "Copy link" is only useful on this machine. |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
@@ -658,7 +665,7 @@ Built; the text below is the specification it was built to.
   - `docs/API.md`: every endpoint with its request, response and flag. Every later backend task updates it in the same branch.
 - **Done when:** a PATCH of `llm_model` changes the model in `/api/system/` and in the next processed meeting, and `features` is in the response.
 
-#### R1.8 · Demo data command
+#### R1.8 · Demo data command — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.8-seed-demo`
 - **Needs:** none
 - **Files:** `backend/meetings/management/commands/seed_demo.py`
@@ -673,7 +680,7 @@ Built; the text below is the specification it was built to.
   - Demo rows are marked with `tier_used="demo"`. `--reset` deletes only those. Running twice adds nothing.
 - **Done when:** on an empty database the command makes Home and the detail page show the mockup's content.
 
-#### R1.9 · Note templates: backend
+#### R1.9 · Note templates: backend — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.9-templates-backend`
 - **Needs:** R1.7
 - **Files:** `backend/meetings/models.py`, `backend/meetings/migrations/*`, `backend/meetings/note_templates.py` (new), `backend/meetings/views.py`, `backend/meetings/urls.py`, `backend/meetings/pipeline/llm.py`, `backend/meetings/tasks.py`, `backend/meetings/settings_store.py`, `docs/API.md`
@@ -685,7 +692,7 @@ Built; the text below is the specification it was built to.
   - `llm.py` adds the template's instructions to the summary prompt. The JSON output shape (`summary`, `decisions`, `action_items`) does not change.
 - **Done when:** the same recording summarized with "Stand-up" and "Client call" gives clearly different summaries on the low tier.
 
-#### R1.10 · Templates page
+#### R1.10 · Templates page — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.10-templates-page`
 - **Needs:** R1.9, R1.4
 - **Files:** `frontend/src/pages/Templates.jsx`
@@ -696,7 +703,7 @@ Built; the text below is the specification it was built to.
   - "Use" goes to `#/new?template=<id>`.
 - **Done when:** a template made here is offered by the API, and the page matches the v2 look in all four themes.
 
-#### R1.11 · Models: backend
+#### R1.11 · Models: backend — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.11-models-backend`
 - **Needs:** R1.7
 - **Files:** `backend/meetings/views.py`, `backend/meetings/urls.py`, `backend/meetings/tasks.py`, `backend/meetings/hw.py`, `docs/API.md`
@@ -708,7 +715,7 @@ Built; the text below is the specification it was built to.
   - The pull goes through the worker queue, so it never runs beside a transcription.
 - **Done when:** pulling a small model shows rising progress in `GET /api/models/` and the model then appears as installed.
 
-#### R1.12 · Models page
+#### R1.12 · Models page — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.12-models-page`
 - **Needs:** R1.11, R1.4
 - **Files:** `frontend/src/pages/Models.jsx`
@@ -720,7 +727,7 @@ Built; the text below is the specification it was built to.
   - Warn when the picked model is larger than the tier recommends.
 - **Done when:** picking a model here changes `/api/system/`, and a pull can be watched to the end.
 
-#### R1.13 · Export formats + share page
+#### R1.13 · Export formats + share page — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.13-exports`
 - **Needs:** R1.7
 - **Files:** `backend/meetings/export.py` (new), `backend/meetings/views.py`, `backend/meetings/urls.py`, `docs/API.md`

@@ -132,8 +132,28 @@ The original file. It supports `Range` (206 for a range, 416 when the range is o
 ### `POST /api/meetings/<id>/retry`
 Runs the whole pipeline again. Returns 409 while the meeting is still processing.
 
-### `GET /api/meetings/<id>/export.md`
-The notes and transcript as a Markdown download.
+### `GET /api/meetings/<id>/export.<fmt>`
+The meeting as a download named after its title. 404 for an unknown format.
+
+| `fmt` | Flag | What |
+|---|---|---|
+| `md` | (always) | notes and transcript as Markdown |
+| `txt` | `exports` | the same as plain text, with notes |
+| `json` | `exports` | the full meeting, as `GET /api/meetings/<id>/` |
+| `srt`, `vtt` | `exports` | one subtitle cue per segment, the speaker's name in front |
+| `html` | `share-page` | one self-contained page: inline CSS, no script, no outside request, every value escaped |
+| `docx`, `odt` | `exports-office` | the notes as a Word / OpenDocument file (title, date, participants, summary, key points, an action-items table, notes, transcript) |
+| `ics` | `exports-ics` | action items with a resolvable due date as `VTODO`s (see below) |
+
+`ics`: a due text resolves from the meeting's day: `today`, `tomorrow`, `next week` (the Monday
+after), a weekday (the next one after the meeting), a month and day (`Oct 30`, `30 October`) or
+`the 14th`. Others are left out and counted in the `X-Skipped-Items` header. When none
+resolves: 404 `{"error": "No action item has a date."}`.
+
+### `GET /api/meetings/<id>/audio.mp3` and `audio.opus` (flag `audio-exports`)
+The recording converted for sharing, mono: MP3 at 64 kb/s, Opus in Ogg at 32 kb/s. Made on the
+first request and cached next to the upload (deleted with the meeting). 404 when the audio was
+deleted.
 
 ### `POST /api/meetings/<id>/ask`
 `{"question": "..."}`. Returns 201 with `{"id", "question", "answer": "", "status": "pending"}`. Returns 409 unless the meeting is `done`.
@@ -158,3 +178,59 @@ The action items of all meetings, newest meeting first. `?open=1` leaves out the
   "index": 0, "task": "Push latest API changes", "owner": "Aryan", "due": "Oct 29", "done": false}]}
 ```
 To change an item, `PATCH` its meeting's whole `action_items` list. `index` is the item's position in that list.
+
+## Note templates (flag `templates`)
+
+A template says what a meeting's summary should focus on. Six built-ins are read-only
+(`general`, `standup`, `one-on-one`, `client-call`, `interview`, `lecture`); own templates
+have ids `u<n>`. Every template has the shape:
+```json
+{"id": "standup", "name": "Stand-up", "description": "Yesterday, today and blockers, per person.",
+ "instructions": "This is a daily stand-up. ...", "builtin": true, "is_default": false}
+```
+
+### `GET /api/templates/`
+`{"templates": [...]}`: the built-ins, then own templates by name.
+
+### `POST /api/templates/`
+`{"name", "instructions", "description"?}` (60, 2000 and 200 characters). Returns 201 with the
+template. 400 when a field is missing, empty or too long.
+
+### `GET|PATCH|DELETE /api/templates/<id>/`
+PATCH takes any of the three fields. Built-ins answer 403 to PATCH and DELETE. Deleting the
+default template makes General the default again. 404 for an unknown id.
+
+### Using a template
+- Upload (`POST /api/meetings/`) accepts `template`; without it the meeting gets the default.
+  400 for an unknown id.
+- The default is the settings key `default_template` (`PATCH /api/settings/`), `general`
+  when unset.
+- The full meeting JSON carries `template`. The summary prompt adds the template's
+  instructions; the output shape does not change.
+
+## Models (flag `models`)
+
+### `GET /api/models/`
+Everything the Models page shows:
+```json
+{"hardware": {"tier": "low", "ram_gb": 5.7, "device": "cpu", "gpu": false, "cuda_error": ""},
+ "whisper": {"current": "base", "recommended": "base",
+             "sizes": [{"name": "base", "ram_gb": 0.7, "download_mb": 145, "downloaded": true}, ...]},
+ "ollama": {"reachable": true, "installed": [{"name": "qwen2.5:1.5b", "size": 986061892}],
+            "current": "qwen2.5:1.5b", "recommended": "qwen2.5:1.5b", "provider": "ollama"},
+ "diarization": {"enabled": false, "available": true},
+ "pull": {"model": "qwen2.5:3b", "percent": 42, "status": "pulling", "running": true, "updated": 1794904153.6}}
+```
+- `hardware.tier` and the `recommended` names follow the hardware (`hw.TIERS`), even when a
+  cloud provider makes `/api/system/` report `high`.
+- `pull` is the running or last download, or `null`. `running` turns false when it ends with
+  `status` `success` or `error` (then with `error`), or after 120 s without progress.
+
+### `POST /api/models/pull`
+`{"model": "qwen2.5:3b"}`. 202 with `{"pull": ...}`. 400 for a name not matching
+`^[\w.\-/:]+$`, 409 while another pull runs. The download goes through the worker queue, so it
+never runs beside a transcription. Poll `GET /api/models/` for progress.
+
+### `DELETE /api/models/<name>`
+Removes an installed Ollama model. 204; 404 when it is not installed; 409 for the model that
+writes the notes now; 502 when Ollama cannot be reached.

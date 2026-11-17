@@ -3,6 +3,8 @@ import logging
 import mimetypes
 import os
 import re
+import urllib.error
+import urllib.request
 from datetime import date
 from pathlib import Path
 
@@ -13,8 +15,8 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from . import hw, settings_store, tasks
-from .models import PROCESSING, Meeting, Question, Segment, mmss
+from . import export, hw, note_templates, settings_store, tasks
+from .models import PROCESSING, Meeting, NoteTemplate, Question, Segment, mmss
 from .pipeline import audio
 from .search import search_segments
 
@@ -24,7 +26,7 @@ ALLOWED_EXT = {".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac"
 
 # What this server supports beyond the v1 API; GET /api/system/ returns it so the frontend
 # shows a control only when its endpoint exists (docs/TASKS.md "Feature flags").
-FEATURES = ["settings", "notes", "tags", "filters", "providers"]
+FEATURES = ["settings", "notes", "tags", "filters", "providers", "templates", "models", "exports", "share-page", "exports-office", "exports-ics", "audio-exports"]
 
 MAX_TAGS, MAX_TAG_LEN, MAX_NOTES = 10, 30, 20000
 # ?status= also takes the list page's filter names, so the UI does not have to know the stages.
@@ -106,6 +108,7 @@ def meeting_json(m, full=False):
         d.update(
             notes=m.notes, language=m.language, summary=m.summary, decisions=m.decisions,
             action_items=m.action_items, speaker_names=m.speaker_names, tier_used=m.tier_used,
+            template=m.template,
             device_used=m.device_used,
             segments=[
                 {"start": s.start, "end": s.end, "speaker": s.speaker, "text": s.text}
@@ -194,9 +197,15 @@ def create_meeting(request):
     try:
         notes = clean_notes(request.POST.get("notes", ""))
         tags = clean_tags(request.POST.get("tags", ""))
+        template = request.POST.get("template", "").strip()
+        if template and not note_templates.get(template):
+            raise Invalid(f"No template with id {template!r}.")
     except Invalid as e:
         return bad(str(e))
-    m = Meeting.objects.create(title=title, file=f, notes=notes, tags=tags)
+    # the template is fixed at upload: changing the default later does not rewrite old notes
+    m = Meeting.objects.create(
+        title=title, file=f, notes=notes, tags=tags, template=template or note_templates.default_id()
+    )
     duration = audio.probe(m.file.path)
     if duration is None:
         m.file.delete(save=False)
@@ -212,6 +221,8 @@ def create_meeting(request):
 def meeting_detail(request, pk):
     m = reap(get_object_or_404(Meeting, pk=pk))
     if request.method == "DELETE":
+        for p in export.audio_copies(m):  # the shared MP3/Opus copies go with it
+            p.unlink(missing_ok=True)
         m.file.delete(save=False)
         m.delete()
         return HttpResponse(status=204)
@@ -321,20 +332,40 @@ def question_detail(request, pk):
 
 
 @require_GET
-def meeting_export(request, pk):
+def meeting_export(request, pk, fmt="md"):
+    """GET /api/meetings/<id>/export.<fmt>: the meeting as a download (export.py)."""
     m = get_object_or_404(Meeting, pk=pk)
-    lines = [f"# {m.title}", "", f"_{m.created:%Y-%m-%d %H:%M} · {mmss(m.duration)}_", "", "## Summary", "", m.summary]
-    if m.decisions:
-        lines += ["", "## Decisions", ""] + [f"- {d}" for d in m.decisions]
-    if m.action_items:
-        lines += ["", "## Action items", ""]
-        for i in m.action_items:
-            extra = ", ".join(x for x in (i.get("owner"), i.get("due") and f"due {i['due']}") if x)
-            lines.append(f"- [{'x' if i.get('done') else ' '}] {i.get('task')}{f' ({extra})' if extra else ''}")
-    lines += ["", "## Transcript", "", m.transcript(timestamps=True).replace("\n", "  \n")]
-    resp = HttpResponse("\n".join(lines) + "\n", content_type="text/markdown; charset=utf-8")
-    safe = re.sub(r"[^\w\- ]", "", m.title).strip() or "meeting"
-    resp["Content-Disposition"] = f'attachment; filename="{safe}.md"'
+    build = export.BUILDERS.get(fmt)
+    if build is None:
+        raise Http404
+    try:
+        body, ctype, *extra = build(m)
+    except export.NoDates:
+        return bad("No action item has a date.", 404)
+    resp = HttpResponse(body, content_type=ctype)
+    for k, v in (extra[0] if extra else {}).items():
+        resp[k] = v
+    resp["Content-Disposition"] = f'attachment; filename="{export.filename(m, fmt)}"'
+    return resp
+
+
+@require_GET
+def meeting_audio_export(request, pk, fmt):
+    """GET /api/meetings/<id>/audio.mp3 or audio.opus: the recording converted for sharing."""
+    import subprocess
+
+    if fmt not in export.AUDIO:
+        raise Http404
+    m = get_object_or_404(Meeting, pk=pk)
+    try:
+        path = export.audio_copy(m, fmt)
+    except (subprocess.SubprocessError, OSError) as e:
+        log.warning("audio export of %s failed: %s", pk, e)
+        return bad("Could not convert the audio.", 500)
+    if path is None:
+        return bad("This meeting's audio was deleted.", 404)
+    resp = FileResponse(path.open("rb"), content_type=export.AUDIO[fmt][1])
+    resp["Content-Disposition"] = f'attachment; filename="{export.filename(m, fmt)}"'
     return resp
 
 
@@ -449,6 +480,173 @@ def action_items(request):
                 "due": item.get("due", ""), "done": bool(item.get("done")),
             })
     return JsonResponse({"action_items": rows})
+
+
+def _ollama_models(prof):
+    """Installed Ollama models as [{name, size}], or None when Ollama does not answer."""
+    from .pipeline import llm
+
+    try:
+        with urllib.request.urlopen(f"{llm.ollama_url(prof).rstrip('/')}/api/tags", timeout=5) as r:
+            data = json.load(r)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    return sorted(
+        ({"name": m["name"], "size": m.get("size", 0)} for m in data.get("models", []) if m.get("name")),
+        key=lambda m: m["name"],
+    )
+
+
+def _profile():
+    """The profile the worker runs with (it may see a GPU the web side does not), plus the
+    saved settings: the same one /api/system/ reports."""
+    try:
+        prof = json.loads(tasks.WORKER_PROFILE.read_text())
+    except (OSError, ValueError):
+        prof = hw.base_profile()
+    return hw.apply_overrides(prof, settings_store.load())
+
+
+@require_GET
+def models(request):
+    """Everything the Models page shows: hardware, Whisper sizes, Ollama models, diarization
+    and the running pull."""
+    from .pipeline import diarize
+
+    prof = _profile()
+    # Recommend for the hardware, not the profile's tier: with a cloud provider the tier
+    # reads "high" (hw.apply_overrides), and a 6 GB laptop must not be told to run 7b here.
+    hw_tier = hw.detect_tier(prof.get("ram_gb") or 0, bool(prof.get("cuda")))
+    rec = hw.recommended(hw_tier)
+    installed = _ollama_models(prof)
+    return JsonResponse({
+        "hardware": {"tier": hw_tier, "ram_gb": prof.get("ram_gb"), "device": prof["device"],
+                     "gpu": bool(prof.get("cuda")), "cuda_error": hw.cuda_error()},
+        "whisper": {
+            "current": prof["whisper_model"], "recommended": rec["whisper_model"],
+            "sizes": [{**w, "downloaded": hw.whisper_downloaded(w["name"])} for w in hw.WHISPER_SIZES],
+        },
+        "ollama": {
+            "reachable": installed is not None, "installed": installed or [],
+            "current": prof["llm_model"], "recommended": rec["llm_model"],
+            "provider": prof.get("llm_provider", "ollama"),
+        },
+        "diarization": {"enabled": bool(prof["diarize"]), "available": diarize.available()},
+        "pull": tasks.pull_state(),
+    })
+
+
+@require_POST
+def models_pull(request):
+    """Start downloading an Ollama model: {model}. One pull at a time (409 otherwise)."""
+    try:
+        name = _body(request).get("model", "")
+    except (Invalid, AttributeError):
+        return bad("Expected a JSON object with a model name.")
+    if not isinstance(name, str) or not settings_store.MODEL_NAME.match(name.strip()) or len(name) > 100:
+        return bad("That is not a valid model name.")
+    state = tasks.pull_state()
+    if state and state["running"]:
+        return bad(f"Already downloading {state['model']}. Wait for it to finish.", 409)
+    # shortcut: with CELERY_EAGER the pull runs inside this request and it returns when done;
+    # the page still works (it polls from another request). A real worker returns at once.
+    tasks.pull_model.delay(name.strip())
+    return JsonResponse({"pull": tasks.pull_state()}, status=202)
+
+
+@require_http_methods(["DELETE"])
+def models_delete(request, name):
+    """Remove an installed Ollama model. Refuses the one notes are written with."""
+    from .pipeline import llm
+
+    if not settings_store.MODEL_NAME.match(name) or len(name) > 100:
+        return bad("That is not a valid model name.")
+    prof = _profile()
+    current = prof["llm_model"]
+    # "qwen2.5:1.5b" and "qwen2.5:1.5b:latest" style names: compare without a ":latest" tail
+    same = lambda a, b: a.removesuffix(":latest") == b.removesuffix(":latest")  # noqa: E731
+    if prof.get("llm_provider", "ollama") == "ollama" and same(name, current):
+        return bad(f"{name} writes your notes now. Pick another model first.", 409)
+    req = urllib.request.Request(
+        f"{llm.ollama_url(prof).rstrip('/')}/api/delete", data=json.dumps({"model": name}).encode(),
+        headers={"Content-Type": "application/json"}, method="DELETE",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30):
+            pass
+    except urllib.error.HTTPError as e:
+        return bad("That model is not installed." if e.code == 404 else f"Ollama refused: {e.code}", 404 if e.code == 404 else 502)
+    except (urllib.error.URLError, OSError) as e:
+        return bad(f"Could not reach Ollama: {getattr(e, 'reason', e)}", 502)
+    return HttpResponse(status=204)
+
+
+TEMPLATE_LIMITS = {"name": 60, "description": 200, "instructions": 2000}
+
+
+def clean_template(data, partial=False):
+    """Validated {name, description, instructions} from a request body. Raises Invalid."""
+    if not isinstance(data, dict):
+        raise Invalid("Expected a JSON object.")
+    out = {}
+    for key, limit in TEMPLATE_LIMITS.items():
+        if key not in data:
+            if not partial and key != "description":
+                raise Invalid(f"{key} is required.")
+            continue
+        v = data[key]
+        if not isinstance(v, str):
+            raise Invalid(f"{key} must be a string.")
+        v = v.strip()
+        if len(v) > limit:
+            raise Invalid(f"{key} can be at most {limit} characters.")
+        if not v and key != "description":
+            raise Invalid(f"{key} cannot be empty.")
+        out[key] = v
+    return out
+
+
+def _body(request):
+    try:
+        return json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        raise Invalid("Invalid JSON.") from None
+
+
+@require_http_methods(["GET", "POST"])
+def templates(request):
+    """The built-in templates, then the user's own, each marked builtin and is_default."""
+    if request.method == "POST":
+        try:
+            t = NoteTemplate.objects.create(**clean_template(_body(request)))
+        except Invalid as e:
+            return bad(str(e))
+        return JsonResponse(note_templates.as_json(t, note_templates.default_id()), status=201)
+    default = note_templates.default_id()
+    rows = list(note_templates.BUILTINS) + list(NoteTemplate.objects.all())
+    return JsonResponse({"templates": [note_templates.as_json(t, default) for t in rows]})
+
+
+@require_http_methods(["GET", "PATCH", "DELETE"])
+def template_detail(request, tid):
+    t = note_templates.get(tid)
+    if t is None:
+        raise Http404
+    if request.method != "GET" and isinstance(t, dict):
+        return bad("Built-in templates cannot be changed. Make your own instead.", 403)
+    if request.method == "DELETE":
+        if note_templates.default_id() == t.key:
+            settings_store.save({"default_template": None})  # back to General
+        t.delete()
+        return HttpResponse(status=204)
+    if request.method == "PATCH":
+        try:
+            for k, v in clean_template(_body(request), partial=True).items():
+                setattr(t, k, v)
+        except Invalid as e:
+            return bad(str(e))
+        t.save()
+    return JsonResponse(note_templates.as_json(t, note_templates.default_id()))
 
 
 @ensure_csrf_cookie

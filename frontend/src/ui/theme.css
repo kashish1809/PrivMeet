@@ -191,6 +191,43 @@ html[data-theme="neon"] {
   --color-zinc-900: #180f2b; --color-zinc-950: #0d0619;
 }
 
+/* ---- Nether Gate, a blocky underworld (Minecraft-style, drawn from scratch): portal violet
+   on a netherrack-red black. Dark. */
+html[data-theme="nether"] {
+  --color-primary-50: #faf5ff; --color-primary-100: #f3e8ff; --color-primary-200: #e9d5ff;
+  --color-primary-300: #d8b4fe; --color-primary-400: #c084fc; --color-primary-500: #a855f7;
+  --color-primary-600: #9333ea; --color-primary-700: #7e22ce; --color-primary-800: #6b21a8;
+  --color-primary-900: #581c87; --color-primary-950: #3b0764;
+  --color-zinc-50: #fbf5f5; --color-zinc-100: #f4eaea; --color-zinc-200: #e6d4d4;
+  --color-zinc-300: #cdb0b0; --color-zinc-400: #a88585; --color-zinc-500: #7d5c5c;
+  --color-zinc-600: #573e3e; --color-zinc-700: #3f2b2c; --color-zinc-800: #2c1d1e;
+  --color-zinc-900: #1d1213; --color-zinc-950: #120a0b;
+}
+
+/* ---- Overworld, Nether Gate's daylight twin: grass green on a pale sky. Light. */
+html[data-theme="overworld"] {
+  --color-primary-50: #f1f9ec; --color-primary-100: #e0f2d4; --color-primary-200: #c2e5ab;
+  --color-primary-300: #9bd378; --color-primary-400: #74bd4b; --color-primary-500: #56a32f;
+  --color-primary-600: #3b7d22; --color-primary-700: #33681f; --color-primary-800: #2b521d;
+  --color-primary-900: #25451b; --color-primary-950: #10260a;
+  --color-zinc-50: #f2f7fb; --color-zinc-100: #e6eef5; --color-zinc-200: #d3dee8;
+  --color-zinc-300: #b4c3d0; --color-zinc-400: #8c9cab; --color-zinc-500: #5c6d7e;
+  --color-zinc-600: #4d5d6d; --color-zinc-700: #3a4754; --color-zinc-800: #27313b;
+  --color-zinc-900: #182028; --color-zinc-950: #0c1117;
+}
+
+/* ---- Ancient City, the deepest of the blocky worlds: sculk cyan on deepslate. Dark. */
+html[data-theme="ancient"] {
+  --color-primary-50: #ecfeff; --color-primary-100: #cffafe; --color-primary-200: #a5f3fc;
+  --color-primary-300: #67e8f9; --color-primary-400: #22d3ee; --color-primary-500: #06b6d4;
+  --color-primary-600: #0b7a95; --color-primary-700: #0e6a80; --color-primary-800: #155e75;
+  --color-primary-900: #164e63; --color-primary-950: #083344;
+  --color-zinc-50: #f4f6f8; --color-zinc-100: #e8ecf0; --color-zinc-200: #d4dae2;
+  --color-zinc-300: #b3bcc8; --color-zinc-400: #8a95a5; --color-zinc-500: #646f80;
+  --color-zinc-600: #48515f; --color-zinc-700: #343b46; --color-zinc-800: #232830;
+  --color-zinc-900: #161a20; --color-zinc-950: #0b0d11;
+}
+
 /* ---- Meadow, the special light theme: leaf green on a warm summer cream. Light. */
 html[data-theme="meadow"] {
   --color-primary-50: #effcf1; --color-primary-100: #d9f7de; --color-primary-200: #b4eebf;
@@ -213,6 +250,71 @@ html[data-theme="meadow"] {
   33% { transform: scaleY(0.8); opacity: 0.85; }
   66% { transform: scaleY(1.15); opacity: 0.95; }
 }
+/* Nether Gate: portal motes and lava embers float up and fade (transform/opacity only). */
+@keyframes pm-rise {
+  0% { transform: translateY(0); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateY(-36px); opacity: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pm-rise { animation: pm-rise 4.5s ease-out infinite; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-rise { opacity: 0.6; }
+}
+
+/* Lava running down a lavafall: bright streaks slide down over the drawn fall. */
+@keyframes pm-flow {
+  from { background-position: 0 0; }
+  to { background-position: 0 24px; }
+}
+.pm-flow {
+  background-image: repeating-linear-gradient(to bottom, rgb(255 226 122 / 0.55) 0 3px, transparent 3px 12px);
+  mix-blend-mode: screen;
+}
+.pm-flow-water {
+  background-image: repeating-linear-gradient(to bottom, rgb(200 225 255 / 0.5) 0 2px, transparent 2px 10px);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pm-flow { animation: pm-flow 0.9s linear infinite; }
+  .pm-flow-water { animation-duration: 0.6s; }
+}
+
+/* Stepping through a portal (PixelScape travel()): a violet swirl opens from the portal over
+   the window, holds while the theme switches under it, then clears. */
+@keyframes pm-warp {
+  0% { clip-path: circle(0 at var(--cx) var(--cy)); opacity: 1; }
+  42% { clip-path: circle(150% at var(--cx) var(--cy)); opacity: 1; }
+  58% { clip-path: circle(150% at var(--cx) var(--cy)); opacity: 1; }
+  100% { clip-path: circle(150% at var(--cx) var(--cy)); opacity: 0; }
+}
+.pm-warp {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(circle at var(--cx) var(--cy), #8650de 0, #4c1a96 40%, #1e0838 100%);
+  animation: pm-warp 1.6s ease-in-out forwards;
+}
+/* The warp's spiral (a pixel-art image from PixelScape spiralArt()) turning
+   once, slowly, and growing a little while the warp is open. */
+@keyframes pm-warp-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg) scale(0.7); }
+  to { transform: translate(-50%, -50%) rotate(360deg) scale(1.1); }
+}
+.pm-warp-spiral {
+  position: absolute;
+  left: var(--cx);
+  top: var(--cy);
+  width: 180vmax;
+  height: 180vmax;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  border-radius: 50%;
+  animation: pm-warp-spin 1.6s ease-in-out forwards;
+}
+
 @keyframes pm-drift {
   from { transform: translateX(-10vw); }
   to { transform: translateX(110vw); }
