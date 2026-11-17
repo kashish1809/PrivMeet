@@ -158,7 +158,7 @@ export default function MeetingDetail({ id }) {
         <aside className="flex flex-col gap-4">
           <ActionItemsPanel meeting={meeting} onSave={onSave} compact />
 
-          <ParticipantsCard meeting={meeting} onSave={onSave} features={features} />
+          <ParticipantsCard meeting={meeting} onSave={onSave} />
         </aside>
       </div>
 
