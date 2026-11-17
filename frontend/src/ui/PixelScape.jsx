@@ -874,7 +874,9 @@ function render(ctx, w, h, seed, opts, pal) {
     const REIN = [0x1a1d22, 0x23272e, 0x2f343c, 0x5a6a72].map(hex); // reinforced: a cold rim
     const SCULK = [0x05161b, 0x082128, 0x0b2b33, 0x13444d].map(hex); // dark; the glow is in the veins
     const CYAN = hex(0x22e3ee);
-    const B = Math.max(4, Math.min(8, Math.round(h / (lake ? 16 : 9))));
+    // smaller blocks in the footer than the other worlds, so the whole gate, horns too, fits
+    // in the strip below the page's cards
+    const B = Math.max(4, Math.min(8, Math.round(h / (lake ? 19 : 9))));
     const cols = Math.ceil(w / B) + 1;
     const { cell, steps, glowAt } = blockKit(B, cols, DARK[2]);
     const floor = h - B * (lake ? 2 : 1); // top of the floor tiles
@@ -920,7 +922,8 @@ function render(ctx, w, h, seed, opts, pal) {
     ov.blinks.push({ x: eyeX, y: eyeY, color: "cyan" }, { x: eyeX + Math.max(2, Math.round(B * 0.6)), y: eyeY, color: "cyan" });
 
     // pillars in the middle distance, each with a soul lantern on a chain
-    const gateCol = Math.round((w * (lake ? 0.72 : opts.orbX)) / B);
+    // the gate is 9 blocks wide: keep it whole inside the scene
+    const gateCol = Math.min(Math.floor(w / B) - 5, Math.max(5, Math.round((w * (lake ? 0.72 : opts.orbX)) / B)));
     const pillarEvery = lake ? 9 : 7;
     for (let c = 2; c < cols; c += pillarEvery) {
       if (Math.abs(c - gateCol) < 6) continue;
@@ -940,30 +943,33 @@ function render(ctx, w, h, seed, opts, pal) {
       ov.motes.push({ x: lx, y: ly - 1, tone: "soul", delay: (rand() * 4).toFixed(2) });
     }
 
-    // the gate: a monumental frame of reinforced deepslate with stepped shoulders round a
-    // black void, the city's centrepiece
-    const gw = lake ? 9 : 7;
-    const gh = lake ? 7 : 5;
+    // the gate: the city's iconic centrepiece, a giant frame of reinforced deepslate with two
+    // horns curving up from its top and wide stepped legs, round a black void. Drawn from a
+    // block mask: # is reinforced deepslate, . is the void.
+    const MASK = [
+      "#       #",
+      "##     ##",
+      " ####### ",
+      " #.....# ",
+      "##.....##",
+      "#.......#",
+      "#.......#",
+    ];
+    const gw = MASK[0].length;
+    const gh = MASK.length;
     const gx0 = (gateCol - Math.floor(gw / 2)) * B;
     const gy0 = floor - gh * B;
-    glowAt(gx0 + (gw * B) / 2, gy0 + (gh * B) / 2, B * 5, [20, 120, 140], 0.25);
-    for (let by = 0; by < gh; by += 1) {
-      for (let bx = 0; bx < gw; bx += 1) {
-        const side = bx === 0 || bx === gw - 1;
-        const topRow = by === 0;
-        const shoulder = by === 1 && (bx === 1 || bx === gw - 2);
-        const inner = !side && !topRow && !shoulder;
-        if (topRow && (bx === 0 || bx === gw - 1)) continue; // stepped shoulders
-        if (inner) {
-          for (let yy = 0; yy < B; yy += 1) for (let xx = 0; xx < B; xx += 1) put(gx0 + bx * B + xx, gy0 + by * B + yy, [1, 2, 4]);
-        } else cell(gx0 + bx * B, gy0 + by * B, REIN, 37 + bx + by * 3);
-      }
-    }
-    // a ledge of shoulders one step out at the top corners
-    cell(gx0 - B, gy0 + B, REIN, 61);
-    cell(gx0 + gw * B, gy0 + B, REIN, 62);
+    glowAt(gx0 + (gw * B) / 2, gy0 + (gh * B) * 0.6, B * 5.5, [20, 120, 140], 0.3);
+    MASK.forEach((row, by) => {
+      [...row].forEach((ch, bx) => {
+        const x0 = gx0 + bx * B;
+        const y0 = gy0 + by * B;
+        if (ch === "#") cell(x0, y0, REIN, 37 + bx + by * 3);
+        else if (ch === ".") for (let yy = 0; yy < B; yy += 1) for (let xx = 0; xx < B; xx += 1) put(x0 + xx, y0 + yy, [1, 2, 4]);
+      });
+    });
     for (let i = 0; i < (lake ? 7 : 5); i += 1) {
-      ov.motes.push({ x: gx0 + B + Math.floor(rand() * (gw - 2) * B), y: gy0 + B * 2 + Math.floor(rand() * (gh - 2) * B), tone: "soul", delay: (rand() * 4).toFixed(2) });
+      ov.motes.push({ x: gx0 + B * 2 + Math.floor(rand() * (gw - 4) * B), y: gy0 + B * 4 + Math.floor(rand() * (gh - 4) * B), tone: "soul", delay: (rand() * 4).toFixed(2) });
     }
 
     // the floor: deepslate tiles, with sculk spreading over patches of it
