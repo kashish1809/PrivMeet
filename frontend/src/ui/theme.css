@@ -191,6 +191,19 @@ html[data-theme="neon"] {
   --color-zinc-900: #180f2b; --color-zinc-950: #0d0619;
 }
 
+/* ---- Nether Gate, a blocky underworld (Minecraft-style, drawn from scratch): portal violet
+   on a netherrack-red black. Dark. */
+html[data-theme="nether"] {
+  --color-primary-50: #faf5ff; --color-primary-100: #f3e8ff; --color-primary-200: #e9d5ff;
+  --color-primary-300: #d8b4fe; --color-primary-400: #c084fc; --color-primary-500: #a855f7;
+  --color-primary-600: #9333ea; --color-primary-700: #7e22ce; --color-primary-800: #6b21a8;
+  --color-primary-900: #581c87; --color-primary-950: #3b0764;
+  --color-zinc-50: #fbf5f5; --color-zinc-100: #f4eaea; --color-zinc-200: #e6d4d4;
+  --color-zinc-300: #cdb0b0; --color-zinc-400: #a88585; --color-zinc-500: #7d5c5c;
+  --color-zinc-600: #573e3e; --color-zinc-700: #3f2b2c; --color-zinc-800: #2c1d1e;
+  --color-zinc-900: #1d1213; --color-zinc-950: #120a0b;
+}
+
 /* ---- Meadow, the special light theme: leaf green on a warm summer cream. Light. */
 html[data-theme="meadow"] {
   --color-primary-50: #effcf1; --color-primary-100: #d9f7de; --color-primary-200: #b4eebf;
