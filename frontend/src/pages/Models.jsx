@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Cpu, Gauge, MemoryStick, MonitorCog } from "lucide-react";
+import { AudioLines, Cpu, Gauge, MemoryStick, MonitorCog } from "lucide-react";
 
 import { api } from "../api";
-import { Badge, Card, CardHeader, EmptyState, Skeleton } from "../ui";
+import { Badge, Card, CardHeader, EmptyState, Skeleton, cx, focusRing, toast } from "../ui";
 
 /** One "label: value" line in a card. */
 function Fact({ icon: Icon, label, children }) {
@@ -43,6 +43,61 @@ function HardwareCard({ hw }) {
   );
 }
 
+const sizeMb = (mb) => (mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${mb} MB`);
+
+/** A list of choices as radio buttons; the chosen one is ringed in the accent. */
+function Choice({ name, checked, onPick, children }) {
+  return (
+    <label
+      className={cx(
+        "flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors",
+        checked
+          ? "border-primary-500 bg-primary-50 dark:border-primary-400 dark:bg-primary-950/60"
+          : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/60",
+      )}
+    >
+      <input type="radio" name={name} checked={checked} onChange={onPick} className={cx("accent-primary-600", focusRing)} />
+      {children}
+    </label>
+  );
+}
+
+function WhisperCard({ whisper, ram, onSave }) {
+  const rec = whisper.sizes.find((x) => x.name === whisper.recommended);
+  const cur = whisper.sizes.find((x) => x.name === whisper.current);
+  const tooBig = cur && rec && cur.ram_gb > rec.ram_gb;
+  return (
+    <Card className="pb-5">
+      <CardHeader title="Speech to text" icon={AudioLines} />
+      <p className="px-5 pt-1 text-sm text-zinc-600 dark:text-zinc-400">
+        Larger Whisper models hear more accurately but need more memory and time. A model downloads on first use.
+      </p>
+      <fieldset className="mt-4 grid gap-2 px-5 sm:grid-cols-2">
+        <legend className="sr-only">Whisper model</legend>
+        {whisper.sizes.map((w) => (
+          <Choice key={w.name} name="whisper" checked={w.name === whisper.current} onPick={() => onSave({ whisper_model: w.name })}>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-zinc-900 dark:text-zinc-100">{w.name}</span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                ~{w.ram_gb} GB RAM · {sizeMb(w.download_mb)} download
+              </span>
+            </span>
+            {w.name === whisper.recommended && <Badge tone="primary">Recommended</Badge>}
+            {w.downloaded && <Badge tone="green">Downloaded</Badge>}
+          </Choice>
+        ))}
+      </fieldset>
+      {tooBig && (
+        <p role="status" className="mx-5 mt-3 flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+          <Badge tone="amber">Heavy</Badge>
+          {cur.name} needs about {cur.ram_gb} GB, more than this {ram ? `${ram} GB ` : ""}machine is tuned for. Long
+          meetings may be slow or run out of memory.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 /** Models (R1.12): what runs where, and the models to pick, download or remove. Backend: R1.11. */
 export default function Models() {
   const [data, setData] = useState(null);
@@ -62,6 +117,17 @@ export default function Models() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Picks go to the settings store, the same one Settings -> AI Model writes (R1.7).
+  async function save(patch) {
+    try {
+      await api("/api/settings/", { method: "PATCH", body: patch });
+      toast("Saved. The next meeting uses it.", "green");
+      load();
+    } catch (e) {
+      toast(e.message, "red");
+    }
+  }
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -87,7 +153,10 @@ export default function Models() {
           ))}
         </div>
       ) : (
-        <HardwareCard hw={data.hardware} />
+        <>
+          <HardwareCard hw={data.hardware} />
+          <WhisperCard whisper={data.whisper} ram={data.hardware.ram_gb} onSave={save} />
+        </>
       )}
     </div>
   );
