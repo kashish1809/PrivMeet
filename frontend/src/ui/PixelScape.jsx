@@ -921,9 +921,14 @@ function render(ctx, w, h, seed, opts, pal) {
       const tall = Math.round((h / B) * (1 - inFromEdge / sides) * (0.55 + hash(c, 2, 104) * 0.35));
       for (let k = 0; k < tall; k += 1) cell(c * B, floor - (k + 1) * B, STONE, 105 + k, 0.35, VOID[1]);
     }
-    // the eyes: a tall dark doorway in the far city, and two cyan points that blink
+    // the eyes: a ruined deepslate wall with a tall dark doorway, and two cyan points that
+    // blink in it
     const doorC = Math.round((w * (lake ? 0.16 : 0.12)) / B);
     const doorTop = floor - Math.round(B * 2.6);
+    for (let c = doorC - 1; c <= doorC + 2; c += 1) {
+      const tall = 4 - (c === doorC + 2 ? 1 : 0); // broken off on one side
+      for (let y = floor - tall * B; y < floor; y += 1) for (let xx = 0; xx < B; xx += 1) put(c * B + xx, y, brick(c * B + xx, y, SLATE, 0.2));
+    }
     for (let y = doorTop; y < floor; y += 1) for (let x = doorC * B; x < doorC * B + B * 1.4; x += 1) put(x, y, [2, 3, 5]);
     const eyeY = doorTop + Math.round(B * 0.8);
     const eyeX = doorC * B + Math.round(B * 0.3);
@@ -1001,6 +1006,27 @@ function render(ctx, w, h, seed, opts, pal) {
         }
       });
     });
+    // sculk creeping up the centrepiece's lower courses, veins glowing
+    MASK.forEach((row, by) => {
+      if (by < 6) return;
+      [...row].forEach((ch, bx) => {
+        if (ch !== "#" || hash(bx, by, 121) > 0.42 - (by - 6) * 0.08 + 0.2) return;
+        cell(gx0 + bx * B, gy0 + by * B, SCULK, 122 + bx);
+        put(gx0 + bx * B + Math.floor(hash(bx, by, 123) * B), gy0 + by * B + 1 + Math.floor(hash(bx, by, 124) * (B - 2)), mix(CYAN, SCULK[3], 0.3));
+      });
+    });
+    // candles on the floor before the centrepiece and on its lower ledge: a cream stick,
+    // a warm flame and a small glow, the only warm light in the deep dark
+    const candle = (x, base) => {
+      const tall = Math.max(2, Math.round(B * 0.5));
+      for (let k = 1; k <= tall; k += 1) put(x, base - k, [214, 200, 168]);
+      put(x, base - tall - 1, [255, 170, 60]);
+      glowAt(x, base - tall - 1, B * 1.3, [255, 150, 60], 0.3);
+      ov.sparks.push({ x, y: base - tall - 1, delay: (rand() * 3).toFixed(2) });
+    };
+    [0.15, 0.3, 0.7, 0.85].forEach((f) => candle(Math.round(gx0 + gw * B * f), floor));
+    [0.4, 0.6].forEach((f) => candle(Math.round(gx0 + gw * B * f), gy0 + 7 * B));
+
     // waterfalls: thin blue sheets pouring from the roof (or from high in the side walls in
     // the footer) into a pool on the floor, with flowing light over them (CSS overlay)
     const WATERF = [0x1e3fa8, 0x2c56c8, 0x3f74e4, 0x7fb0ff].map(hex);
