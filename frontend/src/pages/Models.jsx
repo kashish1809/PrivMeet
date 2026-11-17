@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { AudioLines, Cpu, Gauge, MemoryStick, MonitorCog } from "lucide-react";
+import { AudioLines, Cpu, Gauge, MemoryStick, MonitorCog, Sparkles, Trash2 } from "lucide-react";
 
 import { api } from "../api";
-import { Badge, Card, CardHeader, EmptyState, Skeleton, cx, focusRing, toast } from "../ui";
+import { Badge, Card, CardHeader, ConfirmDialog, EmptyState, IconButton, Skeleton, cx, focusRing, toast } from "../ui";
 
 /** One "label: value" line in a card. */
 function Fact({ icon: Icon, label, children }) {
@@ -98,6 +98,73 @@ function WhisperCard({ whisper, ram, onSave }) {
   );
 }
 
+// "qwen2.5:7b" -> 7: the billions of parameters a name states, to compare sizes; null if none
+const params = (name) => {
+  const m = /(\d+(?:\.\d+)?)b\b/i.exec(name || "");
+  return m ? Number(m[1]) : null;
+};
+const same = (a, b) => a?.replace(/:latest$/, "") === b?.replace(/:latest$/, "");
+
+function SummariesCard({ ollama, onSave, onDelete }) {
+  const cloud = ollama.provider !== "ollama";
+  const big = params(ollama.current) > (params(ollama.recommended) ?? Infinity);
+  return (
+    <Card className="pb-5">
+      <CardHeader title="Summaries" icon={Sparkles} />
+      <p className="px-5 pt-1 text-sm text-zinc-600 dark:text-zinc-400">
+        The Ollama model that writes summaries, key points and action items. Recommended here:{" "}
+        <span className="font-medium text-zinc-900 dark:text-zinc-100">{ollama.recommended}</span>.
+      </p>
+      {cloud && (
+        <p className="mx-5 mt-3 flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+          <Badge tone="amber">Cloud</Badge>
+          Notes are written by {ollama.provider} now. These models are used when the provider in Settings is Ollama.
+        </p>
+      )}
+      {!ollama.reachable ? (
+        <p className="mx-5 mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+          Ollama is not answering, so its models cannot be listed. Check Settings → AI Model.
+        </p>
+      ) : ollama.installed.length === 0 ? (
+        <p className="mx-5 mt-4 text-sm text-zinc-600 dark:text-zinc-400">No models installed yet. Download one below.</p>
+      ) : (
+        <fieldset className="mt-4 flex flex-col gap-2 px-5">
+          <legend className="sr-only">Summary model</legend>
+          {ollama.installed.map((m) => {
+            const current = same(m.name, ollama.current);
+            return (
+              <div key={m.name} className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <Choice name="llm" checked={current} onPick={() => onSave({ llm_model: m.name.replace(/:latest$/, "") })}>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{m.name}</span>
+                      <span className="block text-xs text-zinc-500 dark:text-zinc-400">{(m.size / 1e9).toFixed(1)} GB on disk</span>
+                    </span>
+                    {same(m.name, ollama.recommended) && <Badge tone="primary">Recommended</Badge>}
+                  </Choice>
+                </div>
+                {/* the model in use cannot be removed (the server refuses it too) */}
+                <IconButton
+                  icon={Trash2}
+                  label={current && !cloud ? `${m.name} is in use` : `Delete ${m.name}`}
+                  disabled={current && !cloud}
+                  onClick={() => onDelete(m.name)}
+                />
+              </div>
+            );
+          })}
+        </fieldset>
+      )}
+      {big && (
+        <p role="status" className="mx-5 mt-3 flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-300">
+          <Badge tone="amber">Heavy</Badge>
+          {ollama.current} is larger than this machine's {ollama.recommended}. Summaries may be slow.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 /** Models (R1.12): what runs where, and the models to pick, download or remove. Backend: R1.11. */
 export default function Models() {
   const [data, setData] = useState(null);
@@ -117,6 +184,19 @@ export default function Models() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const [deleting, setDeleting] = useState(null);
+  async function remove() {
+    const name = deleting;
+    setDeleting(null);
+    try {
+      await api(`/api/models/${encodeURIComponent(name)}`, { method: "DELETE" });
+      toast(`Deleted ${name}`, "green");
+      load();
+    } catch (e) {
+      toast(e.message, "red");
+    }
+  }
 
   // Picks go to the settings store, the same one Settings -> AI Model writes (R1.7).
   async function save(patch) {
@@ -156,6 +236,10 @@ export default function Models() {
         <>
           <HardwareCard hw={data.hardware} />
           <WhisperCard whisper={data.whisper} ram={data.hardware.ram_gb} onSave={save} />
+          <SummariesCard ollama={data.ollama} onSave={save} onDelete={setDeleting} />
+          <ConfirmDialog open={deleting !== null} title="Delete model?" onConfirm={remove} onCancel={() => setDeleting(null)}>
+            {deleting} is removed from Ollama. You can download it again later.
+          </ConfirmDialog>
         </>
       )}
     </div>
