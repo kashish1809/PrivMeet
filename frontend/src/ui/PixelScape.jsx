@@ -195,6 +195,7 @@ function themedPalette() {
       // teal: a greener aurora over a fjord; sakura: a pink one; pine: a green one
       // the nether has no sky: the window's "stars" are drifting embers
       ...(biome === "nether" ? { star: [255, 150, 80] } : {}),
+      ...(biome === "ancient" ? { star: [60, 200, 210] } : {}),
       ...(biome === "teal" ? { aurora: mix(p(300), [110, 255, 170], 0.5) } : {}),
       ...(biome === "rose" ? { aurora: mix(p(300), [255, 150, 210], 0.5), petal: [255, 183, 213], blossom: [[255, 205, 225], [244, 143, 186], [190, 70, 120]] } : {}),
       ...(biome === "forest" ? { aurora: mix(p(300), [130, 255, 160], 0.55), snow: mix(p(100), WHITE, 0.7), pine: [mix(z(950), [10, 45, 30], 0.6), mix(z(900), [20, 70, 45], 0.55)] } : {}),
@@ -856,6 +857,171 @@ function render(ctx, w, h, seed, opts, pal) {
       put(left + bw, y, INK);
     }
     grassBlock(mx - Math.floor(B / 2), blockY, 98);
+
+    ctx.putImageData(img, 0, 0);
+    return ov;
+  }
+
+  // ---- Ancient City: the deepest blocky world. Near darkness, a ruined deepslate city far
+  // off, brick pillars hung with soul lanterns, a monumental gate of reinforced deepslate
+  // round a black void, sculk creeping over the floor with its sensors, the mascot
+  // tiptoeing past them, and in a far doorway two eyes that blink.
+  if (pal.biome === "ancient") {
+    const ov = { lanterns: [], blinks: [], sparks: [], beams: [], fires: [], kites: [], planes: [], motes: [] };
+    const hex = (v) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    const DARK = [0x040609, 0x070b10, 0x0a1218, 0x0d1a21, 0x10242b].map(hex);
+    const SLATE = [0x24272e, 0x2e323a, 0x3a3f49, 0x4a505c].map(hex);
+    const REIN = [0x1a1d22, 0x23272e, 0x2f343c, 0x5a6a72].map(hex); // reinforced: a cold rim
+    const SCULK = [0x05161b, 0x082128, 0x0b2b33, 0x13444d].map(hex); // dark; the glow is in the veins
+    const CYAN = hex(0x22e3ee);
+    const B = Math.max(4, Math.min(8, Math.round(h / (lake ? 16 : 9))));
+    const cols = Math.ceil(w / B) + 1;
+    const { cell, steps, glowAt } = blockKit(B, cols, DARK[2]);
+    const floor = h - B * (lake ? 2 : 1); // top of the floor tiles
+    const bh = Math.max(2, Math.round(B / 3));
+    const brick = (x, y, tones, haze = 0) => {
+      const row = Math.floor(y / bh);
+      const bw = bh * 2;
+      const mortar = y % bh === 0 || (x + (row % 2) * bh) % bw === 0;
+      const c = mortar ? mix(tones[0], BLACK, 0.45) : tones[1 + Math.floor(hash(Math.floor((x + (row % 2) * bh) / bw), row, 73) * (tones.length - 1.01))];
+      return haze ? mix(c, DARK[2], haze) : c;
+    };
+
+    // the dark, a faint cyan breath low down
+    for (let y = 0; y < h; y += 1) {
+      const f = (y / h) ** 1.4 * (DARK.length - 1);
+      const k = Math.floor(f);
+      for (let x = 0; x < w; x += 1) put(x, y, f - k > dither(x, y) ? DARK[Math.min(DARK.length - 1, k + 1)] : DARK[k]);
+    }
+    // the far city: deepslate towers with battlements and dark arched windows, deep in haze
+    const towers = steps(lake ? 3 : 2, lake ? 9 : 5, 0.45);
+    for (let c = 0; c < cols; c += 1) {
+      const tall = towers[c] + (c % 5 === 2 ? 2 : 0);
+      const top = floor - tall * B;
+      for (let y = top; y < floor; y += 1) {
+        for (let xx = 0; xx < B; xx += 1) {
+          const x = c * B + xx;
+          let col = brick(x, y, SLATE, 0.72);
+          // windows: narrow dark arches every other column
+          if (c % 2 === 0 && xx >= B * 0.3 && xx < B * 0.7 && (y - top) % (B * 2) > B * 0.4 && (y - top) % (B * 2) < B * 1.4) col = DARK[0];
+          put(x, y, col);
+        }
+      }
+      if (c % 2 === 0) for (let xx = 0; xx < B / 2; xx += 1) for (let yy = 1; yy <= Math.max(1, B / 3); yy += 1) put(c * B + xx, top - yy, brick(c * B + xx, top - yy, SLATE, 0.72));
+    }
+    // the eyes: a tall dark doorway in the far city, and two cyan points that blink
+    const doorC = Math.round((w * (lake ? 0.16 : 0.12)) / B);
+    const doorTop = floor - Math.round(B * 2.6);
+    for (let y = doorTop; y < floor; y += 1) for (let x = doorC * B; x < doorC * B + B * 1.4; x += 1) put(x, y, [2, 3, 5]);
+    const eyeY = doorTop + Math.round(B * 0.8);
+    const eyeX = doorC * B + Math.round(B * 0.3);
+    put(eyeX, eyeY, CYAN);
+    put(eyeX + Math.max(2, Math.round(B * 0.6)), eyeY, CYAN);
+    ov.blinks.push({ x: eyeX, y: eyeY, color: "cyan" }, { x: eyeX + Math.max(2, Math.round(B * 0.6)), y: eyeY, color: "cyan" });
+
+    // pillars in the middle distance, each with a soul lantern on a chain
+    const gateCol = Math.round((w * (lake ? 0.72 : opts.orbX)) / B);
+    const pillarEvery = lake ? 9 : 7;
+    for (let c = 2; c < cols; c += pillarEvery) {
+      if (Math.abs(c - gateCol) < 6) continue;
+      const tall = lake ? 6 : 4;
+      for (let k = 0; k < tall; k += 1) {
+        for (let yy = 0; yy < B; yy += 1) for (let xx = 0; xx < B; xx += 1) put(c * B + xx, floor - (k + 1) * B + yy, brick(c * B + xx, floor - (k + 1) * B + yy, SLATE, 0.25));
+      }
+      // a wider capital on top
+      for (let xx = -1; xx <= B; xx += 1) for (let yy = 0; yy < Math.max(2, B / 3); yy += 1) put(c * B + xx, floor - tall * B - yy, SLATE[3]);
+      // chain and soul lantern hanging from the capital's side
+      const lx = c * B + B + Math.round(B * 0.6);
+      const ly0 = floor - tall * B;
+      const ly = ly0 + Math.round(B * 1.5);
+      for (let y = ly0; y < ly; y += 1) if (y % 2 === 0) put(lx, y, [90, 96, 104]);
+      for (let yy = 0; yy < Math.max(3, B * 0.6); yy += 1) for (let xx = -1; xx <= 1; xx += 1) put(lx + xx, ly + yy, yy === 0 ? [70, 74, 80] : xx === 0 ? [180, 250, 255] : [40, 170, 190]);
+      glowAt(lx, ly + 2, B * 2.6, CYAN, 0.35);
+      ov.motes.push({ x: lx, y: ly - 1, tone: "soul", delay: (rand() * 4).toFixed(2) });
+    }
+
+    // the gate: a monumental frame of reinforced deepslate with stepped shoulders round a
+    // black void, the city's centrepiece
+    const gw = lake ? 9 : 7;
+    const gh = lake ? 7 : 5;
+    const gx0 = (gateCol - Math.floor(gw / 2)) * B;
+    const gy0 = floor - gh * B;
+    glowAt(gx0 + (gw * B) / 2, gy0 + (gh * B) / 2, B * 5, [20, 120, 140], 0.25);
+    for (let by = 0; by < gh; by += 1) {
+      for (let bx = 0; bx < gw; bx += 1) {
+        const side = bx === 0 || bx === gw - 1;
+        const topRow = by === 0;
+        const shoulder = by === 1 && (bx === 1 || bx === gw - 2);
+        const inner = !side && !topRow && !shoulder;
+        if (topRow && (bx === 0 || bx === gw - 1)) continue; // stepped shoulders
+        if (inner) {
+          for (let yy = 0; yy < B; yy += 1) for (let xx = 0; xx < B; xx += 1) put(gx0 + bx * B + xx, gy0 + by * B + yy, [1, 2, 4]);
+        } else cell(gx0 + bx * B, gy0 + by * B, REIN, 37 + bx + by * 3);
+      }
+    }
+    // a ledge of shoulders one step out at the top corners
+    cell(gx0 - B, gy0 + B, REIN, 61);
+    cell(gx0 + gw * B, gy0 + B, REIN, 62);
+    for (let i = 0; i < (lake ? 7 : 5); i += 1) {
+      ov.motes.push({ x: gx0 + B + Math.floor(rand() * (gw - 2) * B), y: gy0 + B * 2 + Math.floor(rand() * (gh - 2) * B), tone: "soul", delay: (rand() * 4).toFixed(2) });
+    }
+
+    // the floor: deepslate tiles, with sculk spreading over patches of it
+    const sculkAt = (c) => hash(Math.floor(c / 3), 0, 77) > 0.45 || Math.abs(c - gateCol) <= Math.floor(gw / 2) + 1;
+    for (let c = 0; c < cols; c += 1) {
+      for (let r = 0; r < (lake ? 2 : 1); r += 1) {
+        const y0 = floor + r * B;
+        if (r === 0 && sculkAt(c)) {
+          cell(c * B, y0, SCULK, 81 + c);
+          // the sculk's glowing veins
+          if (hash(c, 0, 85) < 0.6) put(c * B + Math.floor(hash(c, 0, 82) * B), y0 + 1 + Math.floor(hash(c, 0, 83) * (B - 2)), mix(CYAN, SCULK[3], 0.3));
+        } else {
+          const tile = Math.max(2, B >> 1);
+          for (let yy = 0; yy < B; yy += 1) for (let xx = 0; xx < B; xx += 1) {
+            const seam = (xx % tile === 0) || (yy % tile === 0);
+            put(c * B + xx, y0 + yy, seam ? mix(SLATE[0], BLACK, 0.4) : SLATE[1 + Math.floor(hash(c * B + xx >> 1, y0 + yy >> 1, 84) * 2)]);
+          }
+        }
+      }
+    }
+    // sculk sensors on the sculk: a small block with two cyan feelers that twinkle
+    for (let c = 1; c < cols; c += lake ? 7 : 6) {
+      if (!sculkAt(c) || Math.abs(c - gateCol) <= Math.floor(gw / 2) + 1) continue;
+      const sx = c * B + Math.round(B * 0.2);
+      const sw = Math.max(3, Math.round(B * 0.6));
+      const sh = Math.max(2, Math.round(B * 0.4));
+      for (let yy = 0; yy < sh; yy += 1) for (let xx = 0; xx < sw; xx += 1) put(sx + xx, floor - sh + yy, yy === 0 ? SCULK[2] : SCULK[1]);
+      for (let k = 1; k <= Math.max(2, Math.round(B * 0.4)); k += 1) {
+        put(sx + 1, floor - sh - k, CYAN);
+        put(sx + sw - 2, floor - sh - k, CYAN);
+      }
+      glowAt(sx + sw / 2, floor - sh, B * 1.6, CYAN, 0.25);
+      ov.sparks.push({ x: sx + 1, y: floor - sh - 2, delay: (rand() * 3).toFixed(2), tone: "cyan" });
+    }
+
+    // the mascot, tiptoeing: low, legs wide, looking back at the doorway
+    const mc = gateCol - Math.floor(gw / 2) - (lake ? 4 : 3);
+    const mx = mc * B + Math.round(B / 2);
+    const bw = Math.max(5, Math.round(B * 1.3));
+    const bhh = Math.max(4, Math.round(B * 0.95));
+    const top = floor - 1 - bhh;
+    const INK = [16, 30, 40];
+    const left = mx - Math.floor(bw / 2);
+    for (let y = top; y < top + bhh; y += 1) {
+      for (let x = left; x < left + bw; x += 1) {
+        const edgeX = x === left || x === left + bw - 1;
+        const edgeY = y === top || y === top + bhh - 1;
+        if (edgeX && edgeY) continue;
+        put(x, y, edgeX || edgeY ? INK : y > top + bhh * 0.6 ? [200, 230, 236] : [236, 248, 250]);
+      }
+    }
+    put(left + bw - 2, top + bhh, INK); // tail on the other side: it is facing back
+    const ey = top + Math.max(1, Math.round(bhh * 0.35));
+    put(left + 1, ey, CYAN); // eyes to the left, toward the doorway
+    put(left + 1 + Math.max(2, Math.round(bw / 3)), ey, CYAN);
+    put(left, floor - 1, INK); // legs splayed mid-step
+    put(left + bw - 1, floor - 1, INK);
+    glowAt(mx, top + bhh / 2, B * 1.4, CYAN, 0.12);
 
     ctx.putImageData(img, 0, 0);
     return ov;
@@ -1786,7 +1952,9 @@ export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, class
             "absolute size-1",
             b.color === "red"
               ? "pm-blink bg-red-500 shadow-[0_0_8px_2px_rgb(239_68_68/0.7)]"
-              : "pm-twinkle bg-amber-200 shadow-[0_0_10px_3px_rgb(253_230_138/0.7)]",
+              : b.color === "cyan"
+                ? "pm-blink bg-cyan-300 shadow-[0_0_8px_2px_rgb(34_211_238/0.8)]"
+                : "pm-twinkle bg-amber-200 shadow-[0_0_10px_3px_rgb(253_230_138/0.7)]",
           )}
           style={at(b, scene)}
         />
@@ -1794,7 +1962,10 @@ export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, class
       {scene?.sparks.map((s, i) => (
         <span
           key={`s${i}`}
-          className="pm-twinkle absolute size-1 bg-yellow-200 shadow-[0_0_6px_2px_rgb(253_224_71/0.6)]"
+          className={cx(
+            "pm-twinkle absolute size-1",
+            s.tone === "cyan" ? "bg-cyan-200 shadow-[0_0_6px_2px_rgb(34_211_238/0.7)]" : "bg-yellow-200 shadow-[0_0_6px_2px_rgb(253_224_71/0.6)]",
+          )}
           style={{ ...at(s, scene), animationDelay: `${s.delay}s` }}
         />
       ))}
@@ -1807,6 +1978,8 @@ export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, class
               ? "bg-fuchsia-300 shadow-[0_0_6px_2px_rgb(192_132_252/0.7)]"
               : m.tone === "smoke"
                 ? "size-2 bg-zinc-100/80"
+                : m.tone === "soul"
+                  ? "bg-cyan-200 shadow-[0_0_6px_2px_rgb(34_211_238/0.7)]"
                 : "bg-orange-300 shadow-[0_0_6px_2px_rgb(251_146_60/0.7)]",
           )}
           style={{ ...at(m, scene), animationDelay: `${m.delay}s` }}
