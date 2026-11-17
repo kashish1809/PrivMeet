@@ -47,6 +47,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.6** feedback components | Vinayak | `v2/vinayak/R1.1-R1.6-look-shell` | in `src/ui`: `toast()`/`dismissToast()`/`<Toaster />` (mounted in AppShell), `Skeleton`, `Checkbox`, `Breadcrumb`, `Tooltip`. Pages can swap their plain-Tailwind versions in their next task. |
 | **R2.1** API helpers v2 + feature flags | Kashish | `v2/kashish/R2.1-api-v2` | `getSystem()` shares one promise, `hasFeature()` / `useFeatures()`; one helper per v2 endpoint; `format.js` gains `minutes`, `shortDate`, `participants`, `statusBadge` |
 | **R2.2** Meetings list v2 | Kashish | `v2/kashish/R2.2-list-v2` | rows per the mockup (icon tile, `Oct 28, 2026 · 42 min · 4 participants`, pill, kebab); `q` read from the route and written back with `replaceState` |
+| **R1.8** demo data command | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | `python manage.py seed_demo [--reset]`: Project Sync, Design Review, Team Sync ("Processed"), a failed one and one transcribing, with silent audio and the mockup's dates. With `CELERY_EAGER=1` the startup reaper turns the transcribing one into failed on the next start. |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
 Everything in R1.x and R2.x that is not in the table above is open.
@@ -654,7 +655,7 @@ Built; the text below is the specification it was built to.
   - `docs/API.md`: every endpoint with its request, response and flag. Every later backend task updates it in the same branch.
 - **Done when:** a PATCH of `llm_model` changes the model in `/api/system/` and in the next processed meeting, and `features` is in the response.
 
-#### R1.8 · Demo data command
+#### R1.8 · Demo data command — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.8-seed-demo`
 - **Needs:** none
 - **Files:** `backend/meetings/management/commands/seed_demo.py`
