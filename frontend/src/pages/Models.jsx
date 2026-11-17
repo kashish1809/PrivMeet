@@ -1,8 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import { AudioLines, Cpu, Gauge, MemoryStick, MonitorCog, Sparkles, Trash2 } from "lucide-react";
+import { AudioLines, Cpu, Download, Gauge, MemoryStick, MonitorCog, Sparkles, Trash2 } from "lucide-react";
 
 import { api } from "../api";
-import { Badge, Card, CardHeader, ConfirmDialog, EmptyState, IconButton, Skeleton, cx, focusRing, toast } from "../ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  ConfirmDialog,
+  EmptyState,
+  IconButton,
+  Input,
+  ProgressBar,
+  Skeleton,
+  cx,
+  focusRing,
+  toast,
+} from "../ui";
 
 /** One "label: value" line in a card. */
 function Fact({ icon: Icon, label, children }) {
@@ -105,7 +119,49 @@ const params = (name) => {
 };
 const same = (a, b) => a?.replace(/:latest$/, "") === b?.replace(/:latest$/, "");
 
-function SummariesCard({ ollama, onSave, onDelete }) {
+/** Download a model by name; shows the running (or last) pull with a progress bar. */
+function PullBox({ pull, recommended, reachable, onPull }) {
+  const [name, setName] = useState("");
+  const running = pull?.running;
+  return (
+    <div className="mx-5 mt-5 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) onPull(name.trim());
+        }}
+      >
+        <Input
+          label="Download model"
+          hint={`An Ollama model name, e.g. ${recommended}.`}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={recommended}
+          className="min-w-56 flex-1"
+          disabled={running || !reachable}
+        />
+        <Button type="submit" icon={Download} disabled={running || !reachable || !name.trim()} className="mb-6">
+          Download
+        </Button>
+      </form>
+      {pull && (
+        <div className="mt-1 flex flex-col gap-1.5" aria-live="polite">
+          <div className="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-400">
+            <span>
+              {pull.model}: {pull.status === "success" ? "downloaded" : pull.status === "error" ? "failed" : pull.status}
+            </span>
+            <span>{pull.percent}%</span>
+          </div>
+          <ProgressBar value={pull.percent} label={`Downloading ${pull.model}`} />
+          {pull.status === "error" && <p className="text-xs text-red-600 dark:text-red-400">{pull.error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummariesCard({ ollama, pull, onSave, onDelete, onPull }) {
   const cloud = ollama.provider !== "ollama";
   const big = params(ollama.current) > (params(ollama.recommended) ?? Infinity);
   return (
@@ -161,6 +217,7 @@ function SummariesCard({ ollama, onSave, onDelete }) {
           {ollama.current} is larger than this machine's {ollama.recommended}. Summaries may be slow.
         </p>
       )}
+      <PullBox pull={pull} recommended={ollama.recommended} reachable={ollama.reachable} onPull={onPull} />
     </Card>
   );
 }
@@ -195,6 +252,28 @@ export default function Models() {
       load();
     } catch (e) {
       toast(e.message, "red");
+    }
+  }
+
+  // Poll every 2 s, but only while a download runs (it moves; nothing else here does).
+  const pulling = !!data?.pull?.running;
+  useEffect(() => {
+    if (!pulling) return undefined;
+    const t = setInterval(load, 2000);
+    return () => clearInterval(t);
+  }, [pulling, load]);
+
+  async function pull(name) {
+    // With a real worker this returns at once; with CELERY_EAGER it returns when the
+    // download ends, so start polling straight away rather than waiting for the answer.
+    const poll = setTimeout(load, 800);
+    try {
+      await api("/api/models/pull", { method: "POST", body: { model: name } });
+    } catch (e) {
+      toast(e.message, "red");
+    } finally {
+      clearTimeout(poll);
+      load();
     }
   }
 
@@ -236,7 +315,7 @@ export default function Models() {
         <>
           <HardwareCard hw={data.hardware} />
           <WhisperCard whisper={data.whisper} ram={data.hardware.ram_gb} onSave={save} />
-          <SummariesCard ollama={data.ollama} onSave={save} onDelete={setDeleting} />
+          <SummariesCard ollama={data.ollama} pull={data.pull} onSave={save} onDelete={setDeleting} onPull={pull} />
           <ConfirmDialog open={deleting !== null} title="Delete model?" onConfirm={remove} onCancel={() => setDeleting(null)}>
             {deleting} is removed from Ollama. You can download it again later.
           </ConfirmDialog>
