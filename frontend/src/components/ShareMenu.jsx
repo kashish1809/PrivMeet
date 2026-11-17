@@ -7,7 +7,8 @@ import { toast, cx, focusRing } from "../ui";
  * The Share menu of the meeting header.
  *
  * "Copy summary" puts the notes into the clipboard as plain text, ready to paste into an
- * email; "Copy link" is the page's address, which only opens on this computer.
+ * email; "Copy link" is the page's address, which only opens on this computer; "Share..."
+ * hands the same text to the system share sheet where the browser has one (phones mostly).
  */
 
 const outline =
@@ -73,6 +74,7 @@ export async function copyText(text) {
 export default function ShareMenu({ meeting, className }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState("");
+  const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
   const id = useId();
   const root = useRef(null);
   const trigger = useRef(null);
@@ -101,6 +103,18 @@ export default function ShareMenu({ meeting, className }) {
       onSelect: () => copy("link", window.location.href, "Copied link"),
     },
   ];
+
+  if (canNativeShare) {
+    items.push({
+      label: "Share…",
+      icon: Share2,
+      onSelect: () =>
+        navigator
+          .share({ title: meeting.title, text: summaryText(meeting), url: window.location.href })
+          // Closing the sheet rejects with AbortError; that is not a failure to report.
+          .catch(() => {}),
+    });
+  }
 
   const positions = items.map((item, i) => (item.disabled ? -1 : i)).filter((i) => i >= 0);
 
