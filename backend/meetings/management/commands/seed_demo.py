@@ -8,23 +8,27 @@ Demo rows carry tier_used="demo"; --reset deletes only those, never a real meeti
 
 import subprocess
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from django.core.files import File
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
 
 from meetings.models import Meeting, Segment
 
 DEMO = "demo"
 
-# Title, minutes, status, progress, error. Content is filled in by the builders below.
+# Title, minutes, status, progress, error, date (the mockup's; None = now). Content is in
+# CONTENT below.
 MEETINGS = [
-    ("Project Sync", 42, Meeting.Status.DONE, 100, ""),
-    ("Design Review", 36, Meeting.Status.DONE, 100, ""),
-    ("Team Sync", 51, Meeting.Status.DONE, 100, ""),  # done with no summary: "Processed"
-    ("Client Onboarding", 18, Meeting.Status.FAILED, 80, "Ollama is not reachable at http://localhost:11434."),
-    ("Sprint Planning", 47, Meeting.Status.TRANSCRIBING, 40, ""),
+    ("Project Sync", 42, Meeting.Status.DONE, 100, "", (2026, 10, 28, 10, 30)),
+    ("Design Review", 36, Meeting.Status.DONE, 100, "", (2026, 10, 27, 15, 0)),
+    ("Team Sync", 51, Meeting.Status.DONE, 100, "", (2026, 10, 24, 11, 0)),  # no summary: "Processed"
+    ("Client Onboarding", 18, Meeting.Status.FAILED, 80, "Ollama is not reachable at http://localhost:11434.",
+     (2026, 10, 22, 16, 0)),
+    ("Sprint Planning", 47, Meeting.Status.TRANSCRIBING, 40, "", None),  # processing now
 ]
 
 # Speakers are numbered in order of `speakers`; each line is (speaker, text).
@@ -236,7 +240,7 @@ class Command(BaseCommand):
             self.stdout.write(f"Deleted {gone} demo meeting(s).")
         have = set(demo.values_list("title", flat=True))
         made = 0
-        for title, minutes, status, progress, error in MEETINGS:
+        for title, minutes, status, progress, error, when in MEETINGS:
             if title in have:
                 continue  # running twice adds nothing
             with tempfile.TemporaryDirectory() as tmp:
@@ -255,5 +259,9 @@ class Command(BaseCommand):
                     m.language = "en"
                     m.file.save(clip.name, File(f), save=True)
                     Segment.objects.bulk_create(lines_to_segments(m, c.get("lines", [])))
+                    if when:  # created is auto_now_add, so the date is set after the insert
+                        Meeting.objects.filter(pk=m.pk).update(
+                            created=timezone.make_aware(datetime(*when))
+                        )
             made += 1
         self.stdout.write(self.style.SUCCESS(f"Added {made} demo meeting(s)."))
