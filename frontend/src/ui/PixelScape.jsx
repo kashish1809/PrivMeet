@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { cx } from "./cx";
+import { applyTheme } from "./useTheme";
 
 /**
  * PrivMeet's pixel landscapes, drawn pixel by pixel on a small canvas and scaled up crisply
@@ -823,6 +824,7 @@ function render(ctx, w, h, seed, opts, pal) {
     for (let i = 0; i < (lake ? 6 : 4); i += 1) {
       ov.motes.push({ x: Math.round(ix0 + rand() * iw), y: Math.round(iy0 + rand() * ih), tone: "violet", delay: (rand() * 4).toFixed(2) });
     }
+    ov.portal = { x: fx0, y: fy0, w: 4 * B, h: 5 * B, to: "nether" };
 
     // the mascot again, here hauling a grass block
     const mx = mascotCol * B + Math.round(B / 2);
@@ -1227,6 +1229,7 @@ function render(ctx, w, h, seed, opts, pal) {
     for (let i = 0; i < (lake ? 8 : 6); i += 1) {
       ov.motes.push({ x: Math.round(ix0 + rand() * iw), y: Math.round(iy0 + rand() * ih), tone: "violet", delay: (rand() * 4).toFixed(2) });
     }
+    ov.portal = { x: fx0, y: fy0, w: fw * B, h: fh * B, to: "overworld" };
 
     // ---- the mascot: PrivMeet's speech bubble, two violet eyes, arms up, carrying a block
     const mx = mascotCol * B + Math.round(B / 2);
@@ -1938,6 +1941,30 @@ export function PixelStars({ className }) {
   );
 }
 
+/**
+ * Step through a portal: a violet swirl spreads from the portal over the whole window, the
+ * theme switches under it at its fullest, then it clears. Reduced motion: switch at once.
+ */
+function travel(to, rect) {
+  const go = () => {
+    try {
+      localStorage.setItem("theme", to);
+    } catch {
+      // private window: the theme still applies for this visit
+    }
+    applyTheme(to);
+  };
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return go();
+  const warp = document.createElement("div");
+  warp.className = "pm-warp";
+  warp.setAttribute("aria-hidden", "true");
+  warp.style.setProperty("--cx", `${rect.left + rect.width / 2}px`);
+  warp.style.setProperty("--cy", `${rect.top + rect.height / 2}px`);
+  document.body.append(warp);
+  setTimeout(go, 520);
+  setTimeout(() => warp.remove(), 1200);
+}
+
 /** `scene`: "lake" (with the shore, mast, dock and floating lanterns) or "clouds" (still). */
 export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, className }) {
   const box = useRef(null);
@@ -2007,6 +2034,22 @@ export function PixelScape({ scene: kind = "lake", seed = 11, orbX = 0.68, class
           style={{ ...at(f, scene), width: `${(f.w / scene.w) * 100}%`, height: `${(f.h / scene.h) * 100}%` }}
         />
       ))}
+      {/* The portal is a door: in the hero, clicking it travels to the other world. Mouse only
+          (an easter egg; every theme is in Settings), so it stays out of the tab order. */}
+      {scene?.portal && kind === "clouds" && (
+        <button
+          type="button"
+          tabIndex={-1}
+          title={`Step through to the ${scene.portal.to === "overworld" ? "Overworld" : "Nether"}`}
+          onClick={(e) => travel(scene.portal.to, e.currentTarget.getBoundingClientRect())}
+          className="pointer-events-auto absolute z-10 cursor-pointer rounded-sm transition-shadow hover:shadow-[0_0_24px_6px_rgb(168_85_247/0.6)]"
+          style={{
+            ...at(scene.portal, scene),
+            width: `${(scene.portal.w / scene.w) * 100}%`,
+            height: `${(scene.portal.h / scene.h) * 100}%`,
+          }}
+        />
+      )}
       {scene?.motes?.map((m, i) => (
         <span
           key={`m${i}`}
