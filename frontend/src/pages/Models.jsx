@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AudioLines, Cpu, Download, Gauge, MemoryStick, MonitorCog, Sparkles, Trash2 } from "lucide-react";
+import { AudioLines, Cpu, Download, Gauge, MemoryStick, MonitorCog, Sparkles, Trash2, Users } from "lucide-react";
 
 import { api } from "../api";
 import {
@@ -13,6 +13,7 @@ import {
   Input,
   ProgressBar,
   Skeleton,
+  Toggle,
   cx,
   focusRing,
   toast,
@@ -222,6 +223,35 @@ function SummariesCard({ ollama, pull, onSave, onDelete, onPull }) {
   );
 }
 
+function SpeakersCard({ diarization, onSave }) {
+  return (
+    <Card className="pb-5">
+      <CardHeader title="Speakers" icon={Users} />
+      <div className="flex flex-col gap-3 px-5 pt-3">
+        <Toggle
+          checked={diarization.enabled}
+          onChange={(on) => onSave({ diarize: on })}
+          label="Tell speakers apart (Speaker 1, Speaker 2…)"
+        />
+        <p className="flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+          {diarization.available ? (
+            <Badge tone="green" dot>
+              Models present
+            </Badge>
+          ) : (
+            <Badge tone="amber" dot>
+              Models missing
+            </Badge>
+          )}
+          {diarization.available
+            ? "Runs after transcription, on this machine. Adds a little time to each meeting."
+            : "Speaker labels are skipped until the diarization models are in the models folder."}
+        </p>
+      </div>
+    </Card>
+  );
+}
+
 /** Models (R1.12): what runs where, and the models to pick, download or remove. Backend: R1.11. */
 export default function Models() {
   const [data, setData] = useState(null);
@@ -316,6 +346,7 @@ export default function Models() {
           <HardwareCard hw={data.hardware} />
           <WhisperCard whisper={data.whisper} ram={data.hardware.ram_gb} onSave={save} />
           <SummariesCard ollama={data.ollama} pull={data.pull} onSave={save} onDelete={setDeleting} onPull={pull} />
+          <SpeakersCard diarization={data.diarization} onSave={save} />
           <ConfirmDialog open={deleting !== null} title="Delete model?" onConfirm={remove} onCancel={() => setDeleting(null)}>
             {deleting} is removed from Ollama. You can download it again later.
           </ConfirmDialog>
