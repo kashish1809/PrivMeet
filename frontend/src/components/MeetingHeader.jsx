@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Download, Share2, Trash2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Share2, Trash2 } from "lucide-react";
 
-import { meetingExportUrl } from "../api";
+import { useFeatures } from "../api";
 import { minutes, participants as participantCount, shortDate, statusBadge } from "../format";
 import { Badge, LogoMark, Menu, cx, focusRing } from "../ui";
+import DownloadMenu from "./DownloadMenu";
 
 const outline =
   "inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-50 " +
@@ -13,8 +14,8 @@ const outline =
  * Detail page header: the breadcrumb and Share / Download at the top, then the logo tile,
  * title, date · length · participants and the status pill.
  *
- * Share copies the page URL (R2.6 turns this into a menu with "Copy summary"), Download
- * is the Markdown export (R2.5 turns it into a format menu).
+ * Share copies the page URL (R2.6 turns this into a menu with "Copy summary"). Download
+ * is the DownloadMenu: Markdown always, and every other format the server's flags allow.
  *
  * The title is a button: click it (or press Enter on it) to rename the meeting in place.
  * Enter or leaving the field saves, Escape throws the edit away.
@@ -24,6 +25,7 @@ const outline =
  *
  */
 export default function MeetingHeader({ meeting, onRename, onDelete }) {
+  const features = useFeatures();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
 
@@ -125,14 +127,7 @@ export default function MeetingHeader({ meeting, onRename, onDelete }) {
             {copied ? <Check className="size-4" aria-hidden="true" /> : <Share2 className="size-4" aria-hidden="true" />}
             {copied ? "Link copied" : "Share"}
           </button>
-          <a
-            href={meetingExportUrl(meeting.id)}
-            download={`${meeting.title}.md`}
-            className={cx(outline, focusRing)}
-          >
-            <Download className="size-4" aria-hidden="true" />
-            Download
-          </a>
+          <DownloadMenu meeting={meeting} features={features} />
           {onDelete && (
             <Menu
               label="Meeting actions"
