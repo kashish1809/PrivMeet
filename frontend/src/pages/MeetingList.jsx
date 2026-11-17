@@ -37,6 +37,17 @@ export default function MeetingList() {
     setText(urlQuery);
   }, [urlQuery]);
 
+  // Typing writes the query into the URL so the page can be bookmarked or reloaded, with
+  // replaceState: one history entry per keystroke would make the back button useless.
+  function updateText(next) {
+    setText(next);
+    const trimmed = next.trim();
+    const hash = trimmed ? `#/meetings?q=${encodeURIComponent(trimmed)}` : "#/meetings";
+    if (window.location.hash === hash) return;
+    lastUrl.current = trimmed; // our own write, so the effect above leaves the box alone
+    window.history.replaceState(null, "", hash);
+  }
+
   // 300 ms debounce: one request per pause, not one per key press.
   useEffect(() => {
     const timer = setTimeout(() => setSearch(text.trim()), 300);
@@ -90,7 +101,7 @@ export default function MeetingList() {
         label="Search meetings"
         placeholder="Search meetings and transcripts…"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => updateText(e.target.value)}
         className="w-full max-w-md"
       />
 
