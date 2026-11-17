@@ -50,6 +50,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R2.3** Participants card | Kashish | `v2/kashish/R2.3-participants` | `ParticipantsCard.jsx`: two columns of avatar + name, talking time as a percentage, rename in place (PATCH `speaker_names`); suggestions behind `suggestions`, merge behind `speaker-merge` |
 | **R2.4** Notes tab | Kashish | `v2/kashish/R2.4-notes-tab` | `NotesTab.jsx`: autosave 800 ms after typing, also on blur, tab switch and page hide, with "Saving… / Saved"; tags add on Enter and remove on the chip's ×; both disabled without their flag |
 | **R2.5** Download menu | Kashish | `v2/kashish/R2.5-download-menu` | `DownloadMenu.jsx` with Notes / Transcript / Action items / Audio groups, empty ones dropped; `exportCsv.js` builds the two CSVs in the browser (RFC 4180, BOM, formula guard); server formats behind `exports`, `exports-office`, `exports-ics`, `audio-exports`; the list kebab uses it too. **Not built:** the PDF entry, which waits for R2.15's print view. |
+| **R2.6** Share menu | Kashish | `v2/kashish/R2.6-share-menu` | `ShareMenu.jsx`: "Copy summary" pastes the title, date, summary, key points and action items as plain text, "Copy link" says it opens only on this computer, "Share…" where `navigator.share` exists, and the `.html` share page behind `share-page`; the trigger confirms with "Copied summary" / "Copied link" for 2.5 s. **Not built:** the copied link is a localhost address, so "Copy link" is only useful on this machine. |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 
 Everything in R1.x and R2.x that is not in the table above is open.
@@ -905,8 +906,9 @@ Built; the text below is the specification it was built to.
   - "PDF" opens the print dialog;
   - without the R1.13 flags only the browser-made formats and the original audio show, and nothing errors.
 
-#### R2.6 · Share menu
-- **Branch:** `v2/kashish/R2.6-share-menu`
+#### R2.6 · Share menu — **DONE** (see "Finished tasks")
+Built; the text below is the specification it was built to.
+- **Branch:** `v2/kashish/R2.6-share-menu` (unused)
 - **Needs:** T2.4, R2.1
 - **Files:** `frontend/src/components/ShareMenu.jsx` (new), `frontend/src/pages/MeetingDetail.jsx`
 - **Do:**
