@@ -1,7 +1,8 @@
 import { useId, useMemo, useState } from "react";
-import { Check, Users, X } from "lucide-react";
+import { Check, Merge, Users, X } from "lucide-react";
 
-import { Avatar, Card, CardHeader, cx, focusRing } from "../ui";
+import { mergeSpeakers } from "../api";
+import { Avatar, Card, CardHeader, ConfirmDialog, Menu, cx, focusRing } from "../ui";
 
 /**
  * Who spoke, in the right-column card of the mockup: two columns of avatar and name, with
@@ -11,9 +12,9 @@ import { Avatar, Card, CardHeader, cx, focusRing } from "../ui";
  * throws the edit away. The name is saved through the page's onSave, so the transcript,
  * the header and the exports all agree at once.
  *
- * `suggestions` arrives with R1.18: when the summary pass guessed a speaker's name, the
- * card offers "Rename to <name>?" with a yes and a no. Until that flag is in
- * GET /api/system/, the meeting JSON has no `speaker_suggestions` and nothing is offered.
+ * Two controls arrive with later server work and stay hidden until the flag is there:
+ * `suggestions` (R1.18) offers "Rename to <name>?" when the summary pass guessed a name,
+ * and `speaker-merge` (R1.15) moves every line of one speaker onto another.
  */
 
 /** Everyone who spoke, in order of first appearance, with talking time and share of it. */
@@ -46,12 +47,14 @@ export default function ParticipantsCard({ meeting, onSave, features }) {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [merging, setMerging] = useState(null); // { from, to } waiting for the dialog
   const [dismissed, setDismissed] = useState(() => new Set());
   const id = useId();
 
   const people = useMemo(() => speakers(meeting), [meeting]);
   const suggestions = meeting?.speaker_suggestions || {};
   const canRename = typeof onSave === "function";
+  const canMerge = features?.has?.("speaker-merge") && people.length > 1;
 
   function startRename(person) {
     if (!canRename) return;
@@ -78,6 +81,18 @@ export default function ParticipantsCard({ meeting, onSave, features }) {
       setError(e.message || "Could not rename this speaker.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function merge() {
+    const { from, to } = merging;
+    setMerging(null);
+    try {
+      await mergeSpeakers(meeting.id, from, to);
+      // The merge rewrites transcript lines; a reload is the shortest way to show them.
+      window.location.reload();
+    } catch (e) {
+      setError(e.message || "Could not merge those speakers.");
     }
   }
 
@@ -150,6 +165,18 @@ export default function ParticipantsCard({ meeting, onSave, features }) {
                       {person.share}% · {talkTime(person.seconds)}
                     </p>
                   </div>
+                  {canMerge && (
+                    <Menu
+                      label={`Merge ${person.name} into another speaker`}
+                      icon={Merge}
+                      items={people
+                        .filter((other) => other.key !== person.key)
+                        .map((other) => ({
+                          label: `Merge into ${other.name}`,
+                          onSelect: () => setMerging({ from: person.key, to: other.key }),
+                        }))}
+                    />
+                  )}
                 </div>
 
                 {guess && (
@@ -188,6 +215,19 @@ export default function ParticipantsCard({ meeting, onSave, features }) {
           {error}
         </p>
       )}
+
+      <ConfirmDialog
+        open={!!merging}
+        title="Merge speakers?"
+        confirmLabel="Merge"
+        onConfirm={merge}
+        onCancel={() => setMerging(null)}
+      >
+        {merging &&
+          `Every line from ${people.find((p) => p.key === merging.from)?.name} moves to ` +
+            `${people.find((p) => p.key === merging.to)?.name}, and the first name is dropped. ` +
+            "The transcript text does not change. This cannot be undone."}
+      </ConfirmDialog>
     </Card>
   );
 }
