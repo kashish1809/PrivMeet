@@ -68,6 +68,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.15** transcript edit + speaker merge | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | segments carry `id`; `PATCH /api/segments/<id>/` (`text` up to 2000 chars, `speaker` an existing number, the next new one or null); `POST /api/meetings/<id>/speakers/merge` `{from, to}`; both 409 while processing; flags `transcript-edit`, `speaker-merge`. |
 | **R1.16** cancel + queue position | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `cancel_requested` (migration 3); `POST /api/meetings/<id>/cancel` (409 unless processing): a queued meeting fails "Cancelled." at once, the running one at its next stage check or through whisper.cpp's abort callback / sherpa's progress callback; retry clears it; list rows add `queue_position`; flag `cancel`. |
 | **R1.17** language + translate | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | upload `language` (ISO code, empty = detect, 400 for an unknown one) and `translate` (`1` = English), stored as `language_hint` / `translate` (migration 4); whisper.cpp `set_language` / `set_translate`, cloud `/audio/translations`; flag `language`. Checked with the Hindi test clip both ways. |
+| **R1.18** auto title + speaker suggestions | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | the same summary call returns `title` and `speakers`; `auto_title` (set by an untitled upload, cleared by a title PATCH) lets the title replace the file name; `speaker_suggestions` (migration 5) from the inferred names and the model's, kept only when the name was said, never written to `speaker_names`; flag `suggestions`. Checked on the test meeting with Groq and qwen2.5:1.5b. |
 
 Everything in R1.x and R2.x that is not in the table above is open.
 
@@ -808,7 +809,7 @@ Built; the text below is the specification it was built to.
   - Reject an unknown code with 400.
 - **Done when:** a Hindi clip uploaded with `language=hi` is transcribed in Hindi, and with `translate=1` in English.
 
-#### R1.18 · Auto title + speaker name suggestions
+#### R1.18 · Auto title + speaker name suggestions — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.18-llm-suggestions`
 - **Needs:** T1.3, R1.7
 - **Files:** `native/server/src/db.rs` (next migration), `native/server/src/meetings.rs`, `native/server/src/llm.rs`, `native/server/src/pipeline.rs`, `native/server/src/api.rs`, `native/server/src/web.rs`, `docs/API.md`

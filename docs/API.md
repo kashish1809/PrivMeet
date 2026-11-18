@@ -106,7 +106,8 @@ Statuses: `queued`, `converting`, `transcribing`, `diarizing`, `summarizing`, `d
 ### `POST /api/meetings/`
 `multipart/form-data`:
 - `file` (required): `.mp3 .wav .mp4 .m4a .webm .ogg .opus .flac .mkv .mov`, at most `MAX_UPLOAD_MB`.
-- `title`: defaults to the file name.
+- `title`: defaults to the file name. With flag `suggestions`, an upload without a title is
+  renamed from the notes once they are written (at most 80 chars), unless the user renamed it.
 - `notes` (flag `notes`): text, at most 20000 chars.
 - `tags` (flag `tags`): a JSON list (`["API","Sprint"]`) or `"API, Sprint"`.
 - `language` (flag `language`): an ISO code Whisper knows (`en`, `hi`, `ta`...); empty or `auto`
@@ -119,7 +120,9 @@ Returns 201 with the list row and queues processing. Errors:
 - 413: the file is too big.
 
 ### `GET /api/meetings/<id>/`
-The list row plus `notes`, `language`, `summary`, `decisions` (strings), `action_items` (`[{"owner", "task", "due", "done"}]`), `speaker_names` (`{"0": "Rohan"}`), `language_hint` and `translate` (what the upload asked for; `language` is what Whisper detected), `tier_used` and `segments` (`[{"id", "start", "end", "speaker", "text"}]`; `id` with flag `transcript-edit`). Poll it every 2 s while the status is in progress.
+The list row plus `notes`, `language`, `summary`, `decisions` (strings), `action_items` (`[{"owner", "task", "due", "done"}]`), `speaker_names` (`{"0": "Rohan"}`), `speaker_suggestions` (flag `suggestions`: `{"0": "Rohan"}`, names the summary read from the
+conversation for speakers that have no saved name yet; accept one by PATCHing `speaker_names`),
+`language_hint` and `translate` (what the upload asked for; `language` is what Whisper detected), `tier_used` and `segments` (`[{"id", "start", "end", "speaker", "text"}]`; `id` with flag `transcript-edit`). Poll it every 2 s while the status is in progress.
 
 ### `PATCH /api/meetings/<id>/`
 JSON with any of:
