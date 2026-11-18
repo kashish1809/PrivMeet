@@ -63,6 +63,12 @@ fn read(resp: Result<reqwest::blocking::Response, reqwest::Error>) -> Result<Val
     serde_json::from_str(&text).map_err(|_| "The provider sent a reply PrivMeet could not read.".into())
 }
 
+/// GET a path of the provider's API as JSON ("/models", "/key"), errors as one line.
+pub fn get(p: &Profile, path: &str, timeout: Duration) -> Result<Value, String> {
+    let url = base_url(p)? + path;
+    read(with_headers(p, client(timeout)?.get(url)).send())
+}
+
 /// One chat call: a system prompt and one user message. `json_mode` asks for a JSON object.
 /// `num_predict` caps the reply on Ollama only (to keep prompt + reply inside num_ctx); a cloud
 /// model gets no cap, since a reasoning model's hidden tokens count against it.

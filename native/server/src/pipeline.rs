@@ -16,6 +16,7 @@ use crate::{audio, db, diarize, hw, llm, names, providers, stt, templates};
 pub enum Job {
     Meeting(String),
     Question(i64),
+    Pull(String),
 }
 
 static QUEUE: OnceLock<Mutex<Sender<Job>>> = OnceLock::new();
@@ -50,6 +51,7 @@ pub fn start(app: Arc<App>) {
                 match job {
                     Job::Meeting(id) => process_meeting(&app, &id),
                     Job::Question(id) => answer_question(&app, id),
+                    Job::Pull(name) => crate::models::pull_model(&app, &name),
                 }
                 release_memory();
             }
@@ -73,6 +75,11 @@ fn send(job: Job) {
     if let Some(q) = QUEUE.get() {
         let _ = q.lock().unwrap_or_else(|p| p.into_inner()).send(job);
     }
+}
+
+/// Queue an Ollama model download behind any meeting being processed.
+pub fn enqueue_pull(name: &str) {
+    send(Job::Pull(name.to_string()));
 }
 
 pub fn enqueue(_app: &AppState, meeting: &str) {

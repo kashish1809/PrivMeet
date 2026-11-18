@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use tower_http::services::ServeDir;
 
 use crate::config::Config;
-use crate::{api, csrf, db, hw, pipeline, settings, templates};
+use crate::{api, csrf, db, hw, models, pipeline, settings, templates};
 
 /// What every request can reach: configuration, the database and the hardware (read once).
 pub struct App {
@@ -30,7 +30,7 @@ pub type AppState = Arc<App>;
 
 /// What this server supports beyond the v1 API (docs/TASKS.md "Feature flags"). Only what is
 /// built: the React app shows a control only when its flag is here.
-pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters", "templates", "exports", "share-page", "exports-office", "exports-ics", "audio-exports"];
+pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters", "templates", "models", "exports", "share-page", "exports-office", "exports-ics", "audio-exports"];
 
 /// Built-in note template ids (backend/meetings/note_templates.py); own ones are "u<pk>".
 pub fn builtin_template(id: &str) -> bool {
@@ -96,6 +96,10 @@ pub fn router(app: App) -> Router {
     let api = Router::new()
         .route("/system/", get(system))
         .route("/settings/", get(settings_get).patch(settings_patch))
+        .route("/settings/test", axum::routing::post(models::settings_test))
+        .route("/models/", get(models::models))
+        .route("/models/pull", axum::routing::post(models::pull))
+        .route("/models/{*name}", axum::routing::delete(models::delete))
         .route(
             "/meetings/",
             get(api::list).post(api::create).layer(axum::extract::DefaultBodyLimit::max(upload_limit)),

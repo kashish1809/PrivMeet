@@ -13,6 +13,7 @@ mod export;
 mod hw;
 mod llm;
 mod meetings;
+mod models;
 mod names;
 mod pipeline;
 mod providers;
