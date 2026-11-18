@@ -5,6 +5,7 @@
 
 mod api;
 mod audio;
+mod cli;
 mod config;
 mod csrf;
 mod db;
@@ -27,6 +28,17 @@ use std::net::SocketAddr;
 #[tokio::main]
 async fn main() {
     let cfg = config::Config::from_env();
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(done) = cli::run(&args, &cfg) {
+        match done {
+            Ok(msg) => println!("{msg}"),
+            Err(e) => {
+                eprintln!("privmeet-server: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     if let Err(e) = std::fs::create_dir_all(&cfg.data_dir) {
         eprintln!("privmeet-server: cannot create {}: {e}", cfg.data_dir.display());
         std::process::exit(1);
