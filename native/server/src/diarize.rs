@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use sherpa_rs::diarize::{Diarize, DiarizeConfig};
+use std::ffi::{c_void, CString};
 
 use crate::meetings::Segment;
 
@@ -33,33 +33,81 @@ pub fn available(models_dir: &Path) -> bool {
     a.is_file() && b.is_file()
 }
 
+/// The progress closure behind sherpa-onnx's C callback: (chunks done, chunks total) -> 0 to go on.
+type Progress = Box<dyn Fn(i32, i32) -> i32 + Send>;
+
+unsafe extern "C" fn progress_trampoline(done: i32, total: i32, arg: *mut c_void) -> i32 {
+    // SAFETY: `arg` is the &mut Progress passed to ProcessWithCallback below, alive for the call
+    let cb = unsafe { &*(arg as *const Progress) };
+    cb(done, total)
+}
+
 /// Speaker turns [(start, end, speaker)] sorted by start time.
+///
+/// Calls sherpa-onnx's C API directly: sherpa-rs's Diarize::new hard-codes one thread for the
+/// segmentation and embedding models, which made diarization the slowest stage (R1.22).
 pub fn diarize(samples: Vec<f32>, models_dir: &Path, threads: i64, on_progress: &(dyn Fn(f64) + Sync)) -> Result<Vec<(f64, f64, i64)>, String> {
+    use sherpa_rs_sys as sys;
     let (seg, emb) = model_paths(models_dir);
     let n = forced_speakers();
-    let config = DiarizeConfig {
-        num_clusters: Some(if n > 0 { n } else { -1 }),
-        threshold: Some(threshold()),
-        min_duration_on: Some(0.0),
-        min_duration_off: Some(0.0),
-        provider: Some("cpu".into()),
-        debug: false,
+    let cstr = |p: &Path| CString::new(p.to_string_lossy().as_bytes()).map_err(|e| e.to_string());
+    let (seg, emb, provider) = (cstr(&seg)?, cstr(&emb)?, CString::new("cpu").unwrap());
+    let threads = threads.clamp(1, 64) as i32;
+    let config = sys::SherpaOnnxOfflineSpeakerDiarizationConfig {
+        segmentation: sys::SherpaOnnxOfflineSpeakerSegmentationModelConfig {
+            pyannote: sys::SherpaOnnxOfflineSpeakerSegmentationPyannoteModelConfig { model: seg.as_ptr() },
+            num_threads: threads,
+            debug: 0,
+            provider: provider.as_ptr(),
+        },
+        embedding: sys::SherpaOnnxSpeakerEmbeddingExtractorConfig { model: emb.as_ptr(), num_threads: threads, debug: 0, provider: provider.as_ptr() },
+        clustering: sys::SherpaOnnxFastClusteringConfig { num_clusters: if n > 0 { n } else { -1 }, threshold: threshold() },
+        min_duration_on: 0.0,
+        min_duration_off: 0.0,
     };
-    // shortcut: sherpa-rs takes its thread count from the provider defaults, not `threads`;
-    // upgrade when sherpa-rs exposes num_threads on DiarizeConfig.
-    let _ = threads;
-    let mut sd = Diarize::new(&seg, &emb, config).map_err(|e| format!("Cannot load the diarization models: {e}"))?;
+    // SAFETY: every pointer in `config` points into a CString that outlives this call
+    let sd = unsafe { sys::SherpaOnnxCreateOfflineSpeakerDiarization(&config) };
+    if sd.is_null() {
+        return Err("Cannot load the diarization models.".into());
+    }
     let pct = std::sync::Arc::new(std::sync::atomic::AtomicI32::new(0));
     let seen = pct.clone();
-    let cb = Box::new(move |done: i32, total: i32| {
+    let cb: Progress = Box::new(move |done: i32, total: i32| {
         seen.store(if total > 0 { 100 * done / total } else { 0 }, std::sync::atomic::Ordering::Relaxed);
         i32::from(crate::pipeline::cancelled()) // 0 = keep going, 1 = stop (POST .../cancel)
     });
-    let mut turns: Vec<(f64, f64, i64)> = crate::stt::with_progress(&pct, on_progress, || sd.compute(samples, Some(cb)))
-        .map_err(|e| format!("Diarization failed: {e}"))?
-        .into_iter()
-        .map(|s| (s.start as f64, s.end as f64, s.speaker as i64))
-        .collect();
+    let run = || -> Result<Vec<(f64, f64, i64)>, String> {
+        // SAFETY: `sd` is valid until destroyed below; `samples` and `cb` outlive the call; the
+        // result and its segment array are read, then freed with their own destroy functions
+        unsafe {
+            let result = sys::SherpaOnnxOfflineSpeakerDiarizationProcessWithCallback(
+                sd,
+                samples.as_ptr(),
+                samples.len() as i32,
+                Some(progress_trampoline),
+                &cb as *const Progress as *mut c_void,
+            );
+            if result.is_null() {
+                return Err(if crate::pipeline::cancelled() { crate::meetings::CANCELLED.into() } else { "Diarization failed.".into() });
+            }
+            let count = sys::SherpaOnnxOfflineSpeakerDiarizationResultGetNumSegments(result).max(0) as usize;
+            let ptr = sys::SherpaOnnxOfflineSpeakerDiarizationResultSortByStartTime(result);
+            let turns = if ptr.is_null() || count == 0 {
+                vec![]
+            } else {
+                std::slice::from_raw_parts(ptr, count).iter().map(|s| (s.start as f64, s.end as f64, s.speaker as i64)).collect()
+            };
+            if !ptr.is_null() {
+                sys::SherpaOnnxOfflineSpeakerDiarizationDestroySegment(ptr);
+            }
+            sys::SherpaOnnxOfflineSpeakerDiarizationDestroyResult(result);
+            Ok(turns)
+        }
+    };
+    let out = crate::stt::with_progress(&pct, on_progress, run);
+    // SAFETY: created above, used by nothing after this
+    unsafe { sys::SherpaOnnxDestroyOfflineSpeakerDiarization(sd) };
+    let mut turns = out.map_err(|e| format!("Diarization failed: {e}"))?;
     turns.sort_by(|a, b| a.0.total_cmp(&b.0));
     Ok(turns)
 }

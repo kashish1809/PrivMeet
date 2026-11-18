@@ -1178,6 +1178,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sherpa-rs",
+ "sherpa-rs-sys",
  "tempfile",
  "tokio",
  "tokio-util",
