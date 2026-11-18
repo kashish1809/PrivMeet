@@ -195,8 +195,7 @@ fn jwt_expiry(key: &str) -> Option<String> {
     let body = b64url(parts[1])?;
     let exp = serde_json::from_slice::<Value>(&body).ok()?.get("exp")?.as_f64()?;
     let secs = exp.floor() as i64;
-    let iso = crate::db::iso_from_unix(secs, ((exp - secs as f64) * 1e6).round() as u32);
-    Some(iso.replace(".000000+", "+")) // Python's isoformat() drops a zero fraction
+    Some(crate::db::iso_from_unix(secs, ((exp - secs as f64) * 1e6).round() as u32))
 }
 
 fn b64url(s: &str) -> Option<Vec<u8>> {
