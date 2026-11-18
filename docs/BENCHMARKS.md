@@ -1,5 +1,35 @@
 # Benchmarks
 
+## Rust pipeline speed, R1.22 (2026-11-18)
+
+Same laptop (Ryzen 5 3500U, 4 cores / 8 threads, 5.7 GB, `cpu_threads` 4), the 150 s test
+meeting, Whisper `base` and diarization on this machine, one run at a time with nothing else
+heavy running. Stage times come from the meeting's status changes polled every 0.2 s; peak is
+the server's tree RSS (`scripts/mem.py`). WER is against the Groq `whisper-large-v3` transcript
+of the same file (3.8 % from the script itself), as the script is not in the repo; read it as a
+change against the baseline, not as an absolute number. The summary stage was taken out of the
+later runs (Groq's daily token limit was reached), so "local" is converting + transcribing +
+diarizing.
+
+| Change | Transcribe | Diarize | Local total | WER | Speakers | Peak RSS |
+|---|---|---|---|---|---|---|
+| Before (3 runs) | 35–36 s | 46 s | 81 s | 3.3 % | 3 | 441–489 MB |
+| + diarization on 4 threads (3 runs) | 37–41 s | 30–31 s | 66–72 s | 3.3 % | 3 | 441–488 MB |
+| + `base-q8_0` and Silero VAD (2 runs) | 25–30 s | 29–31 s | 54–61 s | 3.6 % | 3 | 379–414 MB |
+
+Tried and dropped: `flash_attn` (transcription 48 s, slower), 8 Whisper threads (no gain), 8
+diarization threads (37 s, slower), no temperature fallback (no gain), `base-q5_1` (35 s, no
+gain over 16-bit). Summary with Groq adds 7–11 s, so a whole meeting is now about 62–72 s
+against 91 s before and Python's ~51 s.
+
+**Silence:** 5 minutes of silence took 33 s to transcribe; with VAD Whisper is not loaded
+and the stage takes 1.8 s. Diarization still reads all of it (14.5 s).
+
+**Not reached yet:** R1.22's target is no more time than Python. Diarization (30 s) is the gap:
+same models and settings as the Python run, so the difference is in the sherpa-onnx / ONNX
+Runtime build sherpa-rs downloads. Next to try: diarizing only the VAD speech regions, and a
+newer sherpa-onnx release.
+
 ## Rust server vs the Django stack (2026-11-18)
 
 The backend moved from Django + Celery + Redis + Postgres to one Rust binary (`native/server`).

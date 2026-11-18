@@ -846,7 +846,11 @@ Built; the text below is the specification it was built to.
 - **Done when:** a backup restored into an empty database gives the same meetings, transcripts and notes, and a zip with a `../` path is rejected.
 
 
-#### R1.22 · Rust pipeline speed: match or beat Python
+#### R1.22 · Rust pipeline speed: match or beat Python (in progress)
+- **Progress (2026-11-18, `v2/vinayak/R1.14-R1.22-backend-features`):** diarization on
+  `cpu_threads` (46 -> 30 s), 8-bit Whisper files and Silero VAD (transcription 36 -> 25–30 s,
+  WER +0.3, silence skipped); a whole meeting ~65 s against Python's ~51 s. Diarization is the
+  remaining gap. Table in `docs/BENCHMARKS.md`.
 - **Branch:** `v2/vinayak/R1.22-rust-speed`
 - **Needs:** the Rust backend (`rust/migration`)
 - **Files:** `native/server/src/stt.rs`, `native/server/src/diarize.rs`, `native/server/src/hw.rs`, `native/server/Cargo.toml` (ask before a new crate), `docs/BENCHMARKS.md`

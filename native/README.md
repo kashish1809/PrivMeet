@@ -107,7 +107,6 @@ The pipeline adds no feature flag (Django's list has none for it); `FEATURES` in
 `server/src/web.rs` still lists only what is built, so the app hides the rest.
 
 **Known shortcuts:**
-- sherpa-rs ignores `cpu_threads`.
 - Name correction handles Latin script only.
 - RAM detection is Linux only.
 - After a local run the server stays at 39 MB, not its idle 7 MB: the ONNX and whisper code
