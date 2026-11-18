@@ -1,5 +1,4 @@
-//! ffmpeg and ffprobe, always as list arguments, never through a shell
-//! (a port of backend/meetings/pipeline/audio.py).
+//! ffmpeg and ffprobe, always as list arguments, never through a shell.
 
 use std::path::Path;
 use std::process::{Command, Output, Stdio};

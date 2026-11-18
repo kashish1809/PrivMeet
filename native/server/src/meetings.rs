@@ -384,7 +384,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tags_like_django() {
+    fn tags_are_cleaned() {
         assert_eq!(clean_tags(&json!("API, design , api,")).unwrap(), vec!["API", "design"]);
         assert_eq!(clean_tags(&json!("[\"a\",\"b\"]")).unwrap(), vec!["a", "b"]);
         assert_eq!(clean_tags(&json!(["x"; 11].iter().enumerate().map(|(i, _)| format!("t{i}")).collect::<Vec<_>>())).unwrap_err(), "A meeting can have at most 10 tags.");

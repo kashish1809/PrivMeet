@@ -1,5 +1,5 @@
-//! The database: SQLite in DATA_DIR/privmeet.sqlite3, the tables of backend/meetings/models.py,
-//! and an FTS5 index over the transcript in place of Postgres's GIN index (search.py).
+//! The database: SQLite in DATA_DIR/privmeet.sqlite3, with an FTS5 index over the transcript
+//! for search.
 //!
 //! Migrations are numbered steps run once each, tracked in PRAGMA user_version.
 
@@ -13,7 +13,7 @@ const MIGRATIONS: &[&str] = &[
     // 1: the tables of models.py (Meeting, Segment, Question, NoteTemplate)
     r#"
     CREATE TABLE meetings (
-        id            TEXT PRIMARY KEY,           -- uuid, as Django's UUIDField
+        id            TEXT PRIMARY KEY,           -- uuid in the dashed form the API uses
         title         TEXT NOT NULL,
         file          TEXT NOT NULL DEFAULT '',   -- path under MEDIA_ROOT, as FileField.name
         duration      REAL NOT NULL DEFAULT 0,
@@ -30,7 +30,7 @@ const MIGRATIONS: &[&str] = &[
         template      TEXT NOT NULL DEFAULT '',
         tier_used     TEXT NOT NULL DEFAULT '',
         device_used   TEXT NOT NULL DEFAULT '',
-        created       TEXT NOT NULL,              -- ISO 8601 UTC, as Django serialises it
+        created       TEXT NOT NULL,              -- ISO 8601 UTC
         heartbeat     TEXT NOT NULL
     );
     CREATE INDEX meetings_created ON meetings (created DESC);
@@ -109,13 +109,13 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-/// Now as Django writes it: "2026-11-17T06:11:36.818574+00:00".
+/// Now, in the timestamp format the API returns: "2026-11-17T06:11:36.818574+00:00".
 pub fn now_iso() -> String {
     let d = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
     iso_from_unix(d.as_secs() as i64, d.subsec_micros())
 }
 
-/// As Django's isoformat(): the fraction only when it is not zero.
+/// The fraction of a second only when it is not zero.
 pub fn iso_from_unix(secs: i64, micros: u32) -> String {
     let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
     let (y, m, d) = civil_from_days(days);
@@ -199,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    fn dates_like_django() {
+    fn dates_in_api_format() {
         assert_eq!(iso_from_unix(0, 0), "1970-01-01T00:00:00+00:00");
         // Python: datetime.fromtimestamp(1794900696.818574, timezone.utc).isoformat()
         assert_eq!(iso_from_unix(1_794_900_696, 818_574), "2026-11-17T07:31:36.818574+00:00");

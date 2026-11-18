@@ -1,5 +1,5 @@
 //! Speech to text: whisper.cpp on this machine (whisper-rs), or the provider's
-//! /audio/transcriptions in cloud mode. A port of backend/meetings/pipeline/transcribe.py.
+//! /audio/transcriptions in cloud mode.
 
 use std::path::{Path, PathBuf};
 

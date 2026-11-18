@@ -1,4 +1,4 @@
-//! The meetings API (backend/meetings/views.py): list and search, upload, detail, edit,
+//! The meetings API: list and search, upload, detail, edit,
 //! delete, audio with Range, retry, tags, action items and questions.
 
 use std::path::{Path, PathBuf};
@@ -264,7 +264,7 @@ pub async fn list(State(app): State<AppState>, Query(p): Query<Params>) -> Respo
             .collect();
         return Json(json!({ "meetings": out })).into_response();
     }
-    // meetings whose title, notes or summary contain the text (Django's icontains)
+    // meetings whose title, notes or summary contain the text, case-insensitively
     let mut results: Vec<(String, Value)> = Vec::new();
     let joiner = if filter.is_empty() { "WHERE" } else { "AND" };
     let mut a2 = args.clone();

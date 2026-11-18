@@ -1,4 +1,4 @@
-//! Pick model sizes that fit the machine (a port of backend/meetings/hw.py). Every value can be
+//! Pick model sizes that fit the machine. Every value can be
 //! overridden by env vars, and the saved settings win over both (apply_overrides).
 
 use std::collections::HashMap;
