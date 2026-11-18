@@ -92,6 +92,8 @@ Newest first, at most 200.
 ```
 - `speakers` is the number of distinct speakers (0 before diarization or on the low tier).
 - `has_summary` is false for a `done` meeting whose summary is empty; show "Processed".
+- `queue_position` (flag `cancel`): for a `queued` meeting, how many queued meetings are ahead
+  of it (0 = next); `null` otherwise.
 
 **Query parameters:**
 - `q`: searches title, notes, summary and transcript. Matching rows add `"hits": [{"start": 12.5, "text": "..."}]` (transcript lines).
@@ -133,6 +135,13 @@ The original file. It supports `Range` (206 for a range, 416 when the range is o
 
 ### `POST /api/meetings/<id>/retry`
 Runs the whole pipeline again. Returns 409 while the meeting is still processing.
+
+### `POST /api/meetings/<id>/cancel` (flag `cancel`)
+Stops processing. A queued meeting leaves the queue and fails with the error `Cancelled.` at
+once. The running one stops at its next check: before each stage, and during transcription
+within a few seconds (whisper.cpp's abort callback); it then fails with `Cancelled.` and its
+temporary WAV is removed. No new status value is used. Returns the list row; 409 when the
+meeting is not processing. Retry clears the request.
 
 ### `POST /api/meetings/<id>/summarize` (flag `summarize`)
 Writes the summary, key points and action items again from the stored transcript: only the LLM

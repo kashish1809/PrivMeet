@@ -66,6 +66,7 @@ further down is kept only as the specification each was built to, and its headin
 | **Backend in Rust** (beyond the task list) | Vinayak | `rust/migration` | `native/server` (`privmeet-server`) replaces Django, Celery, Redis and Postgres: the same `/api/` and twelve feature flags, the pipeline (whisper.cpp, sherpa-onnx, Ollama or cloud), `seed-demo`, `import-django`, `process-file`. Docker runs it as `web` beside `ollama`. The Django backend (`backend/`, `scripts/bench.py`) is deleted. Open backend tasks (R1.14–R1.20, T1.6, T2.6) are written for Rust. Results: `native/README.md`, `docs/BENCHMARKS.md`. |
 | **R1.14** regenerate summary | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `POST /api/meetings/<id>/summarize` with optional `{template}`: a `Summarize` job runs only the LLM stage on the stored transcript; 409 while processing or with no transcript; on failure the old notes stay and the status goes back; flag `summarize`. |
 | **R1.15** transcript edit + speaker merge | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | segments carry `id`; `PATCH /api/segments/<id>/` (`text` up to 2000 chars, `speaker` an existing number, the next new one or null); `POST /api/meetings/<id>/speakers/merge` `{from, to}`; both 409 while processing; flags `transcript-edit`, `speaker-merge`. |
+| **R1.16** cancel + queue position | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `cancel_requested` (migration 3); `POST /api/meetings/<id>/cancel` (409 unless processing): a queued meeting fails "Cancelled." at once, the running one at its next stage check or through whisper.cpp's abort callback / sherpa's progress callback; retry clears it; list rows add `queue_position`; flag `cancel`. |
 
 Everything in R1.x and R2.x that is not in the table above is open.
 
@@ -785,7 +786,7 @@ Built; the text below is the specification it was built to.
   - 409 while the meeting is processing.
 - **Done when:** an edited line shows in search and in the exports, and merging two speakers leaves one name in the transcript.
 
-#### R1.16 · Cancel + queue position
+#### R1.16 · Cancel + queue position — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.16-cancel-queue`
 - **Needs:** R1.7
 - **Files:** `native/server/src/db.rs` (next migration), `native/server/src/meetings.rs`, `native/server/src/pipeline.rs`, `native/server/src/stt.rs`, `native/server/src/api.rs`, `native/server/src/web.rs`, `docs/API.md`
