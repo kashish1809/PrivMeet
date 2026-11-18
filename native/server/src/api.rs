@@ -137,6 +137,21 @@ mod tests {
         assert_eq!(j["speakers"], 1);
     }
 
+    #[tokio::test]
+    async fn cancel_waiting_meeting_and_retry() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "c1");
+        let stop = || cancel(State(app.clone()), UrlPath("c1".to_string()));
+        assert_eq!(stop().await.status(), StatusCode::CONFLICT); // done: nothing to stop
+        app.db().execute("UPDATE meetings SET status = 'queued'", []).unwrap();
+        let j = body_json(stop().await).await;
+        assert_eq!((j["status"].as_str(), j["error"].as_str(), &j["queue_position"]), (Some("failed"), Some("Cancelled."), &Value::Null));
+        assert!(mt::cancel_requested(&app.db(), "c1"));
+        assert_eq!(retry(State(app.clone()), UrlPath("c1".to_string())).await.status(), StatusCode::OK);
+        assert!(!mt::cancel_requested(&app.db(), "c1"));
+    }
+
     #[test]
     fn dates_like_fromisoformat() {
         assert!(super::day("2026-10-28", "from").is_ok());

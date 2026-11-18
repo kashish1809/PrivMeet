@@ -377,3 +377,21 @@ fn answer_question(app: &App, qid: i64) {
     };
     let _ = app.db().execute("UPDATE questions SET answer = ?2, status = ?3 WHERE id = ?1", params![qid, answer, status]);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queue_order_cancel_and_no_double_run() {
+        lock(&PENDING).extend(["q-a", "q-b", "q-c", "q-b"].map(String::from));
+        assert_eq!((queue_position("q-a"), queue_position("q-c"), queue_position("q-z")), (Some(0), Some(2), None));
+        assert!(!cancel("q-b")); // waiting: taken out of the queue, the caller fails it
+        assert_eq!(queue_position("q-c"), Some(1));
+        assert!(take_pending("q-a") && !take_pending("q-b") && take_pending("q-c"));
+        *lock(&CURRENT) = Some("q-run".into());
+        assert!(cancel("q-run") && cancelled());
+        *lock(&CURRENT) = None;
+        CANCEL.store(false, Ordering::Relaxed);
+    }
+}
