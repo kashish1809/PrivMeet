@@ -451,19 +451,7 @@ pub async fn patch(State(app): State<AppState>, UrlPath(id): UrlPath<String>, bo
 /// DELETE /api/meetings/<id>/: the row, its transcript and the file with its shared copies.
 pub async fn delete(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
     let Some(m) = load(&app, &id) else { return not_found() };
-    if !m.file.is_empty() {
-        let src = app.cfg.media_root.join(&m.file);
-        if let (Some(dir), Some(stem)) = (src.parent(), src.file_stem().and_then(|s| s.to_str())) {
-            if let Ok(entries) = std::fs::read_dir(dir) {
-                for e in entries.flatten() {
-                    if e.file_name().to_string_lossy().starts_with(&format!("{stem}.share.")) {
-                        let _ = std::fs::remove_file(e.path());
-                    }
-                }
-            }
-        }
-        let _ = std::fs::remove_file(src);
-    }
+    mt::remove_audio(&app.cfg.media_root, &m.file);
     let _ = app.db().execute("DELETE FROM meetings WHERE id = ?1", [&m.id]);
     StatusCode::NO_CONTENT.into_response()
 }
@@ -471,6 +459,9 @@ pub async fn delete(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -
 /// GET /api/meetings/<id>/audio: the original file, with Range support so the player seeks.
 pub async fn audio(State(app): State<AppState>, UrlPath(id): UrlPath<String>, headers: HeaderMap) -> Response {
     let Some(m) = load(&app, &id) else { return not_found() };
+    if m.file.is_empty() {
+        return error(StatusCode::NOT_FOUND, "This meeting's audio was deleted.");
+    }
     let path = app.cfg.media_root.join(&m.file);
     let Ok(mut file) = tokio::fs::File::open(&path).await else { return not_found() };
     let size = file.metadata().await.map(|md| md.len()).unwrap_or(0);
@@ -516,6 +507,9 @@ pub async fn retry(State(app): State<AppState>, UrlPath(id): UrlPath<String>) ->
     let Some(m) = ({ let db = app.db(); mt::get(&db, &id).ok().flatten() }) else { return not_found() };
     if !matches!(m.status.as_str(), "failed" | "done") && !m.is_stale() {
         return error(StatusCode::CONFLICT, "Meeting is still processing.");
+    }
+    if m.file.is_empty() {
+        return error(StatusCode::CONFLICT, "This meeting's audio was deleted, so it cannot be processed again.");
     }
     let db = app.db();
     let _ = db.execute("UPDATE meetings SET cancel_requested = 0 WHERE id = ?1", [&m.id]);
@@ -664,6 +658,62 @@ pub async fn cancel(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -
     }
     let m = mt::get(&db, &id).ok().flatten().unwrap();
     Json(mt::to_json(&db, &m, false)).into_response()
+}
+
+/// DELETE /api/meetings/<id>/audio: remove the recording, keep the notes and transcript.
+pub async fn delete_audio(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
+    let Some(m) = load(&app, &id) else { return not_found() };
+    if mt::PROCESSING.contains(&m.status.as_str()) {
+        return error(StatusCode::CONFLICT, "Meeting is still processing.");
+    }
+    mt::remove_audio(&app.cfg.media_root, &m.file);
+    let db = app.db();
+    if let Err(e) = db.execute("UPDATE meetings SET file = '' WHERE id = ?1", [&m.id]) {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    let m = mt::get(&db, &id).ok().flatten().unwrap();
+    Json(mt::to_json(&db, &m, true)).into_response()
+}
+
+/// Bytes in files under `path` (recursively); 0 when it does not exist.
+fn bytes_in(path: &Path) -> u64 {
+    match std::fs::symlink_metadata(path) {
+        Ok(md) if md.is_dir() => std::fs::read_dir(path).map(|rd| rd.flatten().map(|e| bytes_in(&e.path())).sum()).unwrap_or(0),
+        Ok(md) => md.len(),
+        Err(_) => 0,
+    }
+}
+
+/// Free bytes on the disk holding `path`, from POSIX `df -Pk` (std has no statvfs).
+fn free_bytes(path: &Path) -> Option<u64> {
+    let mut cmd = std::process::Command::new("df");
+    cmd.args(["-Pk"]).arg(path);
+    let out = audio::run(&mut cmd, std::time::Duration::from_secs(10)).ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let kb: u64 = text.lines().nth(1)?.split_whitespace().nth(3)?.parse().ok()?;
+    Some(kb * 1024)
+}
+
+/// GET /api/storage/: bytes used by recordings, models and the database, and free disk space.
+pub async fn storage(State(app): State<AppState>) -> Response {
+    let cfg = app.cfg.clone();
+    let keep_audio = app.settings().get("keep_audio").and_then(Value::as_bool).unwrap_or(true);
+    let out = tokio::task::spawn_blocking(move || {
+        let models = bytes_in(&cfg.models_dir.join("whisper-cpp")) + bytes_in(&crate::diarize::models_dir(&cfg.models_dir));
+        let database: u64 = ["", "-wal", "-shm"].iter().map(|x| bytes_in(&cfg.data_dir.join(format!("privmeet.sqlite3{x}")))).sum();
+        json!({
+            "audio": bytes_in(&cfg.media_root.join("uploads")),
+            "models": models,
+            "database": database,
+            "free": free_bytes(&cfg.data_dir),
+            "keep_audio": keep_audio,
+        })
+    })
+    .await;
+    match out {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
 }
 
 /// GET /api/tags/: every tag in use with its meeting count, most used first.

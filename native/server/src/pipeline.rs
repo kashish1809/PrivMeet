@@ -183,7 +183,16 @@ fn progress(app: &App, id: &str, status: &str, value: i64) {
 /// The whole pipeline for one meeting: ffmpeg -> Whisper (here or in the cloud) -> names ->
 /// diarization -> summary. Each stage frees its model before the next one loads.
 pub fn process_meeting(app: &App, id: &str) {
-    if let Err(e) = run(app, id) {
+    let result = run(app, id);
+    if result.is_ok() && app.settings().get("keep_audio").and_then(Value::as_bool) == Some(false) {
+        // keep_audio off: the notes and transcript are all the user wants to keep
+        let db = app.db();
+        if let Ok(Some(m)) = mt::get(&db, id) {
+            mt::remove_audio(&app.cfg.media_root, &m.file);
+            let _ = db.execute("UPDATE meetings SET file = '' WHERE id = ?1", [id]);
+        }
+    }
+    if let Err(e) = result {
         eprintln!("meeting {id} failed: {e}");
         // a stage stopped by the cancel flag reports its own error; the user asked for this
         let e = if cancelled() || mt::cancel_requested(&app.db(), id) { mt::CANCELLED.to_string() } else { e };

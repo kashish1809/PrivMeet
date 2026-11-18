@@ -177,6 +177,7 @@ pub fn to_json(db: &Connection, m: &Meeting, full: bool) -> Value {
         "id": m.id, "title": m.title, "status": m.status, "progress": m.progress,
         "duration": m.duration, "created": m.created, "error": m.error,
         "speakers": speaker_count(db, &m.id), "has_summary": !m.summary.trim().is_empty(), "tags": m.tags,
+        "has_audio": !m.file.is_empty(),
         "queue_position": if m.status == "queued" { crate::pipeline::queue_position(&m.id) } else { None },
     });
     if full {
@@ -219,6 +220,25 @@ pub fn reap(db: &Connection, m: &mut Meeting) {
             params![m.id, m.error, m.heartbeat],
         );
     }
+}
+
+/// Delete a meeting's recording and the shared copies made from it (export.audio_copy).
+/// The row keeps its notes and transcript; the caller clears `file`.
+pub fn remove_audio(media_root: &std::path::Path, file: &str) {
+    if file.is_empty() {
+        return;
+    }
+    let src = media_root.join(file);
+    if let (Some(dir), Some(stem)) = (src.parent(), src.file_stem().and_then(|s| s.to_str())) {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for e in entries.flatten() {
+                if e.file_name().to_string_lossy().starts_with(&format!("{stem}.share.")) {
+                    let _ = std::fs::remove_file(e.path());
+                }
+            }
+        }
+    }
+    let _ = std::fs::remove_file(src);
 }
 
 /// Whether the user asked to stop this meeting's run (POST .../cancel).
