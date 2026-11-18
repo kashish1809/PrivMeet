@@ -70,6 +70,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.17** language + translate | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | upload `language` (ISO code, empty = detect, 400 for an unknown one) and `translate` (`1` = English), stored as `language_hint` / `translate` (migration 4); whisper.cpp `set_language` / `set_translate`, cloud `/audio/translations`; flag `language`. Checked with the Hindi test clip both ways. |
 | **R1.18** auto title + speaker suggestions | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | the same summary call returns `title` and `speakers`; `auto_title` (set by an untitled upload, cleared by a title PATCH) lets the title replace the file name; `speaker_suggestions` (migration 5) from the inferred names and the model's, kept only when the name was said, never written to `speaker_names`; flag `suggestions`. Checked on the test meeting with Groq and qwen2.5:1.5b. |
 | **R1.19** storage + audio retention | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `GET /api/storage/` (recordings, models, database, free disk; matched `du -b` exactly), `DELETE /api/meetings/<id>/audio` (notes, transcript, search and exports stay; audio 404, retry 409), `has_audio` on every row, settings key `keep_audio`, a Storage card on the Models page; flag `storage`. |
+| **R1.20** backup + restore | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `native/server/src/backup.rs`: `GET /api/backup.zip?audio=0\|1` (meetings, transcripts, questions, own templates, settings without API keys; zip via `export::zip`), `POST /api/restore` with a small stored-zip reader (refuses `../`, absolute, backslash and compressed members; CRC checked; fresh file names; every field validated; existing meetings skipped); "Your data" in Settings → General; flag `backup`. **Shortcut:** the backup zip is built in memory. |
 
 Everything in R1.x and R2.x that is not in the table above is open.
 
@@ -832,7 +833,7 @@ Built; the text below is the specification it was built to.
   - A Storage card on the Models page with the numbers and the `keep_audio` switch.
 - **Done when:** the numbers match `du` within a few percent, and a meeting without audio still opens, searches and exports.
 
-#### R1.20 · Backup + restore
+#### R1.20 · Backup + restore — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.20-backup`
 - **Needs:** R1.7, U1.5
 - **Files:** `native/server/src/backup.rs` (new), `native/server/src/api.rs`, `native/server/src/web.rs`, `docs/API.md`, `frontend/src/pages/Settings.jsx`

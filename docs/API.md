@@ -229,6 +229,23 @@ Bytes used and free, measured on each call:
 Settings key `keep_audio` (bool, default true): when false, a recording is deleted as soon as
 its meeting is `done`.
 
+## Backup (flag `backup`)
+
+### `GET /api/backup.zip?audio=0|1`
+A zip download (`privmeet-backup-<date>.zip`) with `meetings.json`: every meeting with its
+transcript and questions, the user's own templates and the settings. API keys are never
+included. With `audio=1` it adds each recording as `audio/<file name>`.
+
+### `POST /api/restore`
+`multipart/form-data` with `file`: a zip made by `GET /api/backup.zip`, at most 4 x
+`MAX_UPLOAD_MB`. Returns `{"restored", "skipped", "templates", "settings"}`.
+- Meetings are matched by id: one that already exists is skipped, never overwritten.
+- Every field is checked as the API checks it; a meeting saved while processing comes back
+  `failed` with Retry. Recordings get new file names: no path from the zip is used on disk.
+- Templates are matched by name and instructions. Settings fill only keys not set here.
+- 400 for a file that is not a PrivMeet backup, has a compressed or damaged member, or has a
+  member name with `..`, a leading `/`, `\` or a drive letter (nothing is restored then).
+
 ## Tags (flag `tags`)
 
 ### `GET /api/tags/`
