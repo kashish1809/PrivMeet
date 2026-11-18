@@ -6,11 +6,14 @@ Every person has **two tasks per day**:
 
 Vinayak and Kashish also each have a **v2 track** of 20 tasks (`R1.x`, `R2.x`). It has no days. It brings the app to the new mockup and adds the features that mockup shows.
 
+Harsha joined after Day 5 with a **docs track** of 6 tasks (`D4.1`–`D4.6`). It has no days either.
+
 | Person | Name | Task A (main) | Task B (second) | v2 track |
 |---|---|---|---|---|
 | Person 1 | **Vinayak** | Backend pipeline + AI (`T1.x`) | Heavy UI per mockup (`U1.x`) | Look, shell, backend features (`R1.x`) |
 | Person 2 | **Kashish** | React frontend pages (`T2.x`) | Tauri desktop app + launcher (`A2.x`) | Meeting pages + desktop app (`R2.x`) |
 | Person 3 | **Karthik** | Docker, Postgres, security, notes UI, docs (`T3.x`) | GitHub workflows, packaging, CLI launchers (`W3.x`) | none |
+| Person 4 | **Harsha GP** | none | none | Docs track: user guide, FAQ, screenshots, contributing (`D4.x`) |
 
 - Design: `docs/PLAN.md`. App reference: GitPilot (`github.com/vinayakkam/gitpilot`).
 - **UI mockup (v2): `docs/ui/mockup.webp`.** It is the look for every screen.
@@ -148,6 +151,7 @@ Either person can do all of their tasks in one go. Nothing waits for the other p
 | **Vinayak** | `native/**` (not `native/server/src/api_tests.rs`), `frontend/src/ui/**`, `frontend/src/layout/**`, `frontend/src/App.jsx`, `frontend/src/main.jsx`, `frontend/index.html`, `frontend/public/**`, `frontend/src/pages/{Home,RecordLive,Settings,Templates,Models}.jsx`, `frontend/src/record/**`, `docs/ui/**`, `docs/API.md`, `scripts/bench.sh`, `scripts/mem.py`, `compose.gpu.yml` |
 | **Kashish** | `frontend/src/pages/{MeetingList,NewMeeting,MeetingDetail}.jsx`, `frontend/src/components/**` (not Karthik's three panels), `frontend/src/api.js`, `frontend/src/format.js`, `frontend/src/index.css`, `native/server/src/api_tests.rs`, `desktop/**` |
 | **Karthik** | `frontend/src/components/{SummaryPanel,ActionItemsPanel,QABox}.jsx`, `Dockerfile`, `compose.yml`, `.env.example`, `.github/**`, `packaging/**`, `scripts/privmeet.*`, `README.md`, `docs/ARCHITECTURE.md`, `docs/RELEASING.md` |
+| **Harsha** | `docs/README.md`, `docs/USER_GUIDE.md`, `docs/FAQ.md`, `docs/screenshots/**`, `docs/testing/docs.md`, `CONTRIBUTING.md` |
 
 - Only Vinayak changes the database schema: a new entry at the end of the migration list in `native/server/src/db.rs`. Two branches that both add one are ordered on rebase.
 - Nobody adds a frontend dependency. The Tauri plugins named in the A2 and R2 tasks are approved by this file.
@@ -1128,6 +1132,71 @@ Built; the text below is the specification it was built to.
   - "Check for updates" opens the GitHub releases page in the browser and shows the installed version next to it. The app itself makes no request.
   - "Report a problem" opens a new GitHub issue with the diagnostics template filled in.
 - **Done when:** the copied text is enough to tell why a start failed, and nothing in it comes from a meeting.
+
+---
+
+## Docs track: Harsha (D4.1 – D4.6)
+Writing and checking the documentation a new user and a new contributor read. None of these needs another person's open task; each is its own branch, with the same protocol and commit rules as every task (AGENTS.md). Run the app from `native/README.md` with `privmeet-server seed-demo` for realistic data. The track does not hold up Day 6.
+
+#### D4.1 · Docs index + glossary
+- **Branch:** `docs/harsha/D4.1-docs-index`
+- **Needs:** none
+- **Files:** `docs/README.md` (new)
+- **Do:**
+  - One line per document in the repo (`README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, every `docs/*.md`, `native/README.md`, `desktop/README.md`, `frontend/README.md`): what it is for and who reads it.
+  - A glossary of the words the docs use without explaining: tier, diarization, WER, RSS and PSS, feature flag, ggml, FTS5, CSRF, map-reduce, Ollama, compose override.
+- **Done when:** every document is listed with a working link, and every glossary term is found in at least one doc.
+
+#### D4.2 · User guide
+- **Branch:** `docs/harsha/D4.2-user-guide`
+- **Needs:** none
+- **Files:** `docs/USER_GUIDE.md` (new)
+- **Do:**
+  - One section per screen, in the order a new user meets them: Home, New Meeting (upload), Record / Live, the meeting page (Summary, Transcript, Action Items, Notes tabs; Share and Download), Meetings (search, filters), Templates, Models, Settings (General, AI Model, Recording, Appearance).
+  - For each: what it is for, the steps for its main job, and what the user sees while a meeting is processing.
+  - Say plainly what stays on the machine and what a cloud provider receives.
+  - Plain English, short sentences; no code paths.
+- **Done when:** someone who has never seen the app can upload a recording, rename a speaker, export the notes and change the theme by following the guide alone.
+
+#### D4.3 · Screenshots
+- **Branch:** `docs/harsha/D4.3-screenshots`
+- **Needs:** D4.2
+- **Files:** `docs/screenshots/**` (new), `docs/USER_GUIDE.md`
+- **Do:**
+  - With the demo data, take one screenshot per screen in D4.2 at 1280 px wide in the Indigo theme, plus Home and the meeting page in Teal, Amber and Slate.
+  - PNG, named `<screen>-<theme>.png`, each under 400 KB.
+  - Put each into the user guide next to its section, with alt text.
+- **Done when:** every section of the guide has its picture and the images load on GitHub.
+
+#### D4.4 · FAQ
+- **Branch:** `docs/harsha/D4.4-faq`
+- **Needs:** none
+- **Files:** `docs/FAQ.md` (new)
+- **Do:** questions people ask before and after installing, each answered in a few lines with a link to the full doc:
+  - Privacy: does audio leave my computer, what does a cloud provider see, is there telemetry.
+  - Hardware: will it run on my laptop, do I need a GPU, why is my meeting slow.
+  - Data: where are my meetings stored, how do I back them up or move them, how do I bring meetings over from an install that ran the old Django backend (`import-django`).
+  - Use: which file types work, which languages, how long a meeting can be, how to uninstall cleanly.
+- **Done when:** each answer is checked against the running app or the code, and links work.
+
+#### D4.5 · Contributing guide
+- **Branch:** `docs/harsha/D4.5-contributing`
+- **Needs:** none
+- **Files:** `CONTRIBUTING.md`
+- **Do:**
+  - Bring it up to date for the Rust backend: what to install (Rust from `rust-toolchain.toml`, clang, cmake, Node, ffmpeg, Ollama), how to build and run the server and the frontend, and how to run `cargo test` and `npm run build` before a PR.
+  - Where things live (one table: `native/server`, `frontend`, `desktop`, `docs`), the branch and commit rules from AGENTS.md in short, and how to open a PR with the template.
+- **Done when:** a new contributor builds, tests and runs the app on a clean Linux machine from this file alone.
+
+#### D4.6 · Docs check
+- **Branch:** `docs/harsha/D4.6-docs-check`
+- **Needs:** D4.1, D4.2, D4.4, D4.5
+- **Files:** `docs/testing/docs.md` (new), plus fixes in your own files
+- **Do:**
+  - Follow every relative link and run every command in `README.md`, `docs/*.md`, `native/README.md` and `CONTRIBUTING.md` on a fresh clone.
+  - Record each broken link, wrong command or out-of-date statement in `docs/testing/docs.md` with its file and line, and tell the file's owner (ownership table above). Fix only your own files.
+  - Spelling and consistent names: PrivMeet, Ollama, whisper.cpp, the theme names.
+- **Done when:** `docs/testing/docs.md` lists every check with pass or the owner it was reported to.
 
 ---
 

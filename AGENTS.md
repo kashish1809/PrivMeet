@@ -13,17 +13,20 @@ PrivMeet is a self-hosted meeting notes app. You upload or record audio and get 
 | Person 1 | Vinayak | Backend pipeline + AI (`T1.x`) | Heavy UI per mockup (`U1.x`) |
 | Person 2 | Kashish | React frontend pages (`T2.x`) | Tauri desktop app + launcher (`A2.x`) |
 | Person 3 | Karthik | Docker, Postgres, security, notes UI, docs (`T3.x`) | GitHub workflows, packaging, CLI launchers (`W3.x`) |
+| Person 4 | Harsha GP | Docs track (`D4.x`) | none |
 
 Each day every person has task A and task B. They are separate branches and separate commits.
 
 Vinayak and Kashish also have a v2 track with no days: `R1.1`–`R1.20` (Vinayak: look, shell, backend features) and `R2.1`–`R2.20` (Kashish: meeting pages, desktop app). One R task is one branch.
+
+Harsha has a docs track with no days: `D4.1`–`D4.6` (user guide, FAQ, screenshots, contributing guide, docs index, docs check). One D task is one branch.
 
 ## Communication Style
 Respond like a caveman. No articles, no filler, no pleasantries. Short. Direct. Code speaks for itself.
 
 ## Task protocol (follow exactly)
 1. **Wait for "start".** Never start, continue or pick a task on your own. Begin only when the person says something like "start T2.3" or "I'm Kashish, start my day 3 task".
-2. **Know who is speaking.** If the person has not said their name, ask: "Are you Vinayak, Kashish or Karthik?" If the task belongs to someone else, say whose it is and ask for confirmation before going on.
+2. **Know who is speaking.** If the person has not said their name, ask: "Are you Vinayak, Kashish, Karthik or Harsha?" If the task belongs to someone else, say whose it is and ask for confirmation before going on.
 3. **Read the task** in `docs/TASKS.md`. Check that every task under "Needs" is merged into `main`: its files exist on `main`, or `git log main` shows it. If one is missing, stop and tell the person which one. Day 6 tasks need **all** Day 1–5 tasks (A and B) and **all** R tasks merged.
 4. **Branch from fresh main:**
    ```
