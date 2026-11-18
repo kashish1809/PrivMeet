@@ -134,6 +134,17 @@ The original file. It supports `Range` (206 for a range, 416 when the range is o
 ### `POST /api/meetings/<id>/retry`
 Runs the whole pipeline again. Returns 409 while the meeting is still processing.
 
+### `POST /api/meetings/<id>/summarize` (flag `summarize`)
+Writes the summary, key points and action items again from the stored transcript: only the LLM
+stage runs, no ffmpeg, Whisper or diarization. Optional JSON `{"template": "<id>"}` uses that
+note template (and saves it on the meeting); without it the meeting's own template is used.
+
+Returns the list row with status `summarizing`; poll the meeting until it is `done`. Errors:
+- 400: an unknown template.
+- 409: the meeting is still processing, or it has no transcript.
+
+On failure the old notes stay, the meeting goes back to the status it had, and `error` says why.
+
 ### `GET /api/meetings/<id>/export.<fmt>`
 The meeting as a download named after its title. 404 for an unknown format.
 

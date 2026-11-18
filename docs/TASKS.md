@@ -64,6 +64,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R2.6** Share menu | Kashish | `v2/kashish/R2.6-share-menu` | `ShareMenu.jsx`: "Copy summary" pastes the title, date, summary, key points and action items as plain text, "Copy link" says it opens only on this computer, "Share…" where `navigator.share` exists, and the `.html` share page behind `share-page`; the trigger confirms with "Copied summary" / "Copied link" for 2.5 s. **Not built:** the copied link is a localhost address, so "Copy link" is only useful on this machine. |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 | **Backend in Rust** (beyond the task list) | Vinayak | `rust/migration` | `native/server` (`privmeet-server`) replaces Django, Celery, Redis and Postgres: the same `/api/` and twelve feature flags, the pipeline (whisper.cpp, sherpa-onnx, Ollama or cloud), `seed-demo`, `import-django`, `process-file`. Docker runs it as `web` beside `ollama`. The Django backend (`backend/`, `scripts/bench.py`) is deleted. Open backend tasks (R1.14–R1.20, T1.6, T2.6) are written for Rust. Results: `native/README.md`, `docs/BENCHMARKS.md`. |
+| **R1.14** regenerate summary | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `POST /api/meetings/<id>/summarize` with optional `{template}`: a `Summarize` job runs only the LLM stage on the stored transcript; 409 while processing or with no transcript; on failure the old notes stay and the status goes back; flag `summarize`. |
 
 Everything in R1.x and R2.x that is not in the table above is open.
 
@@ -761,7 +762,7 @@ Built; the text below is the specification it was built to.
   - the `.ics` imports into Google Calendar with the right due dates;
   - the MP3 and Opus play in the browser and in VLC.
 
-#### R1.14 · Regenerate summary
+#### R1.14 · Regenerate summary — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.14-resummarize`
 - **Needs:** R1.7
 - **Files:** `native/server/src/pipeline.rs` (a summarize job), `native/server/src/api.rs`, `native/server/src/web.rs` (route, `FEATURES`), `docs/API.md`
