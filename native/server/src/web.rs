@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use tower_http::services::ServeDir;
 
 use crate::config::Config;
-use crate::{api, csrf, db, hw, pipeline, settings};
+use crate::{api, csrf, db, hw, pipeline, settings, templates};
 
 /// What every request can reach: configuration, the database and the hardware (read once).
 pub struct App {
@@ -30,7 +30,7 @@ pub type AppState = Arc<App>;
 
 /// What this server supports beyond the v1 API (docs/TASKS.md "Feature flags"). Only what is
 /// built: the React app shows a control only when its flag is here.
-pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters", "exports", "share-page", "exports-office", "exports-ics", "audio-exports"];
+pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters", "templates", "exports", "share-page", "exports-office", "exports-ics", "audio-exports"];
 
 /// Built-in note template ids (backend/meetings/note_templates.py); own ones are "u<pk>".
 pub fn builtin_template(id: &str) -> bool {
@@ -106,6 +106,8 @@ pub fn router(app: App) -> Router {
         .route("/meetings/{id}/ask", axum::routing::post(api::ask))
         .route("/meetings/{id}/{file}", get(api::download))
         .route("/questions/{id}/", get(api::question))
+        .route("/templates/", get(templates::list).post(templates::create))
+        .route("/templates/{id}/", get(templates::detail).patch(templates::patch).delete(templates::delete))
         .route("/tags/", get(api::tags))
         .route("/action-items/", get(api::action_items))
         .fallback(|| async { error(StatusCode::NOT_FOUND, "Not found.") })
