@@ -129,9 +129,28 @@ npm run dev                             # http://localhost:5173, proxies /api to
 - One process and a SQLite file in `DATA_DIR` (default `native/server/data`): no Redis, worker or Postgres.
 - `scripts/download_models.sh` fetches the speaker-diarization models; point `DIARIZE_MODELS_DIR` (or `MODELS_DIR/diarize`) at them.
 - `privmeet-server process-file meeting.mp3` runs the whole pipeline on one file from the command line.
-- `privmeet-server seed-demo` adds the mockup's demo meetings; `privmeet-server import-django backend/data/db.sqlite3` copies the meetings of an install that ran the earlier Django backend.
+- `privmeet-server seed-demo` adds the mockup's demo meetings; `privmeet-server import-django <old db.sqlite3>` copies the meetings of an install that ran PrivMeet's earlier Python backend.
 - More in [native/README.md](native/README.md).
 - The API is described in [docs/API.md](docs/API.md), and the design in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+### Coming from the Python backend
+
+A checkout that once ran PrivMeet's earlier Python backend still has `backend/` on disk, about
+9 GB of virtualenv, caches and faster-whisper models. Git deleted the tracked files but cannot
+delete what it never tracked, so clear it out once:
+
+```
+scripts/cleanup-old-backend.sh              # --dry-run first if you like
+powershell -ExecutionPolicy Bypass -File scripts\cleanup-old-backend.ps1   # Windows
+```
+
+It moves the recordings, the speaker models and the old database into `native/server/data`,
+removes the rest, and then prints the one `import-django` command that turns the old database
+into meetings. To have it run by itself after every pull:
+
+```
+git config core.hooksPath .githooks
+```
 
 ## Troubleshooting
 
