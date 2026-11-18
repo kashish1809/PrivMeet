@@ -92,6 +92,51 @@ mod tests {
         assert!(m.error.starts_with("Could not regenerate the summary"), "{}", m.error);
     }
 
+    async fn body_json(r: Response) -> Value {
+        let bytes = axum::body::to_bytes(r.into_body(), 1 << 20).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test]
+    async fn edited_line_reaches_search_and_exports() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "m1");
+        let first = mt::segments(&app.db(), "m1").unwrap()[0].id;
+        let edit = |id: i64, body: &str| patch_segment(State(app.clone()), UrlPath(id), Bytes::from(body.to_string()));
+        assert_eq!(edit(9999, "{}").await.status(), StatusCode::NOT_FOUND);
+        assert_eq!(edit(first, r#"{"text": "  "}"#).await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(edit(first, &format!(r#"{{"text": "{}"}}"#, "x".repeat(2001))).await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(edit(first, r#"{"speaker": 7}"#).await.status(), StatusCode::BAD_REQUEST);
+        let r = edit(first, r#"{"text": "Hello Rohan, can you book the marquee?", "speaker": 2}"#).await;
+        assert_eq!(r.status(), StatusCode::OK);
+        let j = body_json(r).await;
+        assert_eq!((j["id"].as_i64(), j["speaker"].as_i64()), (Some(first), Some(2))); // 2 = a new speaker
+        let found = body_json(list(State(app.clone()), Query([("q".to_string(), "marquee".to_string())].into())).await).await;
+        assert_eq!(found["meetings"][0]["hits"][0]["text"], "Hello Rohan, can you book the marquee?");
+        let m = mt::get(&app.db(), "m1").unwrap().unwrap();
+        let md = String::from_utf8(export::markdown(&m, &mt::segments(&app.db(), "m1").unwrap()).body.to_vec()).unwrap();
+        assert!(md.contains("marquee"));
+        app.db().execute("UPDATE meetings SET status = 'transcribing'", []).unwrap();
+        assert_eq!(edit(first, r#"{"text": "x"}"#).await.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn merge_leaves_one_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "m1");
+        app.db().execute(r#"UPDATE meetings SET speaker_names = '{"0": "Asha", "1": "Rohan"}'"#, []).unwrap();
+        let merge = |body: &str| merge_speakers(State(app.clone()), UrlPath("m1".to_string()), Bytes::from(body.to_string()));
+        assert_eq!(merge(r#"{"from": 1, "to": 1}"#).await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(merge(r#"{"from": 1, "to": 5}"#).await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(merge(r#"{"from": "1"}"#).await.status(), StatusCode::BAD_REQUEST);
+        let j = body_json(merge(r#"{"from": 1, "to": 0}"#).await).await;
+        assert_eq!(j["speaker_names"], json!({"0": "Asha"}));
+        assert!(j["segments"].as_array().unwrap().iter().all(|s| s["speaker"] == 0));
+        assert_eq!(j["speakers"], 1);
+    }
+
     #[test]
     fn dates_like_fromisoformat() {
         assert!(super::day("2026-10-28", "from").is_ok());
