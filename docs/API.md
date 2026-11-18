@@ -45,6 +45,7 @@ Merges the keys you send into the saved settings and returns them all. Sending `
 | `num_ctx` | int | 512 to 131072 |
 | `diarize` | bool | |
 | `cpu_threads` | int | 1 to 256 |
+| `keep_audio` | bool | default true; false deletes each recording once its notes are ready (flag `storage`) |
 | `llm_provider` | string | `ollama` (default), `openai`, `anthropic`, `gemini`, `groq`, `openrouter`, `custom` (flag `providers`) |
 | `api_base_url` | string | `http(s)://` URL of an OpenAI-compatible API, for `custom` |
 | `api_key` | string | at most 300 chars; **never returned**: GET and PATCH show `api_key_set: true/false` instead |
@@ -92,6 +93,7 @@ Newest first, at most 200.
 ```
 - `speakers` is the number of distinct speakers (0 before diarization or on the low tier).
 - `has_summary` is false for a `done` meeting whose summary is empty; show "Processed".
+- `has_audio` (flag `storage`): false once the recording was deleted.
 - `queue_position` (flag `cancel`): for a `queued` meeting, how many queued meetings are ahead
   of it (0 = next); `null` otherwise.
 
@@ -139,6 +141,12 @@ Deletes the meeting and its audio file. Returns 204.
 
 ### `GET /api/meetings/<id>/audio`
 The original file. It supports `Range` (206 for a range, 416 when the range is out of bounds).
+404 once the audio was deleted.
+
+### `DELETE /api/meetings/<id>/audio` (flag `storage`)
+Deletes the recording and its MP3/Opus copies. The notes, transcript, search and exports stay;
+playback, the audio exports and retry do not. Returns the full meeting with `has_audio: false`;
+409 while it is processing.
 
 ### `POST /api/meetings/<id>/retry`
 Runs the whole pipeline again. Returns 409 while the meeting is still processing.
@@ -204,6 +212,22 @@ deleted.
 
 ### `GET /api/questions/<id>/`
 `{"id", "question", "answer", "status"}` with status `pending`, `done` or `failed`. The answer cites `[mm:ss]`.
+
+## Storage (flag `storage`)
+
+### `GET /api/storage/`
+Bytes used and free, measured on each call:
+```json
+{"audio": 22027530, "models": 183541356, "database": 233600, "free": 527167488, "keep_audio": true}
+```
+- `audio`: the recordings and their shared copies (`MEDIA_ROOT/uploads`).
+- `models`: `MODELS_DIR/whisper-cpp` and the diarization models. Ollama's models live in Ollama
+  and are not counted.
+- `database`: the SQLite file with its WAL and SHM.
+- `free`: free space on the disk holding `DATA_DIR` (`df -Pk`), or `null` when unknown.
+
+Settings key `keep_audio` (bool, default true): when false, a recording is deleted as soon as
+its meeting is `done`.
 
 ## Tags (flag `tags`)
 

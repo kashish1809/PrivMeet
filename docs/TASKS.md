@@ -69,6 +69,7 @@ further down is kept only as the specification each was built to, and its headin
 | **R1.16** cancel + queue position | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `cancel_requested` (migration 3); `POST /api/meetings/<id>/cancel` (409 unless processing): a queued meeting fails "Cancelled." at once, the running one at its next stage check or through whisper.cpp's abort callback / sherpa's progress callback; retry clears it; list rows add `queue_position`; flag `cancel`. |
 | **R1.17** language + translate | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | upload `language` (ISO code, empty = detect, 400 for an unknown one) and `translate` (`1` = English), stored as `language_hint` / `translate` (migration 4); whisper.cpp `set_language` / `set_translate`, cloud `/audio/translations`; flag `language`. Checked with the Hindi test clip both ways. |
 | **R1.18** auto title + speaker suggestions | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | the same summary call returns `title` and `speakers`; `auto_title` (set by an untitled upload, cleared by a title PATCH) lets the title replace the file name; `speaker_suggestions` (migration 5) from the inferred names and the model's, kept only when the name was said, never written to `speaker_names`; flag `suggestions`. Checked on the test meeting with Groq and qwen2.5:1.5b. |
+| **R1.19** storage + audio retention | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `GET /api/storage/` (recordings, models, database, free disk; matched `du -b` exactly), `DELETE /api/meetings/<id>/audio` (notes, transcript, search and exports stay; audio 404, retry 409), `has_audio` on every row, settings key `keep_audio`, a Storage card on the Models page; flag `storage`. |
 
 Everything in R1.x and R2.x that is not in the table above is open.
 
@@ -820,7 +821,7 @@ Built; the text below is the specification it was built to.
   - Bad or missing keys are ignored; the summary must not fail because of them.
 - **Done when:** a recording where people use each other's names gets correct suggestions on the mid tier, and an untitled upload gets a sensible title.
 
-#### R1.19 · Storage + audio retention
+#### R1.19 · Storage + audio retention — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.19-storage`
 - **Needs:** R1.7, R1.12
 - **Files:** `native/server/src/api.rs`, `native/server/src/web.rs`, `native/server/src/pipeline.rs`, `native/server/src/settings.rs`, `native/server/src/models.rs`, `docs/API.md`, `frontend/src/pages/Models.jsx`
