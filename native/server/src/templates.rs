@@ -108,6 +108,11 @@ fn own(db: &Connection, pk: i64) -> Option<Own> {
 /// Validated {name, description, instructions} (views.clean_template); `partial` for PATCH.
 fn clean(body: &Bytes, partial: bool) -> Result<Map<String, Value>, String> {
     let data: Value = if body.is_empty() { json!({}) } else { serde_json::from_slice(body).map_err(|_| "Invalid JSON.".to_string())? };
+    clean_value(&data, partial)
+}
+
+/// The same rules on a parsed value (a template read back from a backup).
+pub fn clean_value(data: &Value, partial: bool) -> Result<Map<String, Value>, String> {
     let Value::Object(data) = data else { return Err("Expected a JSON object.".into()) };
     let mut out = Map::new();
     for (key, limit) in LIMITS {

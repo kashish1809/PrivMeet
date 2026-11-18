@@ -302,14 +302,18 @@ fn blocks(m: &Meeting, segs: &[Segment]) -> Vec<Block> {
 }
 
 fn crc32(data: &[u8]) -> u32 {
-    let mut crc = !0u32;
+    !crc32_update(!0u32, data)
+}
+
+/// CRC-32 over one more piece: start with !0 and invert at the end (backup.rs reads in pieces).
+pub fn crc32_update(mut crc: u32, data: &[u8]) -> u32 {
     for &b in data {
         crc ^= b as u32;
         for _ in 0..8 {
             crc = if crc & 1 != 0 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
         }
     }
-    !crc
+    crc
 }
 
 /// A zip of stored (uncompressed) entries, in the given order. Office and ODF readers accept
