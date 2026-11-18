@@ -164,7 +164,8 @@ fn run(app: &App, id: &str) -> Result<(), String> {
 
     if p.diarize && diarize::available(&app.cfg.models_dir) {
         progress(app, id, "diarizing", 70);
-        let turns = diarize::diarize(stt::read_wav(&wav)?, &app.cfg.models_dir, p.cpu_threads)?;
+        let on_dia = |f: f64| progress(app, id, "diarizing", 70 + (10.0 * f) as i64);
+        let turns = diarize::diarize(stt::read_wav(&wav)?, &app.cfg.models_dir, p.cpu_threads, &on_dia)?;
         let mut stored = mt::segments(&app.db(), id).map_err(|e| e.to_string())?;
         diarize::assign_speakers(&mut stored, &turns);
         let db = app.db();

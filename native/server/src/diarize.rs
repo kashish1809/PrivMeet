@@ -34,7 +34,7 @@ pub fn available(models_dir: &Path) -> bool {
 }
 
 /// Speaker turns [(start, end, speaker)] sorted by start time.
-pub fn diarize(samples: Vec<f32>, models_dir: &Path, threads: i64) -> Result<Vec<(f64, f64, i64)>, String> {
+pub fn diarize(samples: Vec<f32>, models_dir: &Path, threads: i64, on_progress: &dyn Fn(f64)) -> Result<Vec<(f64, f64, i64)>, String> {
     let (seg, emb) = model_paths(models_dir);
     let n = forced_speakers();
     let config = DiarizeConfig {
@@ -49,8 +49,13 @@ pub fn diarize(samples: Vec<f32>, models_dir: &Path, threads: i64) -> Result<Vec
     // upgrade when sherpa-rs exposes num_threads on DiarizeConfig.
     let _ = threads;
     let mut sd = Diarize::new(&seg, &emb, config).map_err(|e| format!("Cannot load the diarization models: {e}"))?;
-    let mut turns: Vec<(f64, f64, i64)> = sd
-        .compute(samples, None)
+    let pct = std::sync::Arc::new(std::sync::atomic::AtomicI32::new(0));
+    let seen = pct.clone();
+    let cb = Box::new(move |done: i32, total: i32| {
+        seen.store(if total > 0 { 100 * done / total } else { 0 }, std::sync::atomic::Ordering::Relaxed);
+        0 // 0 = keep going
+    });
+    let mut turns: Vec<(f64, f64, i64)> = crate::stt::with_progress(&pct, on_progress, || sd.compute(samples, Some(cb)))
         .map_err(|e| format!("Diarization failed: {e}"))?
         .into_iter()
         .map(|s| (s.start as f64, s.end as f64, s.speaker as i64))

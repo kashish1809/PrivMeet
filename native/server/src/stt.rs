@@ -114,6 +114,32 @@ pub fn read_wav(path: &Path) -> Result<Vec<f32>, String> {
 /// whisper.cpp on this machine. The model is loaded for this call and freed when it returns,
 /// so only one heavy model is ever in memory (the LLM runs after, in Ollama). `on_segment`
 /// sees each segment as whisper.cpp finishes it, for progress.
+/// Run `work` in a scoped thread while this one passes `pct` (0-100, set by a library's
+/// progress callback, which must be 'static) on to `on_progress` whenever it changes.
+pub fn with_progress<T, E: std::fmt::Display>(
+    pct: &std::sync::atomic::AtomicI32,
+    on_progress: &dyn Fn(f64),
+    work: impl FnOnce() -> Result<T, E> + Send,
+) -> Result<T, String>
+where
+    T: Send,
+    E: Send,
+{
+    std::thread::scope(|s| {
+        let run = s.spawn(work);
+        let mut last = -1;
+        while !run.is_finished() {
+            let now = pct.load(std::sync::atomic::Ordering::Relaxed);
+            if now != last {
+                on_progress(now as f64 / 100.0);
+                last = now;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        run.join().map_err(|_| "it crashed".to_string())?.map_err(|e| e.to_string())
+    })
+}
+
 pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progress: &dyn Fn(f64)) -> Result<(Vec<Seg>, Info), String> {
     let model = ensure_model(models_dir, &p.whisper_model)?;
     let samples = read_wav(wav)?;
@@ -136,9 +162,12 @@ pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progre
     if !prompt.is_empty() {
         params.set_initial_prompt(prompt);
     }
-    // shortcut: progress is reported at the end only; upgrade with set_progress_callback_safe
-    // when long local runs need a moving bar.
-    state.full(params, &samples).map_err(|e| format!("Transcription failed: {e}"))?;
+    // whisper.cpp reports percent from inside full(); the callback must be 'static, so it only
+    // stores the number and this thread passes changes on while full() runs in a scoped thread.
+    let pct = std::sync::Arc::new(std::sync::atomic::AtomicI32::new(0));
+    let seen = pct.clone();
+    params.set_progress_callback_safe(move |p: i32| seen.store(p, std::sync::atomic::Ordering::Relaxed));
+    with_progress(&pct, on_progress, || state.full(params, &samples)).map_err(|e| format!("Transcription failed: {e}"))?;
     on_progress(1.0);
     let mut out = Vec::new();
     for i in 0..state.full_n_segments() {
