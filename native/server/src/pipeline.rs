@@ -249,8 +249,18 @@ fn run(app: &App, id: &str) -> Result<(), String> {
         check(app, id)?;
         progress(app, id, "diarizing", 70);
         let on_dia = |f: f64| progress(app, id, "diarizing", 70 + (10.0 * f) as i64);
-        let turns = diarize::diarize(stt::read_wav(&wav)?, &app.cfg.models_dir, p.cpu_threads, &on_dia)?;
         let mut stored = mt::segments(&app.db(), id).map_err(|e| e.to_string())?;
+        // only the speech voice activity detection found, so long silences cost nothing (R1.22)
+        let all = stt::read_wav(&wav)?;
+        let mut speech = stt::Speech::glue(&all, &info.speech);
+        let glued = !info.speech.is_empty();
+        let input = if glued { std::mem::take(&mut speech.samples) } else { all };
+        let mut turns = if stored.is_empty() { vec![] } else { diarize::diarize(input, &app.cfg.models_dir, p.cpu_threads, &on_dia)? };
+        if glued {
+            for t in &mut turns {
+                (t.0, t.1) = speech.original_span(t.0, t.1);
+            }
+        }
         diarize::assign_speakers(&mut stored, &turns);
         let db = app.db();
         let tx = db.unchecked_transaction().map_err(|e| e.to_string())?;

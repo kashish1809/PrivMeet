@@ -23,12 +23,24 @@ gain over 16-bit). Summary with Groq adds 7–11 s, so a whole meeting is now ab
 against 91 s before and Python's ~51 s.
 
 **Silence:** 5 minutes of silence took 33 s to transcribe; with VAD Whisper is not loaded
-and the stage takes 1.8 s. Diarization still reads all of it (14.5 s).
+and the stage takes 1.8 s. Diarization now reads only the speech VAD found, and nothing when
+there is no transcript: the whole 5 minutes of silence go through in 2.2 s (1.8 s + 14.5 s
+before). The test meeting with 3 minutes of silence inserted (330 s): diarization 38.0 s ->
+27.5 s, the same 150.6 s of speech as the plain meeting.
 
-**Not reached yet:** R1.22's target is no more time than Python. Diarization (30 s) is the gap:
-same models and settings as the Python run, so the difference is in the sherpa-onnx / ONNX
-Runtime build sherpa-rs downloads. Next to try: diarizing only the VAD speech regions, and a
-newer sherpa-onnx release.
+**Where diarization's time goes:** on the test meeting the models load in 1.2 s and the audio
+takes 23.5–28.5 s on 4 threads (the server now logs both). sherpa-onnx's own CLI from the same
+bundled build (v1.12.9) takes 23.6 s, so the server adds nothing; the stage time is the
+library's. The Python environment is gone, so its share of the 51 s cannot be measured again.
+
+**Speaker clustering is on an edge on this meeting.** The same audio always gives the same
+labels, but moving it by about half a second (silence inserted at a pause, then glued out)
+gives 3 speakers instead of 4 at threshold 0.8. The plain test meeting is 100 % speech, so it
+is diarized whole and keeps its 4.
+
+**Not reached yet:** R1.22's target is no more time than Python. Diarization (24–28 s) is the
+gap. Next to try: sherpa-onnx v2.0.1 (a newer ONNX Runtime) against the bundled v1.12.9 with
+the CLI on the same file; moving to it means a newer `sherpa-rs-sys`.
 
 ## Rust server vs the Django stack (2026-11-18)
 

@@ -851,6 +851,9 @@ Built; the text below is the specification it was built to.
   `cpu_threads` (46 -> 30 s), 8-bit Whisper files and Silero VAD (transcription 36 -> 25–30 s,
   WER +0.3, silence skipped); a whole meeting ~65 s against Python's ~51 s. Diarization is the
   remaining gap. Table in `docs/BENCHMARKS.md`.
+- **Progress (2026-11-18, `v2/vinayak/R1.22-rust-speed`):** diarization reads only the speech
+  VAD found (5 min of silence 16.3 -> 2.2 s in all); its time is sherpa-onnx's own (CLI from the
+  same v1.12.9 build: 23.6 s). Next: try sherpa-onnx v2.0.1, which needs a newer `sherpa-rs-sys`.
 - **Branch:** `v2/vinayak/R1.22-rust-speed`
 - **Needs:** the Rust backend (`rust/migration`)
 - **Files:** `native/server/src/stt.rs`, `native/server/src/diarize.rs`, `native/server/src/hw.rs`, `native/server/Cargo.toml` (ask before a new crate), `docs/BENCHMARKS.md`
