@@ -276,10 +276,21 @@ fn write_notes(app: &App, id: &str, p: &hw::Profile, known: &[String], template:
     let language = if m.translate { "English" } else { m.language.as_str() };
     let notes = llm::summarize(&transcript(&m, &stored, false, Some(&guessed)), p, &on_llm, language, &focus)?;
     check(app, id)?; // an LLM call cannot be stopped midway: drop its result instead
+    // names for speakers: the ones read from who addresses whom, then the model's for the rest;
+    // only suggestions, never written to speaker_names
+    let present: std::collections::HashSet<i64> = stored.iter().filter_map(|s| s.speaker).collect();
+    let mut suggestions = serde_json::Map::new();
+    for (n, name) in guessed.iter().map(|(n, v)| (*n, v.clone())).chain(notes.speakers.iter().cloned()) {
+        if present.contains(&n) {
+            suggestions.entry(n.to_string()).or_insert(Value::String(name));
+        }
+    }
+    let title = if m.auto_title && !notes.title.is_empty() { notes.title.clone() } else { m.title.clone() };
     app.db()
         .execute(
-            "UPDATE meetings SET summary = ?2, decisions = ?3, action_items = ?4, template = ?5, error = '', status = 'done', progress = 100, heartbeat = ?6 WHERE id = ?1",
-            params![id, notes.summary, Value::from(notes.decisions.clone()).to_string(), notes.items_json().to_string(), template, db::now_iso()],
+            "UPDATE meetings SET summary = ?2, decisions = ?3, action_items = ?4, template = ?5, error = '', status = 'done', progress = 100, \
+             heartbeat = ?6, title = ?7, speaker_suggestions = ?8 WHERE id = ?1",
+            params![id, notes.summary, Value::from(notes.decisions.clone()).to_string(), notes.items_json().to_string(), template, db::now_iso(), title, Value::Object(suggestions).to_string()],
         )
         .map_err(|e| e.to_string())?;
     Ok(())
