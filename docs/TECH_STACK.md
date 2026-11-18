@@ -1,6 +1,6 @@
-# PrivMeet tech stack (Rust backend, `rust/migration`)
+# PrivMeet tech stack
 
-The backend moves from Django + Celery to one Rust binary. The React app, the desktop app and
+The backend moved from Django + Celery to one Rust binary. The React app, the desktop app and
 the API stay the same, so nothing above the backend changes.
 
 ## At a glance
@@ -58,16 +58,17 @@ Feature `cuda`: builds whisper.cpp with CUDA; without it the server uses the CPU
 
 ## Why
 
-| | Python stack | Rust |
-|---|---|---|
-| Web server, idle | 44–48 MB (dev); ~150 MB in Docker | **6.9 MB** |
-| Idle after meetings | 58 MB | **39 MB** |
-| Peak, local run (whisper `base` + diarization) | ~1.6 GB (whole Docker stack) | **450–515 MB** |
-| Processes to run | web, worker, Redis, Postgres, Ollama | **server** + Ollama |
-| Transcript quality, cloud (test meeting) | WER 3.8 %, 17/17 names | WER 3.8 %, 17/17 names |
+Measured one at a time on the same 5.7 GB laptop and data ([BENCHMARKS.md](BENCHMARKS.md)):
 
-The Python peak covers the whole Docker stack and the Rust peak one process; the like-for-like
-comparison is stage 6 in `native/README.md`.
+| | Django stack | Rust |
+|---|---|---|
+| Idle, production setup | 263 MB RSS / 170 MB PSS (gunicorn + Celery worker, 5 processes), plus Postgres and Redis | **20 MB RSS / 11 MB PSS**, 1 process |
+| Peak, local run (Whisper `base` + diarization, 150 s meeting) | 543–564 MB | **441–488 MB** |
+| Idle after 3 meetings | 31 MB (web process; jobs ran in a child) | 39 MB |
+| Wall time, same run | **50–51 s** | 104–113 s (task R1.22) |
+| Processes to run | web, worker, Redis, Postgres, Ollama | **server** + Ollama |
+| Transcript quality, cloud | WER 3.8 %, 17/17 names, 4 speakers | WER 3.8 %, 17/17 names, 4 speakers |
+| API | | the same 68 parity requests answer identically |
 
 ## Shipping
 

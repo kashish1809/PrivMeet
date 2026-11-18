@@ -1,13 +1,13 @@
 # PrivMeet in Rust (`rust/migration`)
 
-The backend is being ported from Django to Rust to cut memory. The Rust server answers the
-same `/api/` as Django, so the React app works unchanged, and it serves the built app itself.
-While the port is in progress, the Django backend stays the one in use.
+PrivMeet's backend: ported from Django to Rust to cut memory. The Rust server answers the same
+`/api/` as Django did, so the React app works unchanged, and it serves the built app itself.
+The Django backend is removed; `import-django` copies an old install's meetings.
 
 | Crate | What |
 |---|---|
 | `server/` (`privmeet-server`) | the HTTP server: the React app, CSRF, settings, hardware profile, SQLite |
-| `transcribe/` (`privmeet-transcribe`) | speech to text with whisper.cpp; becomes a module of the server in stage 4 |
+| `transcribe/` (`privmeet-transcribe`) | a standalone whisper.cpp test tool; the server's `stt.rs` replaced it in stage 4 |
 
 ## Run it
 
@@ -25,8 +25,18 @@ The environment variables are Django's, with the same defaults:
 `CPU_THREADS`, `WHISPER_MODEL`, `LLM_MODEL`, `NUM_CTX`, `BEAM_SIZE` and `DIARIZE`.
 
 **Use a separate `DATA_DIR`.** The Rust database (`privmeet.sqlite3`) is not Django's
-`db.sqlite3`; importing an existing install's meetings comes later. `settings.json` is shared
-and readable by both.
+`db.sqlite3`. `settings.json` is shared and readable by both.
+
+Other commands:
+
+```
+privmeet-server seed-demo [--reset]           # the mockup's demo meetings, as manage.py seed_demo
+privmeet-server import-django <db.sqlite3>    # copy a Django install's meetings into this one
+```
+
+`import-django` opens Django's database read-only and copies the meetings (by id; ones already
+here are skipped, never overwritten), transcripts, questions, own templates and the audio files
+from the `media/` folder next to it. Only SQLite installs; a Postgres one is not supported yet.
 
 ## Stages
 
@@ -36,8 +46,32 @@ and readable by both.
 | 2 | SQLite and FTS5 schema, settings store, hardware tiers; `/api/system/`, `/api/settings/` | done |
 | 3 | Meetings: upload, list and search, detail, edit, delete, audio with Range, retry, tags, action items, ask | done |
 | 4 | Pipeline: ffmpeg, whisper.cpp or cloud transcription, names, diarization, summary, Q&A | done |
-| 5 | Template, models and export endpoints, settings test, demo data, import from Django | |
-| 6 | Measure against Python, side-by-side tests, then hand-over to the desktop app | |
+| 5 | Template, models and export endpoints, settings test, demo data, import from Django | done |
+| 6 | Measure against Python, side-by-side tests, then hand-over to Docker and the desktop app | done |
+
+### Stage 6 (done)
+
+- Measured against Django one at a time on the same laptop and data: the Rust server idles at
+  20 MB against 263 MB for gunicorn + the Celery worker, and peaks 15 % lower during a local
+  run, but takes about twice as long (task R1.22). Full tables: `docs/BENCHMARKS.md`.
+- Parity: with Django's database imported, 68 requests (list, search, filters, every detail and
+  export) and 32 more (templates, models, Test Connection) answer as Django did.
+- Docker runs it as `web` beside `ollama` (`Dockerfile`, `compose.yml`); the desktop app needed no
+  change, since it starts the same compose file and waits for the same `/api/system/`.
+- `scripts/bench.sh` repeats the processing benchmark.
+
+### Stage 5 (done)
+
+- `export.rs`: Markdown, plain text, JSON, SRT, VTT, the share page, Word, OpenDocument and
+  calendar (.ics) exports, and the audio as MP3 or Opus. The Office files are zips written by
+  hand (stored entries, CRC32), so no zip crate.
+- `templates.rs`: `/api/templates/` CRUD next to the built-ins.
+- `models.rs`: `/api/models/`, model downloads (queued on the pipeline thread, like Celery),
+  model delete and `/api/settings/test`.
+- `cli.rs`: `seed-demo` and `import-django`; `demo.json` is the demo content, exported once from
+  `seed_demo.py`.
+
+`FEATURES` now lists the same twelve flags as Django.
 
 ### Stage 4 (done)
 
@@ -73,7 +107,6 @@ The pipeline adds no feature flag (Django's list has none for it); `FEATURES` in
 `server/src/web.rs` still lists only what is built, so the app hides the rest.
 
 **Known shortcuts:**
-- Whisper progress is reported only when transcription ends.
 - sherpa-rs ignores `cpu_threads`.
 - Name correction handles Latin script only.
 - RAM detection is Linux only.

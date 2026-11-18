@@ -1,5 +1,74 @@
 # Benchmarks
 
+## Rust server vs the Django stack (2026-11-18)
+
+The backend moved from Django + Celery + Redis + Postgres to one Rust binary (`native/server`).
+Both were measured on the same 5.7 GB laptop, **one at a time with nothing else running**, on
+the same data (the five demo meetings, then the 150 s English test meeting with 4 speakers).
+
+**Method.** `scripts/mem.py` sums the RSS of a server and all its child processes, sampled every
+0.1 s; PSS (shared pages split between processes) is read from `smaps_rollup`. Idle numbers are
+taken after the same warm-up requests on both (every page's endpoints, each meeting's detail and
+Word export, three times). `scripts/bench.sh <audio> [runs] [settings.json]` repeats the
+processing runs for the Rust server.
+
+### Idle, production setup
+
+| | Processes | RSS | PSS |
+|---|---|---|---|
+| Django: gunicorn, master + 2 workers (as in the Docker image) | 3 | 132 MB | 97 MB |
+| Celery worker, idle (`--concurrency 1`, in-memory broker) | 2 | 131 MB | 73 MB |
+| **Django web + worker together** | 5 | **263 MB** | **170 MB** |
+| **Rust server** (API, web app and pipeline) | 1 | **20 MB** | **11 MB** |
+
+Postgres and Redis come on top of the Django column in Docker (their containers were capped at
+256 MB and 64 MB); they were not measured here, as there is no Docker on this machine. The Rust
+stack has neither.
+
+### Processing the 150 s test meeting
+
+Local Whisper `base` with diarization, summary by Groq (`openai/gpt-oss-120b`), names in the
+vocabulary. Django ran as `runserver` with `CELERY_EAGER=1`, where each job runs in a child
+process, as the Celery worker runs one task per child.
+
+| | Run 1 | Run 2 | Run 3 | Server before | Server after 3 runs |
+|---|---|---|---|---|---|
+| Django (faster-whisper, sherpa-onnx) peak | 563 MB | 564 MB | 543 MB | 51 MB | 31 MB |
+| Django wall time | 51 s | 51 s | 50 s | | |
+| **Rust (whisper.cpp, sherpa-rs) peak** | **441 MB** | **488 MB** | **486 MB** | **16 MB** | **39 MB** |
+| Rust wall time | 113 s | 109 s | 104 s | | |
+
+- **Memory:** the Rust server peaks about 15 % lower, and idles 13 to 15 times lower than Django's web + worker. After a
+  meeting it keeps about 25 MB of library code (ONNX Runtime, whisper.cpp) mapped, where Django's
+  child process exits; `malloc_trim` after each job returns the freed heap.
+- **Speed:** the Rust pipeline takes about twice as long. Of its ~105 s, transcription is ~40 s,
+  diarization ~47 s and the summary ~15 s. Python had voice activity detection and multithreaded
+  diarization; Rust has neither yet. Task **R1.22** in `docs/TASKS.md` is to close this gap.
+
+### Quality on the same meeting
+
+| | WER | Names right | Speakers | Owners right |
+|---|---|---|---|---|
+| Django, cloud transcription (Groq) | 3.8 % | 17 of 17 | 4 | 3 of 5 |
+| Rust, cloud transcription (Groq) | 3.8 % | 17 of 17 | 4 | 3 of 5 |
+| Rust, local whisper.cpp `base` | 5.8 % | 16 of 17 | 4 | 3 of 5 |
+
+### API parity
+
+With Django's database imported into the Rust server (`privmeet-server import-django`), 68
+requests answered identically on both: the list, search and filters, tags, action items,
+templates, every meeting's detail, all nine export formats (the Word and OpenDocument files
+compared part by part) and both audio conversions. List order and search ranking were compared
+as sets, since Django's list order is undefined (its `GROUP BY` drops `Meta.ordering`) and its
+SQLite search has no ranking. A further 32 requests on templates, the Models page and Test
+Connection answered the same, apart from the wording of one socket error.
+
+## Django stack, by stage (2026-11-14)
+
+The sections below were measured on the earlier Python backend, with `scripts/bench.py` (removed
+with it).
+
+
 `scripts/bench.py` runs each pipeline stage in its own child process with `TIER=` forced,
 the way the Celery worker runs one task per child, and records wall time, the Whisper
 real-time factor (RTF = wall / audio length) and peak RSS per stage. For the LLM it also
