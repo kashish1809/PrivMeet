@@ -16,7 +16,7 @@ use crate::config::Config;
 use crate::{audio, db};
 
 const DEMO: &str = "demo";
-/// The demo meetings, exported once from backend/meetings/management/commands/seed_demo.py.
+/// The demo meetings: the mockup's content as JSON, kept beside this file.
 const DEMO_JSON: &str = include_str!("demo.json");
 
 /// Run a command named on the command line; None when the arguments name none (serve).
@@ -163,6 +163,19 @@ fn django_uuid(v: &str) -> String {
     uuid::Uuid::parse_str(v).map(|u| u.to_string()).unwrap_or_else(|_| v.to_string())
 }
 
+/// Is `col` a column of `table`? Old databases are missing the ones later versions added.
+fn has_column(conn: &Connection, table: &str, col: &str) -> bool {
+    conn.prepare(&format!("PRAGMA table_info({table})"))
+        .and_then(|mut st| st.query_map([], |r| r.get::<_, String>(1))?.collect::<Result<Vec<_>, _>>())
+        .map(|cols| cols.iter().any(|c| c == col))
+        .unwrap_or(false)
+}
+
+/// Is there such a table? A database from before note templates has none.
+fn has_table(conn: &Connection, table: &str) -> bool {
+    conn.query_row("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1", [table], |_| Ok(())).optional().unwrap_or(None).is_some()
+}
+
 /// Copy a Django install into this one: meetings (matched by id; existing ones are skipped,
 /// never overwritten), their segments and questions, own templates, and the audio files.
 // shortcut: SQLite only; a Postgres install exports with `manage.py dumpdata` first, add that if anyone needs it.
@@ -173,11 +186,13 @@ fn import_django(cfg: &Config, src: &Path) -> Result<String, String> {
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let (mut meetings, mut skipped, mut segs, mut qs, mut files, mut tpls) = (0, 0, 0, 0, 0, 0);
     {
+        // the template column arrived with note templates; an older database has none
+        let template = if has_column(&old, "meetings_meeting", "template") { "template" } else { "''" };
         let mut st = old
-            .prepare(
+            .prepare(&format!(
                 "SELECT id, title, file, duration, language, status, progress, error, summary, decisions, action_items, \
-                 speaker_names, tier_used, created, notes, tags, device_used, heartbeat, template FROM meetings_meeting",
-            )
+                 speaker_names, tier_used, created, notes, tags, device_used, heartbeat, {template} FROM meetings_meeting",
+            ))
             .map_err(|e| format!("not a PrivMeet Django database: {e}"))?;
         let rows: Vec<Vec<rusqlite::types::Value>> = st
             .query_map([], |r| (0..19).map(|i| r.get::<_, rusqlite::types::Value>(i)).collect())
@@ -247,10 +262,14 @@ fn import_django(cfg: &Config, src: &Path) -> Result<String, String> {
             }
         }
     }
-    // own templates keep their number, so a meeting's "u<pk>" still points at the same one
-    let mut st = old.prepare("SELECT id, name, description, instructions, created FROM meetings_notetemplate").map_err(|e| e.to_string())?;
-    let t_rows: Vec<(i64, String, String, String, String)> =
-        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))).and_then(|it| it.collect()).map_err(|e| e.to_string())?;
+    // own templates keep their number, so a meeting's "u<pk>" still points at the same one;
+    // a database from before note templates has no such table and nothing to copy
+    let t_rows: Vec<(i64, String, String, String, String)> = if has_table(&old, "meetings_notetemplate") {
+        let mut st = old.prepare("SELECT id, name, description, instructions, created FROM meetings_notetemplate").map_err(|e| e.to_string())?;
+        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))).and_then(|it| it.collect()).map_err(|e| e.to_string())?
+    } else {
+        Vec::new()
+    };
     for (pk, n, d, i, c) in t_rows {
         tpls += tx
             .execute("INSERT OR IGNORE INTO note_templates (id, name, description, instructions, created) VALUES (?1, ?2, ?3, ?4, ?5)", params![pk, n, d, i, django_time(&c)])
