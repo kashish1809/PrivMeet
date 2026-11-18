@@ -57,6 +57,41 @@ fn day(v: &str, name: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::web::{test_app, test_meeting};
+
+    fn status_of(r: Response) -> StatusCode {
+        r.status()
+    }
+
+    #[tokio::test]
+    async fn summarize_checks_state_and_queues() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "m1");
+        let call = |id: &str, body: &str| summarize(State(app.clone()), UrlPath(id.to_string()), Bytes::from(body.to_string()));
+        assert_eq!(status_of(call("nope", "").await), StatusCode::NOT_FOUND);
+        assert_eq!(status_of(call("m1", r#"{"template": "zzz"}"#).await), StatusCode::BAD_REQUEST);
+        assert_eq!(status_of(call("m1", r#"{"template": "standup"}"#).await), StatusCode::OK);
+        assert_eq!(mt::get(&app.db(), "m1").unwrap().unwrap().status, "summarizing");
+        assert_eq!(status_of(call("m1", "").await), StatusCode::CONFLICT); // already running
+        app.db().execute("UPDATE meetings SET status = 'done'", []).unwrap();
+        app.db().execute("DELETE FROM segments", []).unwrap();
+        assert_eq!(status_of(call("m1", "").await), StatusCode::CONFLICT); // no transcript
+    }
+
+    #[test]
+    fn failed_summary_keeps_the_old_notes() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "m1");
+        app.db().execute("UPDATE meetings SET status = 'summarizing'", []).unwrap();
+        pipeline::summarize_meeting(&app, "m1", None, "done"); // Ollama at :9 refuses
+        let m = mt::get(&app.db(), "m1").unwrap().unwrap();
+        assert_eq!((m.status.as_str(), m.summary.as_str()), ("done", "Old summary"));
+        assert!(m.error.starts_with("Could not regenerate the summary"), "{}", m.error);
+    }
+
     #[test]
     fn dates_like_fromisoformat() {
         assert!(super::day("2026-10-28", "from").is_ok());

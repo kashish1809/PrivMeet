@@ -200,3 +200,36 @@ async fn spa(State(app): State<AppState>, req: Request) -> Response {
             .into_response(),
     }
 }
+
+/// An app on a temporary DATA_DIR with no pipeline thread: queued jobs go nowhere, so a test
+/// sees exactly the state a handler left.
+#[cfg(test)]
+pub fn test_app(dir: &std::path::Path) -> AppState {
+    let cfg = Config {
+        host: "127.0.0.1".into(),
+        port: 0,
+        allowed_hosts: vec!["127.0.0.1".into()],
+        trusted_origins: vec![],
+        data_dir: dir.to_path_buf(),
+        media_root: dir.join("media"),
+        models_dir: dir.join("models"),
+        frontend_dist: dir.join("dist"),
+        max_upload_mb: 5,
+        ollama_url: "http://127.0.0.1:9".into(), // nothing listens: LLM calls fail at once
+    };
+    Arc::new(App::new(cfg).expect("test app"))
+}
+
+/// A done meeting with two transcript lines and a summary, for tests.
+#[cfg(test)]
+pub fn test_meeting(app: &App, id: &str) {
+    let db = app.db();
+    db.execute(
+        "INSERT INTO meetings (id, title, file, status, progress, summary, created, heartbeat) VALUES (?1, 'Sync', 'uploads/a.wav', 'done', 100, 'Old summary', ?2, ?2)",
+        rusqlite::params![id, db::now_iso()],
+    )
+    .unwrap();
+    for (start, speaker, text) in [(0.0, 0, "Hello Rohan, can you book the room?"), (4.0, 1, "Yes Asha, I will book it.")] {
+        db.execute("INSERT INTO segments (meeting_id, start, end, speaker, text) VALUES (?1, ?2, ?3, ?4, ?5)", rusqlite::params![id, start, start + 3.0, speaker, text]).unwrap();
+    }
+}
