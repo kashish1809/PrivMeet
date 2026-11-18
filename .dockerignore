@@ -6,12 +6,9 @@
 .opencode
 .vscode
 
-**/__pycache__
-**/*.pyc
-backend/.venv
-backend/data
-backend/staticfiles
-backend/frontend_dist
+# Rust build output and local data; the image builds its own
+native/*/target
+native/server/data
 
 # The image builds its own dist from source; a stale local build would mask that.
 frontend/node_modules

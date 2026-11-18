@@ -1,69 +1,15 @@
-# PrivMeet stack: Postgres, Redis, Ollama, the Django web app and one Celery worker.
+# PrivMeet stack: the PrivMeet server (Rust: API, web app and pipeline in one process) and Ollama.
 # Only the web port is published, and only on 127.0.0.1: there is no login.
-# Copy .env.example to .env first. The settings Compose reads from .env are listed there.
+# .env is optional; the settings Compose reads from it are listed in .env.example.
 #
-# web and worker pull ghcr.io/kashish1809/privmeet:${PRIVMEET_VERSION:-latest},
-# because desktop users have no source checkout. Set PRIVMEET_VERSION to pin a
-# release; `docker compose build` or `up --build` still builds from source.
+# web pulls ghcr.io/kashish1809/privmeet:${PRIVMEET_VERSION:-latest}, because desktop users
+# have no source checkout. Set PRIVMEET_VERSION to pin a release; `docker compose build` or
+# `up --build` still builds from source.
 
 name: privmeet
 
-# Settings shared by web and worker. Paths point inside the image, not the host.
-x-app-env: &app-env
-  DATA_DIR: /data
-  MODELS_DIR: /data/models
-  DIARIZE_MODELS_DIR: /opt/models/diarize
-  POSTGRES_HOST: db
-  POSTGRES_PORT: "5432"
-  POSTGRES_DB: ${POSTGRES_DB:-privmeet}
-  POSTGRES_USER: ${POSTGRES_USER:-privmeet}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-privmeet}
-  REDIS_URL: redis://redis:6379/0
-  OLLAMA_URL: http://ollama:11434
-  SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
-  DEBUG: ${DEBUG:-0}
-  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
-  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://127.0.0.1:8000,http://localhost:8000}
-  MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
-  # Empty means "let hw.py detect the tier from RAM and CUDA".
-  TIER: ${TIER:-}
-  CPU_THREADS: ${CPU_THREADS:-}
-  WHISPER_MODEL: ${WHISPER_MODEL:-}
-  LLM_MODEL: ${LLM_MODEL:-}
-  NUM_CTX: ${NUM_CTX:-}
-  BEAM_SIZE: ${BEAM_SIZE:-}
-  DIARIZE: ${DIARIZE:-}
-
 services:
-  db:
-    image: postgres:17-alpine
-    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=20"]
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-privmeet}
-      POSTGRES_USER: ${POSTGRES_USER:-privmeet}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-privmeet}
-    volumes:
-      - db:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-privmeet} -d ${POSTGRES_DB:-privmeet}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    mem_limit: ${DB_MEM:-256m}
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--maxmemory", "32mb", "--save", "", "--appendonly", "no"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    mem_limit: ${REDIS_MEM:-64m}
-    restart: unless-stopped
-
-  # No published port: only the worker talks to it.
+  # No published port: only the server talks to it.
   ollama:
     image: ollama/ollama
     environment:
@@ -74,20 +20,29 @@ services:
     mem_limit: ${OLLAMA_MEM:-4g}
     restart: unless-stopped
 
+  # One process: meetings are processed one at a time on its pipeline thread, so only one
+  # heavy model is in RAM at a time, and freed memory goes back to the system after each.
   web:
     image: ghcr.io/kashish1809/privmeet:${PRIVMEET_VERSION:-latest}
     build: .
-    environment: *app-env
-    command: ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn privmeet.wsgi -b 0.0.0.0:8000 -w 2 --timeout 300"]
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://127.0.0.1:8000,http://localhost:8000}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
+      # Empty means "detect the tier from RAM and CUDA".
+      TIER: ${TIER:-}
+      CPU_THREADS: ${CPU_THREADS:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      NUM_CTX: ${NUM_CTX:-}
+      BEAM_SIZE: ${BEAM_SIZE:-}
+      DIARIZE: ${DIARIZE:-}
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - data:/data
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
       ollama:
         condition: service_started
     healthcheck:
@@ -95,31 +50,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 20s
-    mem_limit: ${WEB_MEM:-1g}
-    restart: unless-stopped
-
-  # One task per child, so only one heavy model is in RAM at a time.
-  # niceness keeps the web UI responsive while whisper runs.
-  worker:
-    image: ghcr.io/kashish1809/privmeet:${PRIVMEET_VERSION:-latest}
-    build: .
-    environment: *app-env
-    command: ["nice", "-n", "10", "celery", "-A", "privmeet", "worker",
-              "--concurrency=1", "--prefetch-multiplier=1", "--max-tasks-per-child=1", "-l", "info"]
-    volumes:
-      - data:/data
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      ollama:
-        condition: service_started
-    mem_limit: ${WORKER_MEM:-4g}
+      start_period: 10s
+    mem_limit: ${WEB_MEM:-4g}
     restart: unless-stopped
 
 volumes:
-  db:
   data:
   ollama:

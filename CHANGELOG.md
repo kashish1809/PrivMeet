@@ -4,6 +4,7 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 ### Added
+- Backend rewritten in Rust (`native/server`, `privmeet-server`): the same API and feature flags, the pipeline on whisper.cpp and sherpa-onnx, SQLite with FTS5, and `seed-demo`, `import-django` and `process-file` commands. The Docker stack is now `web` + `ollama`; Django, Celery, Redis and Postgres are removed. Idle memory 20 MB instead of 263 MB (`docs/BENCHMARKS.md`).
 - Day-0 backend scaffold: Django models, hardware tiers, Whisper (faster-whisper) / sherpa-onnx diarization / LangChain + Ollama pipeline, Celery tasks, JSON API.
 - 6-day task split with two tasks per person per day (`docs/TASKS.md`), agent rules (`AGENTS.md`, `CLAUDE.md`, `opencode.json`) and a `/start-task` command.
 - UI mockup (`docs/ui/mockup.webp`) and design plan (`docs/PLAN.md`).

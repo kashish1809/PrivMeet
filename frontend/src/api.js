@@ -1,7 +1,7 @@
 /**
- * All PrivMeet HTTP goes through here. Django's CsrfViewMiddleware rejects writes
- * without the cookie value echoed in X-CSRFToken, and GET /api/system/ (called once
- * on load) is what makes Django set that cookie.
+ * All PrivMeet HTTP goes through here. The server rejects writes without the
+ * csrftoken cookie value echoed in X-CSRFToken, and GET /api/system/ (called once
+ * on load) is what makes the server set that cookie (native/server/src/csrf.rs).
  */
 
 import { useEffect, useState } from "react";
@@ -124,7 +124,7 @@ export function useFeatures() {
   return current;
 }
 
-// Thin wrappers so pages never hand-write a path. See backend/meetings/urls.py.
+// Thin wrappers so pages never hand-write a path. See native/server/src/web.rs.
 export const listMeetings = (q = "") => api(`/api/meetings/${q ? `?q=${encodeURIComponent(q)}` : ""}`);
 export const getMeeting = (id) => api(`/api/meetings/${id}/`);
 export const patchMeeting = (id, patch) => api(`/api/meetings/${id}/`, { method: "PATCH", body: patch });

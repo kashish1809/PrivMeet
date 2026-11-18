@@ -3,7 +3,7 @@
 # Safe to re-run: files that already exist are skipped.
 set -euo pipefail
 
-DEST="${DIARIZE_MODELS_DIR:-$(cd "$(dirname "$0")/.." && pwd)/backend/data/models/diarize}"
+DEST="${DIARIZE_MODELS_DIR:-$(cd "$(dirname "$0")/.." && pwd)/native/server/data/models/diarize}"
 BASE=https://github.com/k2-fsa/sherpa-onnx/releases/download
 SEG_URL="$BASE/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2"
 # "recongition" is the real (misspelled) upstream release tag.

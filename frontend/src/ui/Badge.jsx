@@ -17,7 +17,7 @@ const DOTS = {
   primary: "bg-primary-500",
 };
 
-// Meeting.status values from backend/meetings/models.py, plus "recording" for the Record / Live screen.
+// Meeting status values (STATUSES in native/server/src/meetings.rs), plus "recording" for the Record / Live screen.
 const STATUS = {
   queued: ["gray", "Queued"],
   converting: ["blue", "Converting"],

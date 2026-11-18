@@ -1,0 +1,556 @@
+//! The meetings API (backend/meetings/views.py): list and search, upload, detail, edit,
+//! delete, audio with Range, retry, tags, action items and questions.
+
+use std::path::{Path, PathBuf};
+
+use axum::{
+    body::{Body, Bytes},
+    extract::{Multipart, Path as UrlPath, Query, State},
+    http::{header, HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+    Json,
+};
+use rusqlite::{params, params_from_iter};
+use serde_json::{json, Value};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+
+use crate::meetings::{self as mt, Meeting};
+use crate::web::{error, AppState};
+use crate::{audio, db, export, pipeline};
+
+type Params = std::collections::HashMap<String, String>;
+
+fn not_found() -> Response {
+    error(StatusCode::NOT_FOUND, "Not found.")
+}
+
+/// A meeting by id from the URL, reaped if its run is stale (views.reap on every read).
+fn load(app: &AppState, id: &str) -> Option<Meeting> {
+    let db = app.db();
+    let mut m = mt::get(&db, id).ok().flatten()?;
+    mt::reap(&db, &mut m);
+    Some(m)
+}
+
+fn json_body(body: &Bytes) -> Result<Value, Response> {
+    if body.is_empty() {
+        return Ok(json!({}));
+    }
+    serde_json::from_slice(body).map_err(|_| error(StatusCode::BAD_REQUEST, "Invalid JSON."))
+}
+
+/// A real calendar date "YYYY-MM-DD" (Python's date.fromisoformat): 2026-13-01 and 2026-02-30
+/// are refused, by checking that the date survives a round trip through day numbers.
+fn day(v: &str, name: &str) -> Result<String, String> {
+    let bad = || format!("{name} must be a date like 2026-10-28.");
+    let parts: Vec<&str> = v.split('-').collect();
+    let [y, m, d] = parts[..] else { return Err(bad()) };
+    if v.len() != 10 || y.len() != 4 || m.len() != 2 || d.len() != 2 {
+        return Err(bad());
+    }
+    let (Ok(y), Ok(m), Ok(d)) = (y.parse::<i64>(), m.parse::<u32>(), d.parse::<u32>()) else { return Err(bad()) };
+    if !(1..=12).contains(&m) || d == 0 || db::civil_from_days(db::days_from_civil(y, m, d)) != (y, m, d) {
+        return Err(bad());
+    }
+    Ok(v.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn dates_like_fromisoformat() {
+        assert!(super::day("2026-10-28", "from").is_ok());
+        assert!(super::day("2024-02-29", "from").is_ok());
+        for bad in ["2026-13-01", "2026-02-30", "2025-02-29", "2026-1-01", "26-01-01", "yesterday", ""] {
+            assert_eq!(super::day(bad, "from").unwrap_err(), "from must be a date like 2026-10-28.");
+        }
+    }
+}
+
+/// GET /api/meetings/: newest first, at most 200. ?status= (a status, "processing" or
+/// "ready", comma list), ?from= / ?to= (inclusive dates), ?tag=, and ?q= which matches the
+/// title, notes, summary and transcript and returns the matching lines as `hits`.
+pub async fn list(State(app): State<AppState>, Query(p): Query<Params>) -> Response {
+    let mut wheres: Vec<String> = Vec::new();
+    let mut args: Vec<String> = Vec::new();
+    let statuses: Vec<String> = p.get("status").map(|s| s.split(',').map(|x| x.trim().to_lowercase()).filter(|x| !x.is_empty()).collect()).unwrap_or_default();
+    if !statuses.is_empty() {
+        let mut wanted: Vec<&str> = Vec::new();
+        for s in &statuses {
+            match s.as_str() {
+                "processing" => wanted.extend(mt::PROCESSING),
+                "ready" => wanted.push("done"),
+                x if mt::STATUSES.contains(&x) => wanted.push(mt::STATUSES.iter().find(|y| **y == x).unwrap()),
+                x => return error(StatusCode::BAD_REQUEST, format!("Unknown status '{x}'.")),
+            }
+        }
+        wheres.push(format!("status IN ({})", vec!["?"; wanted.len()].join(",")));
+        args.extend(wanted.iter().map(|s| s.to_string()));
+    }
+    for (key, op) in [("from", ">="), ("to", "<=")] {
+        if let Some(v) = p.get(key).filter(|v| !v.is_empty()) {
+            match day(v, key) {
+                Ok(d) => {
+                    wheres.push(format!("substr(created, 1, 10) {op} ?"));
+                    args.push(d);
+                }
+                Err(e) => return error(StatusCode::BAD_REQUEST, e),
+            }
+        }
+    }
+    let tag = p.get("tag").map(|t| t.trim().to_lowercase()).unwrap_or_default();
+    let has_tag = |m: &Meeting| tag.is_empty() || m.tags.as_array().is_some_and(|a| a.iter().any(|t| t.as_str().is_some_and(|t| t.to_lowercase() == tag)));
+    let q = p.get("q").map(|q| q.trim().to_string()).unwrap_or_default();
+    let filter = if wheres.is_empty() { String::new() } else { format!("WHERE {}", wheres.join(" AND ")) };
+
+    let db = app.db();
+    let rows = |extra: &str, limit: i64, args: &[String]| -> Vec<Meeting> {
+        let sql = format!("SELECT {} FROM meetings {filter} {extra} ORDER BY created DESC LIMIT {limit}", mt::COLUMNS);
+        db.prepare(&sql)
+            .and_then(|mut st| st.query_map(params_from_iter(args.iter()), Meeting::from_row)?.collect())
+            .unwrap_or_default()
+    };
+    if q.is_empty() {
+        let out: Vec<Value> = rows("", 200, &args)
+            .into_iter()
+            .filter(|m| has_tag(m))
+            .map(|mut m| {
+                mt::reap(&db, &mut m);
+                mt::to_json(&db, &m, false)
+            })
+            .collect();
+        return Json(json!({ "meetings": out })).into_response();
+    }
+    // meetings whose title, notes or summary contain the text (Django's icontains)
+    let mut results: Vec<(String, Value)> = Vec::new();
+    let joiner = if filter.is_empty() { "WHERE" } else { "AND" };
+    let mut a2 = args.clone();
+    a2.extend([q.clone(), q.clone(), q.clone()]);
+    for m in rows(&format!("{joiner} (title LIKE '%' || ? || '%' OR notes LIKE '%' || ? || '%' OR summary LIKE '%' || ? || '%')"), 50, &a2) {
+        let mut j = mt::to_json(&db, &m, false);
+        j["hits"] = json!([]);
+        results.push((m.id.clone(), j));
+    }
+    // and transcript lines that match any of its words, best first (FTS5 bm25)
+    let words = mt::search_words(&q, false);
+    if !words.is_empty() {
+        let ids: Vec<String> = rows("", 100_000, &args).into_iter().map(|m| m.id).collect();
+        let sql = "SELECT s.meeting_id, s.start, s.text FROM segments_fts f JOIN segments s ON s.id = f.rowid \
+                   WHERE segments_fts MATCH ?1 ORDER BY bm25(segments_fts) LIMIT 400";
+        let hits: Vec<(String, f64, String)> = db
+            .prepare(sql)
+            .and_then(|mut st| st.query_map([mt::fts_query(&words)], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect())
+            .unwrap_or_default();
+        for (mid, start, text) in hits.into_iter().filter(|(mid, ..)| ids.contains(mid)).take(100) {
+            if !results.iter().any(|(id, _)| *id == mid) {
+                if let Ok(Some(m)) = mt::get(&db, &mid) {
+                    let mut j = mt::to_json(&db, &m, false);
+                    j["hits"] = json!([]);
+                    results.push((mid.clone(), j));
+                }
+            }
+            if let Some((_, j)) = results.iter_mut().find(|(id, _)| *id == mid) {
+                j["hits"].as_array_mut().unwrap().push(json!({"start": start, "text": text}));
+            }
+        }
+    }
+    let out: Vec<Value> = results
+        .into_iter()
+        .map(|(_, j)| j)
+        .filter(|j| tag.is_empty() || j["tags"].as_array().is_some_and(|a| a.iter().any(|t| t.as_str().is_some_and(|t| t.to_lowercase() == tag))))
+        .collect();
+    Json(json!({ "meetings": out })).into_response()
+}
+
+/// POST /api/meetings/ (multipart): file, and optional title, notes, tags and template.
+/// The file streams to disk with the size limit enforced as it arrives.
+pub async fn create(State(app): State<AppState>, headers: HeaderMap, mut form: Multipart) -> Response {
+    let limit = app.cfg.max_upload_mb * 1024 * 1024;
+    let too_big = || error(StatusCode::PAYLOAD_TOO_LARGE, format!("File is larger than {} MB.", app.cfg.max_upload_mb));
+    // refuse on the header alone when it is clearly over (1 MB covers the multipart overhead)
+    let length: u64 = headers.get(header::CONTENT_LENGTH).and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok()).unwrap_or(0);
+    if length > limit + 1024 * 1024 {
+        return too_big();
+    }
+    let uploads = app.cfg.media_root.join("uploads");
+    if let Err(e) = tokio::fs::create_dir_all(&uploads).await {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, format!("Cannot store the file: {e}"));
+    }
+    let (mut stored, mut name): (Option<PathBuf>, String) = (None, String::new());
+    let mut fields: std::collections::HashMap<String, String> = Default::default();
+    // a file that fails later must not stay on disk
+    struct Cleanup(Option<PathBuf>);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            if let Some(p) = self.0.take() {
+                let _ = std::fs::remove_file(p);
+            }
+        }
+    }
+    let mut cleanup = Cleanup(None);
+    loop {
+        let field = match form.next_field().await {
+            Ok(Some(f)) => f,
+            Ok(None) => break,
+            Err(e) if e.status() == StatusCode::PAYLOAD_TOO_LARGE => return too_big(),
+            Err(e) => return error(StatusCode::BAD_REQUEST, format!("Bad upload: {}", e.body_text())),
+        };
+        let key = field.name().unwrap_or("").to_string();
+        if key == "file" && stored.is_none() {
+            name = field.file_name().unwrap_or("").to_string();
+            let ext = Path::new(&name).extension().and_then(|e| e.to_str()).map(|e| format!(".{}", e.to_lowercase())).unwrap_or_default();
+            if !mt::ALLOWED_EXT.contains(&ext.as_str()) {
+                return error(StatusCode::BAD_REQUEST, format!("Unsupported file type. Allowed: {}", mt::ALLOWED_EXT.join(", ")));
+            }
+            let path = uploads.join(format!("{}{ext}", uuid::Uuid::new_v4().simple()));
+            cleanup.0 = Some(path.clone());
+            let mut out = match tokio::fs::File::create(&path).await {
+                Ok(f) => f,
+                Err(e) => return error(StatusCode::INTERNAL_SERVER_ERROR, format!("Cannot store the file: {e}")),
+            };
+            let (mut field, mut size) = (field, 0u64);
+            loop {
+                match field.chunk().await {
+                    Ok(Some(chunk)) => {
+                        size += chunk.len() as u64;
+                        if size > limit {
+                            return too_big();
+                        }
+                        if out.write_all(&chunk).await.is_err() {
+                            return error(StatusCode::INTERNAL_SERVER_ERROR, "Cannot store the file.");
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(e) if e.status() == StatusCode::PAYLOAD_TOO_LARGE => return too_big(),
+                    Err(e) => return error(StatusCode::BAD_REQUEST, format!("Bad upload: {}", e.body_text())),
+                }
+            }
+            let _ = out.flush().await;
+            stored = Some(path);
+        } else if let Ok(text) = field.text().await {
+            fields.insert(key, text);
+        }
+    }
+    let Some(path) = stored else { return error(StatusCode::BAD_REQUEST, "No file uploaded.") };
+    let stem = Path::new(&name).file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+    let title: String = fields.get("title").filter(|t| !t.is_empty()).cloned().unwrap_or(stem).chars().take(200).collect();
+    let notes = match mt::clean_notes(&json!(fields.get("notes").cloned().unwrap_or_default())) {
+        Ok(n) => n,
+        Err(e) => return error(StatusCode::BAD_REQUEST, e),
+    };
+    let tags = match mt::clean_tags(&json!(fields.get("tags").cloned().unwrap_or_default())) {
+        Ok(t) => t,
+        Err(e) => return error(StatusCode::BAD_REQUEST, e),
+    };
+    let template = fields.get("template").map(|t| t.trim().to_string()).unwrap_or_default();
+    if !template.is_empty() && !app.template_exists(&template) {
+        return error(StatusCode::BAD_REQUEST, format!("No template with id '{template}'."));
+    }
+    // the template is fixed at upload: changing the default later does not rewrite old notes
+    let template = if template.is_empty() { app.default_template() } else { template };
+    let probe_path = path.clone();
+    let Some(duration) = tokio::task::spawn_blocking(move || audio::probe(&probe_path)).await.ok().flatten() else {
+        return error(StatusCode::BAD_REQUEST, "No audio stream found in this file.");
+    };
+    let id = uuid::Uuid::new_v4().to_string();
+    let rel = format!("uploads/{}", path.file_name().unwrap().to_string_lossy());
+    let now = db::now_iso();
+    let m = {
+        let db = app.db();
+        let ok = db.execute(
+            "INSERT INTO meetings (id, title, file, duration, notes, tags, template, created, heartbeat) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
+            params![id, title, rel, duration, notes, Value::from(tags).to_string(), template, now],
+        );
+        if let Err(e) = ok {
+            return error(StatusCode::INTERNAL_SERVER_ERROR, format!("Cannot save the meeting: {e}"));
+        }
+        cleanup.0 = None; // the meeting owns the file now
+        let m = mt::get(&db, &id).ok().flatten().unwrap();
+        mt::to_json(&db, &m, false)
+    };
+    pipeline::enqueue(&app, &id);
+    (StatusCode::CREATED, Json(m)).into_response()
+}
+
+pub async fn detail(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
+    let Some(m) = load(&app, &id) else { return not_found() };
+    let db = app.db();
+    Json(mt::to_json(&db, &m, true)).into_response()
+}
+
+/// PATCH /api/meetings/<id>/: title, notes, tags, speaker_names and action_items.
+pub async fn patch(State(app): State<AppState>, UrlPath(id): UrlPath<String>, body: Bytes) -> Response {
+    let Some(mut m) = load(&app, &id) else { return not_found() };
+    let data = match json_body(&body) {
+        Ok(Value::Object(o)) => o,
+        Ok(_) => return error(StatusCode::BAD_REQUEST, "Expected a JSON object."),
+        Err(r) => return r,
+    };
+    if let Some(t) = data.get("title").and_then(Value::as_str).map(str::trim).filter(|t| !t.is_empty()) {
+        m.title = t.chars().take(200).collect();
+    }
+    if let Some(v) = data.get("notes") {
+        match mt::clean_notes(v) {
+            Ok(n) => m.notes = n,
+            Err(e) => return error(StatusCode::BAD_REQUEST, e),
+        }
+    }
+    if let Some(v) = data.get("tags") {
+        match mt::clean_tags(v) {
+            Ok(t) => m.tags = json!(t),
+            Err(e) => return error(StatusCode::BAD_REQUEST, e),
+        }
+    }
+    if let Some(names) = data.get("speaker_names").and_then(Value::as_object) {
+        m.speaker_names = Value::Object(
+            names
+                .iter()
+                .filter(|(k, _)| !k.is_empty() && k.chars().all(|c| c.is_ascii_digit()))
+                .map(|(k, v)| {
+                    let s = v.as_str().map(String::from).unwrap_or_else(|| v.to_string());
+                    (k.clone(), Value::String(s.chars().take(60).collect()))
+                })
+                .collect(),
+        );
+    }
+    if let Some(items) = data.get("action_items").and_then(Value::as_array) {
+        m.action_items = mt::clean_action_items(items);
+    }
+    let db = app.db();
+    let r = db.execute(
+        "UPDATE meetings SET title = ?2, notes = ?3, tags = ?4, speaker_names = ?5, action_items = ?6, heartbeat = ?7 WHERE id = ?1",
+        params![m.id, m.title, m.notes, m.tags.to_string(), m.speaker_names.to_string(), m.action_items.to_string(), db::now_iso()],
+    );
+    if let Err(e) = r {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    Json(mt::to_json(&db, &m, true)).into_response()
+}
+
+/// DELETE /api/meetings/<id>/: the row, its transcript and the file with its shared copies.
+pub async fn delete(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
+    let Some(m) = load(&app, &id) else { return not_found() };
+    if !m.file.is_empty() {
+        let src = app.cfg.media_root.join(&m.file);
+        if let (Some(dir), Some(stem)) = (src.parent(), src.file_stem().and_then(|s| s.to_str())) {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for e in entries.flatten() {
+                    if e.file_name().to_string_lossy().starts_with(&format!("{stem}.share.")) {
+                        let _ = std::fs::remove_file(e.path());
+                    }
+                }
+            }
+        }
+        let _ = std::fs::remove_file(src);
+    }
+    let _ = app.db().execute("DELETE FROM meetings WHERE id = ?1", [&m.id]);
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// GET /api/meetings/<id>/audio: the original file, with Range support so the player seeks.
+pub async fn audio(State(app): State<AppState>, UrlPath(id): UrlPath<String>, headers: HeaderMap) -> Response {
+    let Some(m) = load(&app, &id) else { return not_found() };
+    let path = app.cfg.media_root.join(&m.file);
+    let Ok(mut file) = tokio::fs::File::open(&path).await else { return not_found() };
+    let size = file.metadata().await.map(|md| md.len()).unwrap_or(0);
+    let ctype = audio::content_type(&path);
+    let range = headers.get(header::RANGE).and_then(|v| v.to_str().ok()).map(str::trim).and_then(|r| r.strip_prefix("bytes=")).and_then(|r| {
+        let (a, b) = r.split_once('-')?;
+        let ok = |s: &str| s.chars().all(|c| c.is_ascii_digit());
+        (ok(a) && ok(b) && !(a.is_empty() && b.is_empty())).then(|| (a.to_string(), b.to_string()))
+    });
+    let Some((a, b)) = range else {
+        let body = Body::from_stream(tokio_util::io::ReaderStream::new(file));
+        return ([(header::CONTENT_TYPE, ctype), (header::ACCEPT_RANGES, "bytes")], body).into_response();
+    };
+    let (start, end) = if !a.is_empty() {
+        let s: u64 = a.parse().unwrap_or(u64::MAX);
+        (s, b.parse::<u64>().map(|e| e.min(size.saturating_sub(1))).unwrap_or(size.saturating_sub(1)))
+    } else {
+        (size.saturating_sub(b.parse().unwrap_or(0)), size.saturating_sub(1)) // the last N bytes
+    };
+    if size == 0 || start > end || start >= size {
+        return (StatusCode::RANGE_NOT_SATISFIABLE, [(header::CONTENT_RANGE, format!("bytes */{size}"))]).into_response();
+    }
+    let len = (end - start + 1).min(4 * 1024 * 1024); // cap a chunk; the browser asks for the rest
+    let mut buf = vec![0u8; len as usize];
+    if file.seek(std::io::SeekFrom::Start(start)).await.is_err() || file.read_exact(&mut buf).await.is_err() {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, "Cannot read the audio.");
+    }
+    (
+        StatusCode::PARTIAL_CONTENT,
+        [
+            (header::CONTENT_TYPE, ctype.to_string()),
+            (header::CONTENT_RANGE, format!("bytes {start}-{}/{size}", start + len - 1)),
+            (header::ACCEPT_RANGES, "bytes".to_string()),
+        ],
+        buf,
+    )
+        .into_response()
+}
+
+/// POST /api/meetings/<id>/retry: run the pipeline again. A meeting whose run died (stale)
+/// is taken over instead of refused (bug B4).
+pub async fn retry(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
+    let Some(m) = ({ let db = app.db(); mt::get(&db, &id).ok().flatten() }) else { return not_found() };
+    if !matches!(m.status.as_str(), "failed" | "done") && !m.is_stale() {
+        return error(StatusCode::CONFLICT, "Meeting is still processing.");
+    }
+    let db = app.db();
+    mt::set_status(&db, &m.id, "queued", Some(0));
+    drop(db);
+    pipeline::enqueue(&app, &m.id);
+    let db = app.db();
+    let m = mt::get(&db, &id).ok().flatten().unwrap();
+    Json(mt::to_json(&db, &m, false)).into_response()
+}
+
+/// GET /api/tags/: every tag in use with its meeting count, most used first.
+pub async fn tags(State(app): State<AppState>) -> Response {
+    let db = app.db();
+    let lists: Vec<String> = db
+        .prepare("SELECT tags FROM meetings WHERE tags != '[]'")
+        .and_then(|mut st| st.query_map([], |r| r.get(0))?.collect())
+        .unwrap_or_default();
+    let mut counts: Vec<(String, String, i64)> = Vec::new(); // (lower, shown, count)
+    for l in lists {
+        for t in serde_json::from_str::<Vec<String>>(&l).unwrap_or_default() {
+            match counts.iter_mut().find(|(k, ..)| *k == t.to_lowercase()) {
+                Some(c) => c.2 += 1,
+                None => counts.push((t.to_lowercase(), t, 1)),
+            }
+        }
+    }
+    counts.sort_by(|a, b| b.2.cmp(&a.2).then(a.0.cmp(&b.0)));
+    Json(json!({"tags": counts.into_iter().map(|(_, n, c)| json!({"name": n, "count": c})).collect::<Vec<_>>()})).into_response()
+}
+
+/// GET /api/action-items/: every meeting's action items, newest meeting first. ?open=1 leaves
+/// out done ones; `index` is the item's place in its meeting, for a PATCH of that list.
+pub async fn action_items(State(app): State<AppState>, Query(p): Query<Params>) -> Response {
+    let only_open = p.get("open").map(String::as_str) == Some("1");
+    let db = app.db();
+    let rows: Vec<(String, String, String, String)> = db
+        .prepare("SELECT id, title, created, action_items FROM meetings WHERE action_items != '[]' ORDER BY created DESC")
+        .and_then(|mut st| st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect())
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    for (id, title, created, items) in rows {
+        for (i, item) in serde_json::from_str::<Vec<Value>>(&items).unwrap_or_default().iter().enumerate() {
+            let done = item["done"].as_bool().unwrap_or(false);
+            if only_open && done {
+                continue;
+            }
+            let s = |k: &str| item[k].as_str().unwrap_or("").to_string();
+            out.push(json!({
+                "meeting": id, "meeting_title": title, "meeting_created": created, "index": i,
+                "task": s("task"), "owner": s("owner"), "due": s("due"), "done": done,
+            }));
+        }
+    }
+    Json(json!({"action_items": out})).into_response()
+}
+
+fn question_json(r: &rusqlite::Row) -> rusqlite::Result<Value> {
+    Ok(json!({"id": r.get::<_, i64>(0)?, "question": r.get::<_, String>(1)?, "answer": r.get::<_, String>(2)?, "status": r.get::<_, String>(3)?}))
+}
+
+/// GET /api/questions/<id>/
+pub async fn question(State(app): State<AppState>, UrlPath(id): UrlPath<i64>) -> Response {
+    let db = app.db();
+    match db.query_row("SELECT id, question, answer, status FROM questions WHERE id = ?1", [id], question_json) {
+        Ok(q) => Json(q).into_response(),
+        Err(_) => not_found(),
+    }
+}
+
+/// POST /api/meetings/<id>/ask: {"question"}, answered in the background; poll the question.
+pub async fn ask(State(app): State<AppState>, UrlPath(id): UrlPath<String>, body: Bytes) -> Response {
+    let Some(m) = load(&app, &id) else { return not_found() };
+    if m.status != "done" {
+        return error(StatusCode::CONFLICT, "Meeting is not processed yet.");
+    }
+    let question = match json_body(&body) {
+        Ok(v) => match v.get("question") {
+            Some(Value::String(s)) => s.trim().to_string(),
+            Some(Value::Null) | None => String::new(),
+            Some(other) => other.to_string(),
+        },
+        Err(r) => return r,
+    };
+    if question.is_empty() {
+        return error(StatusCode::BAD_REQUEST, "Question is empty.");
+    }
+    let q: String = question.chars().take(1000).collect();
+    let (qid, out) = {
+        let db = app.db();
+        if db.execute("INSERT INTO questions (meeting_id, question, created) VALUES (?1, ?2, ?3)", params![m.id, q, db::now_iso()]).is_err() {
+            return error(StatusCode::INTERNAL_SERVER_ERROR, "Cannot save the question.");
+        }
+        let qid = db.last_insert_rowid();
+        (qid, db.query_row("SELECT id, question, answer, status FROM questions WHERE id = ?1", [qid], question_json).unwrap())
+    };
+    pipeline::enqueue_question(&app, qid);
+    (StatusCode::CREATED, Json(out)).into_response()
+}
+
+fn attachment(name: &str) -> String {
+    format!("attachment; filename=\"{name}\"")
+}
+
+/// GET /api/meetings/<id>/export.<fmt> and /audio.<fmt>: the meeting or its recording as a
+/// download named after the title (views.meeting_export, views.meeting_audio_export).
+pub async fn download(State(app): State<AppState>, UrlPath((id, file)): UrlPath<(String, String)>) -> Response {
+    let Some((kind, fmt)) = file.split_once('.') else { return not_found() };
+    let Some(m) = load(&app, &id) else { return not_found() };
+    if kind == "audio" {
+        let Some((_, ctype)) = export::audio_format(fmt) else { return not_found() };
+        let src = app.cfg.media_root.join(&m.file);
+        let fmt2 = fmt.to_string();
+        let made = tokio::task::spawn_blocking(move || export::audio_copy(&src, &fmt2)).await.unwrap_or_else(|e| Err(e.to_string()));
+        return match made {
+            Ok(Some(path)) => match tokio::fs::File::open(&path).await {
+                Ok(f) => (
+                    [(header::CONTENT_TYPE, ctype.to_string()), (header::CONTENT_DISPOSITION, attachment(&export::filename(&m, fmt)))],
+                    Body::from_stream(tokio_util::io::ReaderStream::new(f)),
+                )
+                    .into_response(),
+                Err(_) => error(StatusCode::INTERNAL_SERVER_ERROR, "Could not convert the audio."),
+            },
+            Ok(None) => error(StatusCode::NOT_FOUND, "This meeting's audio was deleted."),
+            Err(e) => {
+                eprintln!("audio export of {id} failed: {e}");
+                error(StatusCode::INTERNAL_SERVER_ERROR, "Could not convert the audio.")
+            }
+        };
+    }
+    if kind != "export" {
+        return not_found();
+    }
+    let (segs, full) = {
+        let db = app.db();
+        (mt::segments(&db, &m.id).unwrap_or_default(), if fmt == "json" { mt::to_json(&db, &m, true) } else { Value::Null })
+    };
+    let out = match fmt {
+        "md" => export::markdown(&m, &segs),
+        "txt" => export::plain_text(&m, &segs),
+        "json" => export::as_json(&full),
+        "srt" => export::srt(&m, &segs),
+        "vtt" => export::vtt(&m, &segs),
+        "html" => export::share_html(&m, &segs),
+        "docx" => export::docx(&m, &segs),
+        "odt" => export::odt(&m, &segs),
+        "ics" => match export::ics(&m) {
+            Ok(e) => e,
+            Err(export::NoDates) => return error(StatusCode::NOT_FOUND, "No action item has a date."),
+        },
+        _ => return not_found(),
+    };
+    let mut resp = ([(header::CONTENT_TYPE, out.ctype.to_string()), (header::CONTENT_DISPOSITION, attachment(&export::filename(&m, fmt)))], out.body).into_response();
+    for (k, v) in out.headers {
+        if let Ok(v) = v.parse() {
+            resp.headers_mut().insert(k, v);
+        }
+    }
+    resp
+}

@@ -1,11 +1,11 @@
 .env
 __pycache__/
 *.pyc
-backend/.venv/
-backend/data/
-backend/staticfiles/
-backend/frontend_dist/
 frontend/node_modules/
 frontend/dist/
 .DS_Store
 /session.txt
+
+# Rust build output (native/*)
+native/*/target/
+native/server/data/

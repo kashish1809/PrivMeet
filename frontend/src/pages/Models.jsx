@@ -294,8 +294,8 @@ export default function Models() {
   }, [pulling, load]);
 
   async function pull(name) {
-    // With a real worker this returns at once; with CELERY_EAGER it returns when the
-    // download ends, so start polling straight away rather than waiting for the answer.
+    // The server queues the download and answers at once; start polling anyway, so a slow
+    // answer never delays the progress bar.
     const poll = setTimeout(load, 800);
     try {
       await api("/api/models/pull", { method: "POST", body: { model: name } });

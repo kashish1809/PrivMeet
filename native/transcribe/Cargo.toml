@@ -1,0 +1,16 @@
+[package]
+name = "privmeet-transcribe"
+version = "0.1.0"
+edition = "2021"
+description = "PrivMeet's speech-to-text step in Rust: whisper.cpp on a 16 kHz mono WAV, segments out as JSON lines."
+license = "MIT"
+publish = false
+
+[dependencies]
+whisper-rs = "0.16.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

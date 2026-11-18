@@ -1,6 +1,6 @@
 # PrivMeet HTTP API
 
-All endpoints are under `/api/`. They are plain Django views that return JSON.
+All endpoints are under `/api/`. The Rust server (`native/server`, routes in `src/web.rs`) answers them with JSON in the shapes the earlier Django backend used.
 
 **Writes and CSRF:**
 - Every write (`POST`, `PATCH`, `DELETE`) needs the `X-CSRFToken` header set to the `csrftoken` cookie. `GET /api/system/` sets that cookie.

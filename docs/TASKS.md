@@ -60,6 +60,7 @@ further down is kept only as the specification each was built to, and its headin
 | Blocky themes (beyond the task list) | Vinayak | `v2/vinayak/R1.8-R1.12-templates-models` | three themes drawn from scratch in the style of a sandbox game: **Nether Gate** (lava, fortress bridge, glowstone, an obsidian portal showing the overworld), **Overworld (Light)** (grass hills, oaks, a village house, block clouds, a portal showing the nether) and **Ancient City** (a deep-dark cave, the centrepiece with its wide frame, waterfalls, sculk, candles, eyes in a doorway). Clicking the hero's portal travels between Nether and Overworld through a pixel spiral. No game textures or characters; the bubble mascot stands in. |
 | **R2.6** Share menu | Kashish | `v2/kashish/R2.6-share-menu` | `ShareMenu.jsx`: "Copy summary" pastes the title, date, summary, key points and action items as plain text, "Copy link" says it opens only on this computer, "Share…" where `navigator.share` exists, and the `.html` share page behind `share-page`; the trigger confirms with "Copied summary" / "Copied link" for 2.5 s. **Not built:** the copied link is a localhost address, so "Copy link" is only useful on this machine. |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
+| **Backend in Rust** (beyond the task list) | Vinayak | `rust/migration` | `native/server` (`privmeet-server`) replaces Django, Celery, Redis and Postgres: the same `/api/` and twelve feature flags, the pipeline (whisper.cpp, sherpa-onnx, Ollama or cloud), `seed-demo`, `import-django`, `process-file`. Docker runs it as `web` beside `ollama`. The Django backend (`backend/`, `scripts/bench.py`) is deleted. Open backend tasks (R1.14–R1.20, T1.6, T2.6) are written for Rust. Results: `native/README.md`, `docs/BENCHMARKS.md`. |
 
 Everything in R1.x and R2.x that is not in the table above is open.
 
@@ -144,11 +145,11 @@ Either person can do all of their tasks in one go. Nothing waits for the other p
 ### Ownership
 | Owner | Files |
 |---|---|
-| **Vinayak** | `backend/**` (not `backend/meetings/tests/test_views.py`), `frontend/src/ui/**`, `frontend/src/layout/**`, `frontend/src/App.jsx`, `frontend/src/main.jsx`, `frontend/index.html`, `frontend/public/**`, `frontend/src/pages/{Home,RecordLive,Settings,Templates,Models}.jsx`, `frontend/src/record/**`, `docs/ui/**`, `docs/API.md`, `scripts/bench.py`, `compose.gpu.yml` |
-| **Kashish** | `frontend/src/pages/{MeetingList,NewMeeting,MeetingDetail}.jsx`, `frontend/src/components/**` (not Karthik's three panels), `frontend/src/api.js`, `frontend/src/format.js`, `frontend/src/index.css`, `backend/meetings/tests/test_views.py`, `desktop/**` |
+| **Vinayak** | `native/**` (not `native/server/src/api_tests.rs`), `frontend/src/ui/**`, `frontend/src/layout/**`, `frontend/src/App.jsx`, `frontend/src/main.jsx`, `frontend/index.html`, `frontend/public/**`, `frontend/src/pages/{Home,RecordLive,Settings,Templates,Models}.jsx`, `frontend/src/record/**`, `docs/ui/**`, `docs/API.md`, `scripts/bench.sh`, `scripts/mem.py`, `compose.gpu.yml` |
+| **Kashish** | `frontend/src/pages/{MeetingList,NewMeeting,MeetingDetail}.jsx`, `frontend/src/components/**` (not Karthik's three panels), `frontend/src/api.js`, `frontend/src/format.js`, `frontend/src/index.css`, `native/server/src/api_tests.rs`, `desktop/**` |
 | **Karthik** | `frontend/src/components/{SummaryPanel,ActionItemsPanel,QABox}.jsx`, `Dockerfile`, `compose.yml`, `.env.example`, `.github/**`, `packaging/**`, `scripts/privmeet.*`, `README.md`, `docs/ARCHITECTURE.md`, `docs/RELEASING.md` |
 
-- Only Vinayak adds models and migrations. A migration takes the next free number when its branch is made; renumber on rebase if another of his branches merged first.
+- Only Vinayak changes the database schema: a new entry at the end of the migration list in `native/server/src/db.rs`. Two branches that both add one are ordered on rebase.
 - Nobody adds a frontend dependency. The Tauri plugins named in the A2 and R2 tasks are approved by this file.
 
 ## UI v2 spec (what "matches the mockup" means)
@@ -230,7 +231,7 @@ on its own.
 - `MeetingInfo.jsx` is no longer used. T2.4 deletes the stub.
 - **Logo master:** `docs/ui/logo.svg` (R1.3). A2.5, R2.16 and W3.4 use it when it is on `main`; until then they keep `desktop/app-icon.png`.
 
-### API (on `main` today, `backend/meetings/urls.py`)
+### API (on `main` today, `native/server/src/web.rs`)
 - `GET|POST /api/meetings/`, `?q=` searches.
 - `GET|PATCH|DELETE /api/meetings/<id>/`.
 - `GET /api/meetings/<id>/audio` supports Range requests.
@@ -266,7 +267,7 @@ on its own.
 - On open, a small bundled **launcher page** (`desktop/launcher/`, plain HTML/JS) checks Docker and starts the stack with `docker compose up -d`. It runs a bundled `compose.yml` that uses the published image. When `/api/system/` answers, the window navigates to `http://127.0.0.1:8000`.
 - The GPU override (`compose.gpu.yml`) is added automatically when `nvidia-smi` works.
 - On quit, the app stops the stack unless "Keep running in background" is on.
-- The React UI itself is served by Django, as in the main plan. The desktop app does not bundle a second copy.
+- The React UI itself is served by the PrivMeet server (the Rust binary), as in the main plan. The desktop app does not bundle a second copy.
 - The app makes no request outside the machine except pulling Docker images and models.
 
 ---
@@ -759,18 +760,18 @@ Built; the text below is the specification it was built to.
 #### R1.14 · Regenerate summary
 - **Branch:** `v2/vinayak/R1.14-resummarize`
 - **Needs:** R1.7
-- **Files:** `backend/meetings/tasks.py`, `backend/meetings/views.py`, `backend/meetings/urls.py`, `docs/API.md`
+- **Files:** `native/server/src/pipeline.rs` (a summarize job), `native/server/src/api.rs`, `native/server/src/web.rs` (route, `FEATURES`), `docs/API.md`
 - **Do:** (flag `summarize`)
   - `POST /api/meetings/<id>/summarize` with optional `{template}`. It sets status `summarizing` and runs only the LLM stage on the stored segments. No ffmpeg, Whisper or diarization.
   - 409 when the meeting is processing or has no segments.
   - `template` is used once R1.9 is merged; before that it is ignored.
   - On failure the old summary stays.
-- **Done when:** a 10-min meeting gets a new summary in a fraction of the full pipeline time, and Whisper is never loaded (check the worker log).
+- **Done when:** a 10-min meeting gets a new summary in a fraction of the full pipeline time, and Whisper is never loaded (check the server log).
 
 #### R1.15 · Transcript edit + speaker merge
 - **Branch:** `v2/vinayak/R1.15-transcript-edit`
 - **Needs:** R1.7
-- **Files:** `backend/meetings/views.py`, `backend/meetings/urls.py`, `docs/API.md`
+- **Files:** `native/server/src/api.rs`, `native/server/src/meetings.rs` (segment `id` in the JSON), `native/server/src/web.rs`, `docs/API.md`
 - **Do:** (flags `transcript-edit`, `speaker-merge`)
   - Segments in the meeting JSON carry `id`.
   - `PATCH /api/segments/<id>/` with `{text?, speaker?}`. Text up to 2000 chars; `speaker` is a speaker number of that meeting or null.
@@ -781,20 +782,20 @@ Built; the text below is the specification it was built to.
 #### R1.16 · Cancel + queue position
 - **Branch:** `v2/vinayak/R1.16-cancel-queue`
 - **Needs:** R1.7
-- **Files:** `backend/meetings/models.py`, `backend/meetings/migrations/*`, `backend/meetings/tasks.py`, `backend/meetings/pipeline/transcribe.py`, `backend/meetings/views.py`, `backend/meetings/urls.py`, `docs/API.md`
+- **Files:** `native/server/src/db.rs` (next migration), `native/server/src/meetings.rs`, `native/server/src/pipeline.rs`, `native/server/src/stt.rs`, `native/server/src/api.rs`, `native/server/src/web.rs`, `docs/API.md`
 - **Do:** (flag `cancel`)
   - `Meeting.cancel_requested` (bool). `POST /api/meetings/<id>/cancel` sets it; 409 when the meeting is not processing.
-  - The task checks the flag before each stage and between Whisper segment batches. On cancel it stops, sets `failed` with the error "Cancelled." and removes the temp WAV. No new status value.
+  - The pipeline checks the flag before each stage, and whisper.cpp's abort callback (`set_abort_callback_safe`) checks it during transcription. On cancel it stops, sets `failed` with the error "Cancelled." and removes the temp WAV. No new status value.
   - Retry clears the flag.
   - List rows add `queue_position`: how many queued meetings are ahead (null when not queued).
-- **Done when:** cancelling during transcription stops the worker within a few seconds, and the next queued meeting starts.
+- **Done when:** cancelling during transcription stops the pipeline within a few seconds, and the next queued meeting starts.
 
 #### R1.17 · Language + translate
 - **Branch:** `v2/vinayak/R1.17-language`
 - **Needs:** R1.7
-- **Files:** `backend/meetings/models.py`, `backend/meetings/migrations/*`, `backend/meetings/pipeline/transcribe.py`, `backend/meetings/tasks.py`, `backend/meetings/views.py`, `docs/API.md`
+- **Files:** `native/server/src/db.rs` (next migration), `native/server/src/meetings.rs`, `native/server/src/stt.rs`, `native/server/src/pipeline.rs`, `native/server/src/api.rs`, `native/server/src/web.rs`, `docs/API.md`
 - **Do:** (flag `language`)
-  - Upload accepts `language` (an ISO code Whisper knows; empty means auto-detect) and `translate` (`1` runs Whisper with `task="translate"`, giving English text).
+  - Upload accepts `language` (an ISO code Whisper knows; empty means auto-detect) and `translate` (`1` runs whisper.cpp with `set_translate(true)`, giving English text; cloud transcription uses the provider's `/audio/translations`).
   - Store both on the meeting (`language_hint`, `translate`). `language` keeps holding what Whisper detected.
   - Reject an unknown code with 400.
 - **Done when:** a Hindi clip uploaded with `language=hi` is transcribed in Hindi, and with `translate=1` in English.
@@ -802,7 +803,7 @@ Built; the text below is the specification it was built to.
 #### R1.18 · Auto title + speaker name suggestions
 - **Branch:** `v2/vinayak/R1.18-llm-suggestions`
 - **Needs:** T1.3, R1.7
-- **Files:** `backend/meetings/models.py`, `backend/meetings/migrations/*`, `backend/meetings/pipeline/llm.py`, `backend/meetings/tasks.py`, `backend/meetings/views.py`, `docs/API.md`
+- **Files:** `native/server/src/db.rs` (next migration), `native/server/src/meetings.rs`, `native/server/src/llm.rs`, `native/server/src/pipeline.rs`, `native/server/src/api.rs`, `native/server/src/web.rs`, `docs/API.md`
 - **Do:** (flag `suggestions`)
   - Ask for two more keys in the **same** summary call, so no extra LLM pass runs: `title` and `speakers` (`{"Speaker 1": "Rohan"}`).
   - Title: use it only when the upload had no title (`Meeting.auto_title`, set at upload). Max 80 chars.
@@ -813,9 +814,9 @@ Built; the text below is the specification it was built to.
 #### R1.19 · Storage + audio retention
 - **Branch:** `v2/vinayak/R1.19-storage`
 - **Needs:** R1.7, R1.12
-- **Files:** `backend/meetings/views.py`, `backend/meetings/urls.py`, `backend/meetings/tasks.py`, `backend/meetings/settings_store.py`, `docs/API.md`, `frontend/src/pages/Models.jsx`
+- **Files:** `native/server/src/api.rs`, `native/server/src/web.rs`, `native/server/src/pipeline.rs`, `native/server/src/settings.rs`, `native/server/src/models.rs`, `docs/API.md`, `frontend/src/pages/Models.jsx`
 - **Do:** (flag `storage`)
-  - `GET /api/storage/`: bytes used by audio, by models (Whisper cache, diarization) and by the database, plus free disk space.
+  - `GET /api/storage/`: bytes used by audio, by models (`MODELS_DIR/whisper-cpp` ggml files, diarization) and by the database, plus free disk space.
   - `DELETE /api/meetings/<id>/audio` removes the audio file and keeps the notes and transcript. Meeting JSON gains `has_audio`. The audio endpoint then answers 404.
   - Settings key `keep_audio` (default true). When false, the audio is deleted once the meeting is `done`.
   - A Storage card on the Models page with the numbers and the `keep_audio` switch.
@@ -824,14 +825,34 @@ Built; the text below is the specification it was built to.
 #### R1.20 · Backup + restore
 - **Branch:** `v2/vinayak/R1.20-backup`
 - **Needs:** R1.7, U1.5
-- **Files:** `backend/meetings/backup.py` (new), `backend/meetings/views.py`, `backend/meetings/urls.py`, `docs/API.md`, `frontend/src/pages/Settings.jsx`
+- **Files:** `native/server/src/backup.rs` (new), `native/server/src/api.rs`, `native/server/src/web.rs`, `docs/API.md`, `frontend/src/pages/Settings.jsx`
 - **Do:** (flag `backup`)
   - `GET /api/backup.zip?audio=0|1` streams a zip: `meetings.json` (meetings, segments, questions, templates, settings) and, when asked, the audio files.
   - `POST /api/restore` takes that zip. Meetings are matched by uuid; existing ones are skipped, never overwritten.
+  - Write the zip with `export::zip` (no new crate). Reading one back needs a zip reader: write a small one for stored entries, or ask before adding a crate.
   - Safety: cap the upload size, read only the known member names, never extract a path from the zip, and validate every field as the normal API does.
   - A "Your data" block in Settings → General: Download backup (with or without audio) and Restore from backup.
 - **Done when:** a backup restored into an empty database gives the same meetings, transcripts and notes, and a zip with a `../` path is rejected.
 
+
+#### R1.22 · Rust pipeline speed: match or beat Python
+- **Branch:** `v2/vinayak/R1.22-rust-speed`
+- **Needs:** the Rust backend (`rust/migration`)
+- **Files:** `native/server/src/stt.rs`, `native/server/src/diarize.rs`, `native/server/src/hw.rs`, `native/server/Cargo.toml` (ask before a new crate), `docs/BENCHMARKS.md`
+- **Measured on 2026-11-18** (5.7 GB laptop, the 150 s English test meeting, Whisper `base` + diarization locally, Groq summary; `docs/BENCHMARKS.md`):
+  | Stage | Python (faster-whisper, sherpa-onnx) | Rust (whisper.cpp, sherpa-rs) |
+  |---|---|---|
+  | Whole meeting | ~51 s | ~103 s |
+  | Transcription | (inside the 51 s) | ~40 s |
+  | Diarization | (inside the 51 s) | ~47 s |
+  | Summary (Groq) | (inside the 51 s) | ~15 s |
+- **Do:**
+  - **Diarization threads.** sherpa-rs ignores `cpu_threads` (shortcut in `diarize.rs`), so the speaker embeddings run on its default thread count; Python passes `num_threads=threads`. Set `num_threads` on the embedding extractor (through `sherpa-rs-sys` if `DiarizeConfig` has no field for it) and measure.
+  - **Skip silence.** faster-whisper ran voice activity detection; whisper.cpp here does not, so silence is decoded too (a 47 min silent demo meeting took many minutes). Use whisper.cpp's VAD (Silero ggml model) or a cheap energy gate before Whisper, keeping timestamps right.
+  - **Whisper.** Try, one at a time, and keep what is faster with no WER loss on the test meeting: a quantized ggml model (`q8_0`, `q5_1`) as faster-whisper's int8, `flash_attn` in the context parameters, the thread count, and greedy decoding on the low tier as faster-whisper does (`beam_size` 1).
+  - **Overlap nothing.** Stages stay sequential (one heavy model in RAM at a time); the gain must come from each stage, not from running them together.
+  - Measure every change with the same method (`peak RSS`, wall time per stage, 3 runs) and add the before and after table to `docs/BENCHMARKS.md`.
+- **Done when:** the Rust server processes the test meeting in no more time than Python (~51 s) on the same laptop, with WER within 0.5 points of today's 5.8 % and the same 4 speakers, and its peak memory stays under Python's.
 
 #### R1.21 · Idle footprint: memory and CPU — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.21-idle-footprint`
@@ -1118,17 +1139,17 @@ Built; the text below is the specification it was built to.
 
 #### T1.6 · Backend unit tests
 - **Branch:** `d6/vinayak/T1.6-unit-tests`
-- **Files:** `backend/pytest.ini`, `backend/requirements-dev.txt`, `backend/meetings/tests/test_*.py` (not `test_views.py`)
-- **Do:** pytest + pytest-django on SQLite. Cover:
-  - `hw.build_profile`: tiers, env overrides, settings overrides, forced high without CUDA.
-  - `diarize.assign_speakers`: overlap, no overlap gives None.
-  - `llm.parse_notes`: bad JSON, missing keys, wrong types, the `title` and `speakers` keys.
-  - `llm.split` sizes.
-  - `search.excerpts`: full vs. retrieval.
-  - `settings_store`: unknown keys and wrong types rejected.
+- **Files:** the `#[cfg(test)] mod tests` blocks in `native/server/src/*.rs` (not `api_tests.rs`)
+- **Do:** `cargo test` in `native/server` (31 tests exist; add what is missing). Cover:
+  - `hw::build_profile`: tiers, env overrides, settings overrides, forced high without CUDA.
+  - `diarize` speaker assignment: overlap, no overlap gives None.
+  - `llm` note parsing: bad JSON, missing keys, wrong types, the `title` and `speakers` keys.
+  - `llm` text splitting sizes.
+  - Q&A excerpts (`pipeline.rs`): full vs. retrieval.
+  - `settings::validate`: unknown keys and wrong types rejected.
   - v2 endpoints with the pipeline mocked: templates, exports (SRT timing, HTML escaping), summarize, segment edit, speaker merge, cancel, backup and restore (including a `../` path).
   - A smoke test that runs real Whisper `base` on a short sample. Skip it when the sample file is absent.
-- **Done when:** `pytest` passes, and any bugs found are fixed in this branch.
+- **Done when:** `cargo test` passes, and any bugs found are fixed in this branch.
 
 **Task B**
 
@@ -1150,9 +1171,9 @@ Built; the text below is the specification it was built to.
 
 #### T2.6 · API tests + browser test pass
 - **Branch:** `d6/kashish/T2.6-api-tests`
-- **Files:** `backend/meetings/tests/test_views.py`, `docs/testing/frontend.md`
+- **Files:** `native/server/src/api_tests.rs` (new, `#[cfg(test)]`, registered in `main.rs`), `docs/testing/frontend.md`
 - **Do:**
-  - Django test client with `tasks.*.delay` and `audio.probe` mocked. Cover:
+  - Drive the axum router in-process (`tower::ServiceExt::oneshot`, a temp `DATA_DIR`, the pipeline thread not started, a tiny real audio file for ffprobe). Cover:
     - Upload accepted; bad extension gives 400; no audio stream gives 400; too big gives 413.
     - The list and the `?q=` search.
     - PATCH validation.
@@ -1187,7 +1208,7 @@ Built; the text below is the specification it was built to.
   - Fresh clone, then `docker compose up` on the low-end machine (Vinayak's 5.7 GB laptop).
   - Process an MP3, a WAV, an MP4 and a browser recording.
   - Check search, Q&A, export, delete and retry after stopping ollama.
-  - Record peak `docker stats` memory per service and total time per file.
+  - Record peak `docker stats` memory per service (`web`, `ollama`) and total time per file.
   - Repeat on a mid or GPU machine if one is available.
   - Report bugs to their owners. Small fixes may go in this branch; tell the owner.
 - **Done when:** `docs/testing/e2e.md` is filled with results.

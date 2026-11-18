@@ -6,6 +6,8 @@ PrivMeet turns a meeting recording into a transcript with speakers, a summary, d
 - how the system stays inside the memory of a low-end laptop
 - the data it stores
 
+The backend is one Rust program, `privmeet-server` (`native/server`). It replaced the earlier Django + Celery + Redis + Postgres stack with the same API; [TECH_STACK.md](TECH_STACK.md) compares the two and [BENCHMARKS.md](BENCHMARKS.md) has the numbers.
+
 ## Components
 
 ```mermaid
@@ -16,47 +18,38 @@ flowchart LR
   end
 
   subgraph Stack["docker compose (only 127.0.0.1:8000 published)"]
-    WEB["web<br/>Django + gunicorn<br/>JSON API, serves the built UI"]
-    WORKER["worker<br/>Celery, concurrency 1,<br/>one task per child"]
-    REDIS[("redis<br/>task queue")]
-    DB[("db<br/>PostgreSQL<br/>meetings, segments, FTS index")]
+    WEB["web: privmeet-server (Rust)<br/>JSON API, serves the built UI,<br/>pipeline thread (one job at a time)"]
     OLLAMA["ollama<br/>local LLM server"]
-    VOL[("data volume<br/>uploads, Whisper models,<br/>settings.json")]
+    VOL[("data volume<br/>SQLite + FTS5, uploads,<br/>Whisper models, settings.json")]
   end
 
-  CLOUD["Cloud LLM (optional)<br/>OpenAI, OpenRouter,<br/>Anthropic, compatible"]
+  CLOUD["Cloud provider (optional)<br/>OpenAI, OpenRouter, Anthropic,<br/>Groq, Gemini, compatible"]
 
   UI -->|"fetch /api/... (CSRF)"| WEB
   REC -->|"upload webm/opus"| WEB
-  WEB -->|"enqueue process_meeting, answer_question"| REDIS
-  REDIS --> WORKER
-  WEB <--> DB
-  WORKER <--> DB
   WEB <--> VOL
-  WORKER <--> VOL
-  WORKER -->|"summary and Q&A (default)"| OLLAMA
-  WORKER -.->|"transcript text, only if chosen in Settings"| CLOUD
+  WEB -->|"summary and Q&A (default)"| OLLAMA
+  WEB -.->|"transcript text, or audio for cloud transcription, only if chosen in Settings"| CLOUD
 ```
 
 | Part | Technology | Job |
 |---|---|---|
-| UI | React 19 + Tailwind 4 (Vite build) | Pages: Home, Meetings, New Meeting, Meeting detail, Record / Live, Settings. Polls the API every 2 s while a meeting is processing; there are no websockets. |
+| UI | React 19 + Tailwind 4 (Vite build) | Pages: Home, Meetings, New Meeting, Meeting detail, Record / Live, Templates, Models, Settings. Polls the API every 2 s while a meeting is processing; there are no websockets. |
 | Recorder | Web Audio + `MediaRecorder` | Mixes the mic with a shared tab's audio (`getDisplayMedia`) into one stream, records `audio/webm;codecs=opus`, uploads on stop. |
 | Desktop app | Tauri 2 (system webview) | Launcher page: checks Docker, runs `docker compose up -d` with the bundled `compose.yml` (+ `compose.gpu.yml` on NVIDIA), opens the app, stops the stack on quit. Grants mic/camera to `127.0.0.1:8000` only. |
-| web | Django, plain `JsonResponse` views, whitenoise | Upload validation, the meetings API, settings, search, serving the built UI. Runs no models. |
-| worker | Celery | Runs the pipeline and Q&A jobs, one at a time. |
-| redis | Redis 7 | The Celery broker, capped at 32 MB. |
-| db | PostgreSQL 17 (SQLite in local dev) | Meetings, transcript segments, questions; a GIN full-text index on segments. |
+| web | Rust: axum + tokio, rusqlite (SQLite with FTS5), whisper-rs (whisper.cpp), sherpa-rs (sherpa-onnx), reqwest | Upload validation, the meetings API, settings, search, exports, serving the built UI, and the pipeline on one background thread. |
 | ollama | Ollama | Serves the qwen2.5 model of the tier; at most one model loaded. |
 
+Module map of `native/server/src`: `web.rs` (router, `FEATURES`, Host check), `csrf.rs`, `api.rs` (meetings), `templates.rs`, `models.rs` (Models page, Test Connection), `export.rs`, `db.rs` (schema, migrations), `meetings.rs`, `settings.rs`, `hw.rs` (tiers), `pipeline.rs` (job queue, stages, Q&A), `audio.rs` (ffmpeg), `stt.rs`, `diarize.rs`, `names.rs`, `llm.rs`, `providers.rs`, `cli.rs` (`seed-demo`, `import-django`, `process-file`).
+
 ## The pipeline
-`meetings/tasks.py: process_meeting(meeting_id)` runs these stages strictly one after another in the worker. Each stage updates `Meeting.status` and `progress`, and the UI shows them as it polls.
+`pipeline.rs: process_meeting(id)` runs these stages strictly one after another on the pipeline thread. Each stage updates the meeting's `status` and `progress` (and a heartbeat), and the UI shows them as it polls.
 
 ```mermaid
 flowchart LR
   U["upload<br/>(web)"] --> Q["queued"]
   Q --> C["converting<br/>ffmpeg → 16 kHz mono WAV"]
-  C --> T["transcribing<br/>faster-whisper"]
+  C --> T["transcribing<br/>whisper.cpp or cloud"]
   T --> D["diarizing<br/>sherpa-onnx (mid/high)"]
   D --> S["summarizing<br/>LLM map-reduce"]
   S --> OK["done"]
@@ -65,59 +58,60 @@ flowchart LR
 
 1. **Upload (web).** The upload is checked before it is stored:
    - extension allow-list
-   - size limit (`MAX_UPLOAD_MB`), checked on the header before Django reads the body
+   - size limit (`MAX_UPLOAD_MB`), enforced while the body streams in
    - `ffprobe` must find an audio stream
 
-   The file gets a random name, a `Meeting` row is created in `queued`, and the job is put on the queue.
-2. **Converting.** `pipeline/audio.py` runs `ffmpeg` (list arguments, never a shell) to a temporary 16 kHz mono WAV. Every later stage reads that file, and it is deleted at the end whatever happens.
-3. **Transcribing.** `pipeline/transcribe.py` loads Whisper through faster-whisper (CTranslate2, int8 on CPU, so no PyTorch):
-   - Voice activity detection skips silence.
-   - Segments are streamed and saved in batches of 20, and progress follows the audio position.
-   - On a CUDA profile, a failure while loading or decoding the first segment retries once on the CPU with int8.
-4. **Diarizing** (on unless the tier is `low`). `pipeline/diarize.py` runs sherpa-onnx (pyannote segmentation + a CAM++ speaker embedding, about 35 MB of ONNX). Each transcript segment gets the speaker whose turns overlap it most, and speakers are renumbered in order of appearance.
-5. **Summarizing.** `pipeline/llm.py` uses LangChain against Ollama, or the chosen cloud provider (`pipeline/providers.py`):
+   The file gets a random name, a meeting row is created in `queued`, and the job is put on the queue.
+2. **Converting.** `audio.rs` runs `ffmpeg` (`Command` with list arguments, never a shell) to a temporary 16 kHz mono WAV. Every later stage reads that file, and it is deleted at the end whatever happens.
+3. **Transcribing.** `stt.rs` runs whisper.cpp with the tier's ggml model, downloaded into `MODELS_DIR/whisper-cpp` on first use, or sends the audio in FLAC chunks to the cloud provider when cloud transcription is on.
+   - Known names (the user's, saved speaker names, the Settings vocabulary) go into Whisper's prompt, and `names.rs` corrects near-miss spellings afterwards.
+   - Lines Whisper writes into silence are dropped.
+   - Progress follows whisper.cpp's own progress callback.
+4. **Diarizing** (on unless the tier is `low`). `diarize.rs` runs sherpa-onnx (pyannote segmentation + a CAM++ speaker embedding, about 35 MB of ONNX). Each transcript segment gets the speaker whose turns overlap it most, and speakers are renumbered in order of appearance.
+5. **Summarizing.** `llm.rs` calls Ollama's `/api/chat`, or the chosen cloud provider (`providers.rs`), over plain HTTP:
    - **Map:** the transcript is split into chunks of about 1,500 tokens. Each chunk becomes `TOPIC / DECISION / TASK: owner | task | due` lines; small models stay accurate on short chunks.
-   - **Reduce:** one call writes the JSON `{summary, decisions, action_items}`. For a long meeting it reads the map notes; for a short one, the transcript itself.
+   - **Reduce:** one call writes the JSON `{summary, decisions, action_items}`. For a long meeting it reads the map notes; for a short one, the transcript itself. The meeting's note template adds what the summary should focus on.
    - **Repair:**
      - Decisions and tasks are taken from the map lines, so the reduce step cannot drop them.
      - A loose or cut-off JSON reply is repaired.
      - Owners and due dates that never appear in the transcript are blanked (no invented names or deadlines).
-   - **Budget:** every call caps its reply, so prompt plus reply always fit `num_ctx`.
-6. **Done** or **failed**. On any exception the error text is stored, the status becomes `failed`, and the UI offers Retry.
+   - **Budget:** every Ollama call caps its reply, so prompt plus reply always fit `num_ctx`.
+6. **Done** or **failed**. On any error the text is stored, the status becomes `failed`, and the UI offers Retry. After every job the server calls `malloc_trim`, so the memory Whisper and ONNX freed goes back to the system.
 
 **Q&A** (`answer_question`) goes through the same queue, so it never runs next to a transcription.
-- `search.excerpts` sends the whole timestamped transcript when it fits.
-- Otherwise it sends the best keyword hits: Postgres full-text rank, or a word-count rank on SQLite. Each hit comes with the lines that follow it, because a topic is raised before it is decided.
+- The excerpts are the whole timestamped transcript when it fits.
+- Otherwise they are the best FTS5 hits (bm25 rank), each with the lines that follow it, because a topic is raised before it is decided.
 - The answer must cite `[mm:ss]`. When the model leaves the citation out, the timestamps of the best-matching lines are added. An answer that shares nothing with the excerpts becomes "The meeting does not say."
 
-**Search** (`GET /api/meetings/?q=`) matches title, notes and summary, plus the transcript through the Postgres full-text index (`SearchVector('text', 'english')`, GIN index in migration 0002), and returns the matching lines with their timestamps.
+**Search** (`GET /api/meetings/?q=`) matches title, notes and summary, plus the transcript through SQLite's FTS5 index (kept in step with the segments by triggers), and returns the matching lines with their timestamps, best first.
 
 ## Resource strategy
 PrivMeet has to run on a laptop with about 6 GB of RAM and no GPU, and still use an NVIDIA GPU when there is one.
 
-1. **A hardware tier, picked at start-up.** `meetings/hw.py`:
-   - reads the total RAM (`/proc/meminfo`, or the OS API on Windows and macOS),
-   - checks for CUDA through CTranslate2,
+1. **A hardware tier, picked at start-up.** `hw.rs`:
+   - reads the total RAM (`/proc/meminfo`),
+   - checks for CUDA (a binary built with the `cuda` feature, and `nvidia-smi` answering),
    - reads the VRAM through `nvidia-smi`.
 
-   The tier sets the Whisper model and precision, the LLM and its context, the beam size and whether diarization runs. Env variables and then the Settings page override it. Settings are re-read at the start of every job, so a change applies to the next meeting with no restart.
+   The tier sets the Whisper model, the LLM and its context, the beam size and whether diarization runs. Env variables and then the Settings page override it. Settings are re-read at the start of every job, so a change applies to the next meeting with no restart.
 
    | | low | mid | high |
    |---|---|---|---|
    | Trigger | < 7.5 GB, no GPU | ≥ 7.5 GB, no GPU | NVIDIA GPU |
-   | Whisper | base, int8, CPU, beam 1 | small, int8, CPU, beam 5 | large-v3-turbo, int8_float16, CUDA |
+   | Whisper | base, CPU, beam 1 | small, CPU, beam 5 | large-v3-turbo, CUDA |
    | LLM | qwen2.5:1.5b, ctx 4096, unloads after 30 s | qwen2.5:3b, ctx 8192 | qwen2.5:7b, or 3b under 6 GB VRAM |
    | Diarization | off | on | on |
 2. **One heavy model in memory at a time.**
-   - The worker runs with `--concurrency=1 --prefetch-multiplier=1 --max-tasks-per-child=1`: one job, then the process exits and the OS gets all its memory back.
+   - One pipeline thread takes jobs from a queue: meetings, questions and model downloads, one at a time.
    - Inside a job the stages are sequential, and the Whisper model is dropped before diarization starts.
-   - Ollama runs with `OLLAMA_MAX_LOADED_MODELS=1` and `OLLAMA_NUM_PARALLEL=1`, and Q&A shares the worker queue.
-   - Measured low-tier peaks: Whisper worker 0.8 GB, then the 1.5B model 1.1 GB in Ollama, never at the same time (`docs/BENCHMARKS.md`).
-3. **CPU politeness.** Whisper and the LLM use half the cores by default, the worker runs under `nice`, and voice activity detection skips silence, so the desktop and the web UI stay responsive.
+   - Ollama runs with `OLLAMA_MAX_LOADED_MODELS=1` and `OLLAMA_NUM_PARALLEL=1`.
+   - Measured: the whole server peaks at about 0.5 GB during a local run with diarization and settles at about 40 MB afterwards (`docs/BENCHMARKS.md`).
+3. **CPU politeness.** Whisper uses half the cores by default, so the desktop and the web UI stay responsive.
 4. **A light runtime.**
-   - The UI is built to static files at image build time and served by Django and whitenoise, with no Node server.
+   - One process with no interpreter: about 15 MB idle, a 5 MB binary plus the sherpa-onnx libraries.
+   - The UI is built to static files at image build time and served by the same process, with no Node server.
    - Progress is plain polling, with no websockets.
-   - Postgres has `shared_buffers=64MB`, Redis is capped at 32 MB, and every container has a `mem_limit`.
+   - SQLite in the data volume instead of a database server; no message broker.
 5. **Light diarization.** ONNX models through sherpa-onnx instead of pyannote on PyTorch: tens of megabytes instead of gigabytes.
 6. **Long meetings on small models.** Map-reduce with chunk sizes worked out from `num_ctx`, so a one-hour meeting fits a 4k-context model (see "The pipeline").
 
@@ -130,7 +124,7 @@ erDiagram
   MEETING {
     uuid id PK
     string title
-    file file "uploads/<random>.<ext>"
+    string file "uploads/<random>.<ext>"
     float duration "seconds"
     string language "detected by Whisper"
     string status "queued converting transcribing diarizing summarizing done failed"
@@ -142,8 +136,10 @@ erDiagram
     json speaker_names "{'0': 'Rohan'}"
     text notes "the user's own notes"
     json tags "up to 10, 30 chars each"
+    string template "note template id"
     string tier_used
     datetime created
+    datetime heartbeat "last progress, for stale runs"
   }
   SEGMENT {
     int id PK
@@ -151,7 +147,7 @@ erDiagram
     float start
     float end
     int speaker "null without diarization"
-    text text "GIN full-text index on Postgres"
+    text text "FTS5 index"
   }
   QUESTION {
     int id PK
@@ -161,42 +157,52 @@ erDiagram
     string status "pending done failed"
     datetime created
   }
+  NOTE_TEMPLATE {
+    int id PK "the API id is u<id>"
+    string name
+    string description
+    text instructions
+    datetime created
+  }
 ```
 
-- **Uploads** live in the `data` volume under random file names and are only ever served through `GET /api/meetings/<id>/audio`, which supports HTTP Range so the player can seek. Deleting a meeting deletes its file. Segments and questions go with it (cascade).
-- **Settings** are not in the database. They are `DATA_DIR/settings.json`, written atomically (temp file + rename) by `meetings/settings_store.py`, which validates every key and never returns the cloud API key, only `api_key_set`.
+- **The database** is `DATA_DIR/privmeet.sqlite3`; `db.rs` holds the schema as a list of migrations applied in order at start-up.
+- **Uploads** live in the `data` volume under random file names and are only ever served through `GET /api/meetings/<id>/audio`, which supports HTTP Range so the player can seek. Deleting a meeting deletes its file and its converted copies. Segments and questions go with it (cascade).
+- **Settings** are not in the database. They are `DATA_DIR/settings.json`, written atomically (temp file + rename) by `settings.rs`, which validates every key and never returns a cloud API key, only whether one is set.
 - **Per-browser preferences** live in `localStorage`, so they differ per device and never reach the server: theme, font, default microphone, tab audio, camera and recording title.
 
 ## Feature flags
-`GET /api/system/` returns `features`, the list of optional capabilities this server supports (`settings`, `notes`, `tags`, `filters`, `providers`, ...). The frontend shows a control only when its flag is there. This let the backend and frontend halves of the project be built and merged independently, without broken buttons in between. Every endpoint and flag is listed in [API.md](API.md).
+`GET /api/system/` returns `features`, the list of optional capabilities this server supports (`settings`, `notes`, `tags`, `filters`, `providers`, `templates`, `models`, `exports`, ...). The frontend shows a control only when its flag is there. This let the backend and frontend halves of the project be built and merged independently, without broken buttons in between. Every endpoint and flag is listed in [API.md](API.md).
 
 ## Trust boundaries
-- **Single user, no login.** The only published port is `127.0.0.1:8000`. Every write needs the CSRF token. The app refuses to start in production mode with the sample `SECRET_KEY`.
+- **Single user, no login.** The only published port is `127.0.0.1:8000`. Every write needs the CSRF token, and a request whose `Host` is not in `ALLOWED_HOSTS` is refused (DNS rebinding).
 - **Untrusted input:**
   - Uploaded files: an allow-list, a size cap and `ffprobe`. Subprocesses take list arguments only.
-  - Meeting text in the UI: React escapes it, and nothing goes through `innerHTML`.
+  - Meeting text in the UI: React escapes it, and nothing goes through `innerHTML`. The HTML share page escapes every value.
   - Settings values: each key is type- and range-checked.
-- **What leaves the machine:** nothing with the default Ollama provider, apart from downloading images and models. With a cloud provider chosen in Settings (after a warning), the transcript text of each summary and question goes to it. Audio never does.
+  - `import-django` opens the old database read-only and refuses file paths with `..`.
+- **What leaves the machine:** nothing with the default Ollama provider, apart from downloading images and models. With a cloud provider chosen in Settings (after a warning), the transcript text of each summary and question goes to it, and with cloud transcription on, the audio too.
 - **Desktop app:** the Tauri shell grants microphone and camera only to the page on `127.0.0.1:8000`, and the app page gets no Tauri API.
 
 ## Deployment modes
 
 | Mode | Command | What differs |
 |---|---|---|
-| Docker, CPU | `docker compose up -d`, or `scripts/privmeet.sh up` | The normal install. `web` and `worker` pull `ghcr.io/kashish1809/privmeet:${PRIVMEET_VERSION:-latest}` |
-| Docker, GPU | `docker compose -f compose.yml -f compose.gpu.yml up -d` | Adds the NVIDIA device reservations for `worker` and `ollama`; the GPU image carries the CUDA runtime. The launchers add it on their own when `nvidia-smi` answers |
-| Local development | `runserver` + Vite | `CELERY_EAGER=1` runs the pipeline in the web process, SQLite instead of Postgres, no Redis and no worker |
+| Docker, CPU | `docker compose up -d`, or `scripts/privmeet.sh up` | The normal install: `web` pulls `ghcr.io/kashish1809/privmeet:${PRIVMEET_VERSION:-latest}`, beside `ollama` |
+| Docker, GPU | `docker compose -f compose.yml -f compose.gpu.yml up -d` | Adds the NVIDIA device reservations for `web` and `ollama`; the GPU image has whisper.cpp built with CUDA. The launchers add it on their own when `nvidia-smi` answers |
+| Local development | `privmeet-server` + Vite | The same binary from `cargo build --release`; Vite proxies `/api` to it |
 | Desktop app | Tauri 2 shell | Bundles `compose.yml` and `compose.gpu.yml`, starts the stack, then opens `127.0.0.1:8000` in the system webview |
 
-Sources are built into the image when there is no published tag: `docker compose up --build`. The desktop app does not bundle a second copy of the UI; it is the same Django app in another window, which is why it grants the webview microphone and camera access instead of recording natively.
+Sources are built into the image when there is no published tag: `docker compose up --build`. The desktop app does not bundle a second copy of the UI; it is the same web app in another window, which is why it grants the webview microphone and camera access instead of recording natively.
 
 ## Known limits
 
 Deliberate choices, each with a comment in the code or a task that lifts it:
 
-- Retrieval for long transcripts is keyword full-text search, not embeddings, so a question phrased with words the meeting never used can miss. Upgrade path: pgvector with an embedding model, only if recall proves poor.
+- Retrieval for long transcripts is keyword full-text search, not embeddings, so a question phrased with words the meeting never used can miss.
 - One job at a time is the point of the design, so a second meeting waits in `queued`, with no estimate of when it starts.
 - A meeting that fails is reprocessed from the start with Retry; the pipeline has no resume-from-stage.
 - No transcription while recording: the transcript appears once the recording stops and has been processed.
-- SQLite is a development fallback. Search degrades to `LIKE` and is not ranked.
+- The local pipeline is about twice as slow as the earlier Python one (no voice activity detection yet, diarization threads not set); task R1.22.
+- A GPU failure at run time does not fall back to the CPU inside the same meeting; the meeting fails and Retry runs it again.
 - An upload is a single multipart request capped at `MAX_UPLOAD_MB` (2 GB by default), so very long recordings are better compressed before upload.

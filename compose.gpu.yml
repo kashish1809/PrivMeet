@@ -3,15 +3,14 @@
 #   docker compose -f compose.yml -f compose.gpu.yml up -d
 #
 # The desktop app and scripts/privmeet.sh add it on their own when `nvidia-smi` works.
-# Needs the NVIDIA driver and the NVIDIA Container Toolkit on the host; the CUDA runtime
-# libraries CTranslate2 uses come from the GPU image (Dockerfile, GPU=1).
+# Needs the NVIDIA driver and the NVIDIA Container Toolkit on the host; the GPU image
+# (Dockerfile, GPU=1) has whisper.cpp built with CUDA and the CUDA runtime it needs.
 #
-# Only the worker (Whisper) and Ollama get the GPU. The web container never runs a model.
-# If the GPU cannot be used after all, transcription falls back to the CPU on its own
-# (meetings/pipeline/transcribe.py), so a broken driver costs speed, not the meeting.
+# The server (Whisper) and Ollama get the GPU. Without a usable GPU the server reports
+# "cpu" and runs whisper.cpp on the CPU (native/server/src/hw.rs).
 
 services:
-  worker:
+  web:
     # The GPU image is published as <version>-gpu (docker.yml). `build` lets
     # `docker compose ... up --build` make it from source when no published tag exists.
     image: ghcr.io/kashish1809/privmeet:${PRIVMEET_VERSION:-latest}-gpu

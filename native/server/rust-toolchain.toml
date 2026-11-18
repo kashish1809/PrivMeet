@@ -1,0 +1,5 @@
+# shortcut: pinned because Rust 1.100's new build-dir layout breaks sherpa-rs-sys 0.6.8's build
+# script (it copies the sherpa-onnx .so files into target/<profile>/deps); move up once
+# sherpa-rs handles the new layout. Dockerfile and ci.yml use the same version.
+[toolchain]
+channel = "1.98.1"
