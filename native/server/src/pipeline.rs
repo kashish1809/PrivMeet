@@ -217,7 +217,8 @@ fn run(app: &App, id: &str) -> Result<(), String> {
     check(app, id)?;
     progress(app, id, "transcribing", 2);
     let on_asr = |f: f64| progress(app, id, "transcribing", 2 + (68.0 * f) as i64);
-    let (segs, info) = stt::transcribe(&wav, &p, &app.cfg.models_dir, &prompt, &on_asr)?;
+    let lang = stt::Lang { hint: &m.language_hint, translate: m.translate };
+    let (segs, info) = stt::transcribe(&wav, &p, &app.cfg.models_dir, &prompt, lang, &on_asr)?;
     let device = if hw::uses_cloud(&p) { p.llm_provider.chars().take(8).collect() } else { p.device.clone() };
     {
         let db = app.db();
@@ -271,7 +272,9 @@ fn write_notes(app: &App, id: &str, p: &hw::Profile, known: &[String], template:
     let template = template.unwrap_or(&m.template).to_string();
     let focus = templates::instructions(&app.db(), &template, &app.default_template());
     let on_llm = |f: f64| progress(app, id, "summarizing", 80 + (15.0 * f) as i64);
-    let notes = llm::summarize(&transcript(&m, &stored, false, Some(&guessed)), p, &on_llm, &m.language, &focus)?;
+    // a translated transcript is English whatever was spoken
+    let language = if m.translate { "English" } else { m.language.as_str() };
+    let notes = llm::summarize(&transcript(&m, &stored, false, Some(&guessed)), p, &on_llm, language, &focus)?;
     check(app, id)?; // an LLM call cannot be stopped midway: drop its result instead
     app.db()
         .execute(

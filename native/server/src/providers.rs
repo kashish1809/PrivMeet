@@ -155,13 +155,14 @@ pub fn ensure_model(p: &Profile) -> Result<(), String> {
     }
 }
 
-/// One /audio/transcriptions call (OpenAI-style, Groq, custom). The provider's verbose_json.
-pub fn transcribe_chunk(p: &Profile, blob: Vec<u8>, model: &str, language: Option<&str>, prompt: &str) -> Result<Value, String> {
+/// One /audio/transcriptions call (OpenAI-style, Groq, custom), or /audio/translations for
+/// English text, which takes no language. The provider's verbose_json.
+pub fn transcribe_chunk(p: &Profile, blob: Vec<u8>, model: &str, language: Option<&str>, translate: bool, prompt: &str) -> Result<Value, String> {
     let mut form = reqwest::blocking::multipart::Form::new()
         .text("model", model.to_string())
         .text("response_format", "verbose_json")
         .text("temperature", "0");
-    if let Some(l) = language.filter(|l| !l.is_empty()) {
+    if let Some(l) = language.filter(|l| !l.is_empty() && !translate) {
         form = form.text("language", l.to_string());
     }
     if !prompt.is_empty() {
@@ -171,5 +172,6 @@ pub fn transcribe_chunk(p: &Profile, blob: Vec<u8>, model: &str, language: Optio
     form = form.part("file", part);
     let url = base_url(p)?;
     let http = client(TIMEOUT)?;
-    read(with_headers(p, http.post(format!("{url}/audio/transcriptions"))).multipart(form).send())
+    let task = if translate { "translations" } else { "transcriptions" };
+    read(with_headers(p, http.post(format!("{url}/audio/{task}"))).multipart(form).send())
 }

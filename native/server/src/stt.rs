@@ -15,6 +15,13 @@ pub struct Seg {
     pub text: String,
 }
 
+/// What the upload asked for: a language ("" = detect) and whether to translate into English.
+#[derive(Clone, Copy, Default)]
+pub struct Lang<'a> {
+    pub hint: &'a str,
+    pub translate: bool,
+}
+
 pub struct Info {
     pub duration: f64,
     pub language: String,
@@ -141,7 +148,7 @@ pub fn with_progress<T, E: std::fmt::Display>(
     })
 }
 
-pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progress: &(dyn Fn(f64) + Sync)) -> Result<(Vec<Seg>, Info), String> {
+pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, lang: Lang, on_progress: &(dyn Fn(f64) + Sync)) -> Result<(Vec<Seg>, Info), String> {
     let model = ensure_model(models_dir, &p.whisper_model)?;
     let samples = read_wav(wav)?;
     let duration = samples.len() as f64 / 16000.0;
@@ -154,8 +161,8 @@ pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progre
         FullParams::new(SamplingStrategy::Greedy { best_of: 1 })
     };
     params.set_n_threads(p.cpu_threads as i32);
-    params.set_language(Some("auto"));
-    params.set_translate(false);
+    params.set_language(Some(if lang.hint.is_empty() { "auto" } else { lang.hint }));
+    params.set_translate(lang.translate);
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_special(false);
@@ -188,8 +195,11 @@ pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progre
 
 /// The provider's /audio/transcriptions: 16 kHz mono FLAC, in pieces when long, each piece's
 /// timestamps shifted by where it started so the transcript reads as one recording.
-pub fn cloud(wav: &Path, p: &Profile, prompt: &str, on_progress: &(dyn Fn(f64) + Sync)) -> Result<(Vec<Seg>, Info), String> {
-    let model = asr_model(p);
+pub fn cloud(wav: &Path, p: &Profile, prompt: &str, lang: Lang, on_progress: &(dyn Fn(f64) + Sync)) -> Result<(Vec<Seg>, Info), String> {
+    let mut model = asr_model(p);
+    if lang.translate && model == "whisper-large-v3-turbo" {
+        model = "whisper-large-v3".into(); // Groq translates only with the full model
+    }
     let pieces = audio::flac_chunks(wav, providers::CHUNK_SECONDS, providers::MAX_UPLOAD_BYTES)?;
     let (mut out, mut detected, mut end) = (Vec::new(), String::new(), 0.0f64);
     let n = pieces.len().max(1);
@@ -197,7 +207,7 @@ pub fn cloud(wav: &Path, p: &Profile, prompt: &str, on_progress: &(dyn Fn(f64) +
         if crate::pipeline::cancelled() {
             return Err(crate::meetings::CANCELLED.into());
         }
-        let data = providers::transcribe_chunk(p, blob, &model, None, prompt)?;
+        let data = providers::transcribe_chunk(p, blob, &model, Some(lang.hint), lang.translate, prompt)?;
         if detected.is_empty() {
             detected = data["language"].as_str().unwrap_or("").to_string();
         }
@@ -226,11 +236,11 @@ pub fn cloud(wav: &Path, p: &Profile, prompt: &str, on_progress: &(dyn Fn(f64) +
 }
 
 /// Cloud when the user turned it on for a provider that can, else whisper.cpp here.
-pub fn transcribe(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progress: &(dyn Fn(f64) + Sync)) -> Result<(Vec<Seg>, Info), String> {
+pub fn transcribe(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, lang: Lang, on_progress: &(dyn Fn(f64) + Sync)) -> Result<(Vec<Seg>, Info), String> {
     if hw::uses_cloud(p) {
-        cloud(wav, p, prompt, on_progress)
+        cloud(wav, p, prompt, lang, on_progress)
     } else {
-        local(wav, p, models_dir, prompt, on_progress)
+        local(wav, p, models_dir, prompt, lang, on_progress)
     }
 }
 
