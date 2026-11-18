@@ -1,10 +1,11 @@
 # PrivMeet CI: runs on every push and pull request.
 #
-# backend  Django system check plus a migration drift check on SQLite, the same
-#          database the local dev instructions use, so no service containers.
+# server   the Rust server (native/server): build and unit tests.
+# backend  the legacy Django backend, kept for one release: system check plus a
+#          migration drift check on SQLite. Delete with backend/.
 # frontend production build of the Vite/React app, to prove it still compiles.
 #
-# pytest joins once T1.6 is merged (WT3.6). Image builds stay out of CI: they
+# API tests join with T1.6 and T2.6 (WT3.6). Image builds stay out of CI: they
 # are large, and W3.2 builds them on version tags.
 
 name: CI
@@ -21,6 +22,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  server:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: native/server
+    steps:
+      - uses: actions/checkout@v4
+      # bindgen needs clang; whisper.cpp builds with cmake
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang cmake
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native/server
+      - run: cargo test --release
+
   backend:
     runs-on: ubuntu-24.04
     defaults:
