@@ -152,6 +152,24 @@ mod tests {
         assert!(!mt::cancel_requested(&app.db(), "c1"));
     }
 
+    #[tokio::test]
+    async fn suggestions_hide_named_speakers_and_title_sticks() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "s1");
+        app.db().execute(r#"UPDATE meetings SET auto_title = 1, speaker_suggestions = '{"0": "Asha", "1": "Rohan"}'"#, []).unwrap();
+        let d = body_json(detail(State(app.clone()), UrlPath("s1".to_string())).await).await;
+        assert_eq!(d["speaker_suggestions"], json!({"0": "Asha", "1": "Rohan"}));
+        let p = |body: &str| patch(State(app.clone()), UrlPath("s1".to_string()), Bytes::from(body.to_string()));
+        let d = body_json(p(r#"{"speaker_names": {"1": "Rohan"}}"#).await).await;
+        assert_eq!(d["speaker_suggestions"], json!({"0": "Asha"})); // accepted: no longer offered
+        assert!(mt::get(&app.db(), "s1").unwrap().unwrap().auto_title);
+        p(r#"{"title": "My name"}"#).await;
+        assert!(!mt::get(&app.db(), "s1").unwrap().unwrap().auto_title);
+        let d = body_json(merge_speakers(State(app.clone()), UrlPath("s1".to_string()), Bytes::from(r#"{"from": 0, "to": 1}"#)).await).await;
+        assert_eq!(d["speaker_suggestions"], json!({}));
+    }
+
     #[test]
     fn dates_like_fromisoformat() {
         assert!(super::day("2026-10-28", "from").is_ok());
