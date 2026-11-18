@@ -113,7 +113,7 @@ fn progress(app: &App, id: &str, status: &str, value: i64) {
 
 /// The whole pipeline for one meeting: ffmpeg -> Whisper (here or in the cloud) -> names ->
 /// diarization -> summary. Each stage frees its model before the next one loads.
-fn process_meeting(app: &App, id: &str) {
+pub fn process_meeting(app: &App, id: &str) {
     if let Err(e) = run(app, id) {
         eprintln!("meeting {id} failed: {e}");
         let msg: String = e.chars().take(2000).collect();

@@ -2,6 +2,8 @@
 //!   privmeet-server seed-demo [--reset]       the mockup's demo meetings (seed_demo.py)
 //!   privmeet-server import-django <db.sqlite3> meetings, transcripts, questions and templates
 //!                                              from a Django install's SQLite database
+//!   privmeet-server process-file <file> [--title T]  one recording through the whole pipeline,
+//!                                              no web UI (process_file.py)
 
 use std::path::Path;
 use std::process::Command;
@@ -25,7 +27,11 @@ pub fn run(args: &[String], cfg: &Config) -> Option<Result<String, String>> {
             Some(p) => import_django(cfg, Path::new(p)),
             None => Err("usage: privmeet-server import-django <path to Django's db.sqlite3>".into()),
         },
-        "help" | "--help" | "-h" => Ok("usage: privmeet-server [seed-demo [--reset] | import-django <db.sqlite3>]".into()),
+        "process-file" => match args.get(1) {
+            Some(p) => process_file(cfg, Path::new(p), args.iter().position(|a| a == "--title").and_then(|i| args.get(i + 1)).map(String::as_str)),
+            None => Err("usage: privmeet-server process-file <audio or video file> [--title T]".into()),
+        },
+        "help" | "--help" | "-h" => Ok("usage: privmeet-server [seed-demo [--reset] | import-django <db.sqlite3> | process-file <file> [--title T]]".into()),
         other => Err(format!("unknown command {other:?}; try --help")),
     };
     Some(out)
@@ -105,6 +111,42 @@ fn seed_demo(cfg: &Config, reset: bool) -> Result<String, String> {
     }
     said.push(format!("Added {made} demo meeting(s)."));
     Ok(said.join("\n"))
+}
+
+/// Create a meeting from a local file and run the pipeline in this process, then print the
+/// notes. Fails (exit 1) when processing does not end in "done".
+fn process_file(cfg: &Config, path: &Path, title: Option<&str>) -> Result<String, String> {
+    if !path.is_file() {
+        return Err(format!("No such file: {}", path.display()));
+    }
+    let ext = path.extension().and_then(|e| e.to_str()).map(|e| format!(".{}", e.to_lowercase())).unwrap_or_default();
+    if !crate::meetings::ALLOWED_EXT.contains(&ext.as_str()) {
+        return Err(format!("Unsupported file type. Allowed: {}", crate::meetings::ALLOWED_EXT.join(", ")));
+    }
+    let Some(duration) = audio::probe(path) else { return Err("No audio stream found".into()) };
+    let app = crate::web::App::new(cfg.clone())?;
+    let name = format!("{}{ext}", uuid::Uuid::new_v4().simple());
+    let uploads = cfg.media_root.join("uploads");
+    std::fs::create_dir_all(&uploads).map_err(|e| e.to_string())?;
+    std::fs::copy(path, uploads.join(&name)).map_err(|e| e.to_string())?;
+    let (id, now) = (uuid::Uuid::new_v4().to_string(), db::now_iso());
+    let title = title.map(String::from).unwrap_or_else(|| path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default());
+    app.db()
+        .execute(
+            "INSERT INTO meetings (id, title, file, duration, template, created, heartbeat) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+            params![id, title, format!("uploads/{name}"), duration, app.default_template(), now],
+        )
+        .map_err(|e| e.to_string())?;
+    eprintln!("Meeting {id}: processing {}...", path.display());
+    crate::pipeline::process_meeting(&app, &id);
+    let db = app.db();
+    let m = crate::meetings::get(&db, &id).map_err(|e| e.to_string())?.ok_or("The meeting vanished.")?;
+    if m.status != "done" {
+        return Err(format!("Processing failed: {}", m.error));
+    }
+    let segs = crate::meetings::segments(&db, &id).map_err(|e| e.to_string())?;
+    let notes = crate::export::plain_text(&m, &segs);
+    Ok(format!("Status: {}  tier: {}  language: {}\n\n{}", m.status, m.tier_used, m.language, String::from_utf8_lossy(&notes.body)))
 }
 
 /// Django's SQLite datetime "2026-11-04 05:56:12.746947" (UTC) as ISO 8601 with +00:00.
