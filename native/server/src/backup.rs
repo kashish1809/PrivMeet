@@ -408,3 +408,88 @@ pub async fn restore_upload(State(app): State<AppState>, mut form: Multipart) ->
         Err(e) => error(StatusCode::BAD_REQUEST, e),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::web::{test_app, test_meeting};
+    use std::io::Cursor;
+
+    #[test]
+    fn round_trip_into_an_empty_database() {
+        let (a, b) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let src = test_app(a.path());
+        let id = "6f1e2d3c-4b5a-4978-8a1b-2c3d4e5f6a7b";
+        test_meeting(&src, id);
+        let file = "0123456789abcdef0123456789abcdef.wav";
+        std::fs::create_dir_all(a.path().join("media/uploads")).unwrap();
+        std::fs::write(a.path().join("media/uploads").join(file), b"RIFF-audio").unwrap();
+        {
+            let db = src.db();
+            db.execute("UPDATE meetings SET file = ?2, notes = 'n', tags = '[\"Sprint\"]', speaker_names = '{\"0\": \"Asha\"}' WHERE id = ?1", params![id, format!("uploads/{file}")]).unwrap();
+            db.execute("INSERT INTO questions (meeting_id, question, answer, status, created) VALUES (?1, 'Who?', 'Rohan [00:04]', 'done', ?2)", params![id, db::now_iso()]).unwrap();
+            db.execute("INSERT INTO note_templates (name, description, instructions, created) VALUES ('Retro', '', 'What went well', 'x')", []).unwrap();
+            db.execute("UPDATE meetings SET template = 'u1' WHERE id = ?1", [id]).unwrap();
+        }
+        settings::save(a.path(), &json!({"display_name": "V", "groq_api_key": "secret"}), &|_| true).unwrap();
+        let man = manifest(&src).unwrap();
+        assert!(!man.to_string().contains("secret"));
+        let body = serde_json::to_vec(&man).unwrap();
+        let audio = b"RIFF-audio".to_vec();
+        let zip = export::zip(&[(MANIFEST, &body), (&format!("audio/{file}"), &audio)]);
+
+        let dst = test_app(b.path());
+        let r = restore(&dst, &mut Cursor::new(&zip)).unwrap();
+        assert_eq!(r, Restored { meetings: 1, skipped: 0, templates: 1, settings: 1 });
+        let m = mt::get(&dst.db(), id).unwrap().unwrap();
+        let orig = {
+            let db = src.db();
+            mt::to_json(&db, &mt::get(&db, id).unwrap().unwrap(), true)
+        };
+        let back = mt::to_json(&dst.db(), &m, true);
+        for k in ["title", "summary", "notes", "tags", "speaker_names", "decisions", "action_items", "status", "created"] {
+            assert_eq!(orig[k], back[k], "{k}");
+        }
+        let texts = |j: &Value| j["segments"].as_array().unwrap().iter().map(|s| (s["text"].clone(), s["speaker"].clone())).collect::<Vec<_>>();
+        assert_eq!(texts(&orig), texts(&back));
+        assert_eq!(m.template, "u1");
+        assert_ne!(m.file, format!("uploads/{file}")); // a fresh name, never the zip's
+        assert_eq!(std::fs::read(b.path().join("media").join(&m.file)).unwrap(), b"RIFF-audio");
+        let q: i64 = dst.db().query_row("SELECT count(*) FROM questions", [], |r| r.get(0)).unwrap();
+        assert_eq!(q, 1);
+        assert!(!dst.settings().contains_key("groq_api_key"));
+        // again: nothing new, nothing overwritten
+        let r = restore(&dst, &mut Cursor::new(&zip)).unwrap();
+        assert_eq!(r, Restored { meetings: 0, skipped: 1, templates: 0, settings: 0 });
+    }
+
+    #[test]
+    fn refuses_unsafe_and_foreign_zips() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let man = br#"{"format": "privmeet-backup", "version": 1, "meetings": []}"#;
+        for bad in ["../evil.wav", "audio/../../x", "/etc/passwd", "C:\\x", "audio\\..\\x"] {
+            let zip = export::zip(&[(MANIFEST, man), (bad, b"x")]);
+            let e = restore(&app, &mut Cursor::new(&zip)).unwrap_err();
+            assert!(e.contains("unsafe path"), "{bad}: {e}");
+        }
+        assert_eq!(restore(&app, &mut Cursor::new(b"not a zip at all")).unwrap_err(), NOT_OURS);
+        let other = export::zip(&[(MANIFEST, br#"{"format": "something"}"#)]);
+        assert_eq!(restore(&app, &mut Cursor::new(&other)).unwrap_err(), NOT_OURS);
+        // a member whose bytes were changed fails its checksum
+        let mut zip = export::zip(&[(MANIFEST, man)]);
+        zip[31 + MANIFEST.len()] ^= 1;
+        assert!(restore(&app, &mut Cursor::new(&zip)).unwrap_err().contains("damaged"));
+        // junk fields are cleaned, not trusted
+        let junk = json!({"format": "privmeet-backup", "version": 1, "meetings": [
+            {"id": "not-a-uuid"},
+            {"id": "7f1e2d3c-4b5a-4978-8a1b-2c3d4e5f6a7b", "title": 5, "status": "transcribing", "tags": "a,b", "file": "../../x.wav",
+             "segments": [{"start": -1, "end": 2, "text": "x"}, {"start": 1, "end": 2, "speaker": 999, "text": "ok"}]}]});
+        let zip = export::zip(&[(MANIFEST, &serde_json::to_vec(&junk).unwrap())]);
+        assert_eq!(restore(&app, &mut Cursor::new(&zip)).unwrap().meetings, 1);
+        let m = mt::get(&app.db(), "7f1e2d3c-4b5a-4978-8a1b-2c3d4e5f6a7b").unwrap().unwrap();
+        assert_eq!((m.title.as_str(), m.status.as_str(), m.file.as_str()), ("Restored meeting", "failed", ""));
+        let segs = mt::segments(&app.db(), &m.id).unwrap();
+        assert_eq!((segs.len(), segs[0].speaker), (1, None));
+    }
+}
