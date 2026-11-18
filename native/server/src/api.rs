@@ -337,6 +337,11 @@ pub async fn create(State(app): State<AppState>, headers: HeaderMap, mut form: M
         Ok(t) => t,
         Err(e) => return error(StatusCode::BAD_REQUEST, e),
     };
+    let field = |k: &str| fields.get(k).map(String::as_str).unwrap_or("");
+    let (language, translate) = match (mt::clean_language(field("language")), mt::clean_flag(field("translate"), "translate")) {
+        (Ok(l), Ok(t)) => (l, t),
+        (Err(e), _) | (_, Err(e)) => return error(StatusCode::BAD_REQUEST, e),
+    };
     let template = fields.get("template").map(|t| t.trim().to_string()).unwrap_or_default();
     if !template.is_empty() && !app.template_exists(&template) {
         return error(StatusCode::BAD_REQUEST, format!("No template with id '{template}'."));
@@ -353,8 +358,9 @@ pub async fn create(State(app): State<AppState>, headers: HeaderMap, mut form: M
     let m = {
         let db = app.db();
         let ok = db.execute(
-            "INSERT INTO meetings (id, title, file, duration, notes, tags, template, created, heartbeat) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
-            params![id, title, rel, duration, notes, Value::from(tags).to_string(), template, now],
+            "INSERT INTO meetings (id, title, file, duration, notes, tags, template, created, heartbeat, language_hint, translate) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9, ?10)",
+            params![id, title, rel, duration, notes, Value::from(tags).to_string(), template, now, language, translate],
         );
         if let Err(e) = ok {
             return error(StatusCode::INTERNAL_SERVER_ERROR, format!("Cannot save the meeting: {e}"));

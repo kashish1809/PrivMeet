@@ -39,10 +39,14 @@ pub struct Meeting {
     pub device_used: String,
     pub created: String,
     pub heartbeat: String,
+    /// The language asked for at upload ("" = detect); `language` holds what Whisper found.
+    pub language_hint: String,
+    /// Transcribe into English (Whisper's translate task).
+    pub translate: bool,
 }
 
 pub const COLUMNS: &str = "id, title, file, duration, language, status, progress, error, summary, decisions, \
-    action_items, speaker_names, notes, tags, template, tier_used, device_used, created, heartbeat";
+    action_items, speaker_names, notes, tags, template, tier_used, device_used, created, heartbeat, language_hint, translate";
 
 fn json_col(row: &Row, i: usize, empty: Value) -> rusqlite::Result<Value> {
     let s: String = row.get(i)?;
@@ -71,6 +75,8 @@ impl Meeting {
             device_used: r.get(16)?,
             created: r.get(17)?,
             heartbeat: r.get(18)?,
+            language_hint: r.get(19)?,
+            translate: r.get(20)?,
         })
     }
 
@@ -177,6 +183,7 @@ pub fn to_json(db: &Connection, m: &Meeting, full: bool) -> Value {
             "notes": m.notes, "language": m.language, "summary": m.summary, "decisions": m.decisions,
             "action_items": m.action_items, "speaker_names": m.speaker_names, "tier_used": m.tier_used,
             "template": m.template, "device_used": m.device_used, "segments": segs,
+            "language_hint": m.language_hint, "translate": m.translate,
         });
         d.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
     }
@@ -252,6 +259,29 @@ pub fn clean_tags(value: &Value) -> Result<Vec<String>, String> {
     Ok(tags)
 }
 
+/// The upload's `language`: "" or "auto" is detection, else an ISO code whisper.cpp knows.
+pub fn clean_language(v: &str) -> Result<String, String> {
+    let code = v.trim().to_lowercase();
+    if code.is_empty() || code == "auto" {
+        return Ok(String::new());
+    }
+    // get_lang_id also takes full names ("english"); the API takes codes only
+    if code.len() <= 3 && whisper_rs::get_lang_id(&code).is_some() {
+        Ok(code)
+    } else {
+        Err(format!("Unknown language '{code}'. Use an ISO code such as en or hi, or leave it empty."))
+    }
+}
+
+/// The upload's `translate`: "1" or "true" on, "", "0" or "false" off.
+pub fn clean_flag(v: &str, name: &str) -> Result<bool, String> {
+    match v.trim().to_lowercase().as_str() {
+        "1" | "true" | "on" => Ok(true),
+        "" | "0" | "false" | "off" => Ok(false),
+        _ => Err(format!("{name} must be 1 or 0.")),
+    }
+}
+
 pub fn clean_notes(value: &Value) -> Result<String, String> {
     let s = value.as_str().ok_or("notes must be a string.")?;
     if s.chars().count() > MAX_NOTES {
@@ -325,6 +355,16 @@ mod tests {
         assert_eq!(clean_tags(&json!(["x".repeat(31)])).unwrap_err(), "A tag can be at most 30 characters.");
         assert_eq!(clean_tags(&json!([1])).unwrap_err(), "tags must be a list of strings.");
         assert_eq!(clean_tags(&json!("[oops")).unwrap_err(), "tags must be a list of strings.");
+    }
+
+    #[test]
+    fn languages_and_flags() {
+        assert_eq!(clean_language(" HI ").unwrap(), "hi");
+        assert_eq!(clean_language("auto").unwrap(), "");
+        assert_eq!(clean_language("").unwrap(), "");
+        assert!(clean_language("english").is_err() && clean_language("xx").is_err());
+        assert_eq!((clean_flag("1", "translate"), clean_flag("", "translate")), (Ok(true), Ok(false)));
+        assert_eq!(clean_flag("yes", "translate").unwrap_err(), "translate must be 1 or 0.");
     }
 
     #[test]
