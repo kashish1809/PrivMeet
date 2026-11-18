@@ -66,28 +66,29 @@ Respond like a caveman. No articles, no filler, no pleasantries. Short. Direct. 
 
 ## Project rules
 - **Low-end first.** The app must run on about 6 GB of RAM with no GPU, and use an NVIDIA GPU when one exists.
-  - Do not add PyTorch, transformers, websockets/Channels, DRF, a router library, TypeScript or any UI kit.
+  - Do not add PyTorch, transformers, websockets, a frontend router library, TypeScript or any UI kit. The backend is the Rust server in `native/server`; `backend/` (Django) is legacy for one release, do not build features there.
   - The only allowed UI dependency is `lucide-react` for icons. Shared components live in `frontend/src/ui/`.
   - The desktop app is Tauri 2 in `desktop/`, never Electron. Its launcher page is plain HTML/JS.
   - Ask before adding any dependency. The Tauri plugins named in a task in `docs/TASKS.md` are already approved.
 - **UI** must match `docs/ui/mockup.webp` in all four themes (Indigo, Teal, Amber, Slate light), using `frontend/src/ui/` components. "UI v2 spec" in `docs/TASKS.md` has the colors and the parts of each screen.
   - In pages, use only `zinc-*`, `primary-*` and `Badge` tones for color. The themes remap those scales.
-- **One heavy model in RAM at a time.** The Celery worker uses concurrency 1 and one task per child. Keep stages sequential: ffmpeg, Whisper, diarization, then the LLM.
-- Model sizes come from `backend/meetings/hw.py` tiers. Never hard-code a model name elsewhere.
-- **Backend:** plain Django views returning `JsonResponse`, with config from env vars in `settings.py`. Run subprocesses with list args, never `shell=True`.
+- **One heavy model in RAM at a time.** The server runs one job at a time on its pipeline thread (`native/server/src/pipeline.rs`) and returns freed memory after each. Keep stages sequential: ffmpeg, Whisper, diarization, then the LLM.
+- Model sizes come from the tiers in `native/server/src/hw.rs`. Never hard-code a model name elsewhere.
+- **Backend:** axum handlers returning JSON in Django's shapes (errors as `{"error": "..."}`), config from env vars in `config.rs`, new routes and their flag in `web.rs`. Run subprocesses with `Command` and list args, never through a shell. `cargo test` must pass.
 - **Frontend:** plain JSX + Tailwind. Use the `api.js` helpers for every request (they send the CSRF token). Poll every 2 s while processing.
 - **Security:** no login exists, so the app binds to `127.0.0.1` only. Validate uploads (extension, size, ffprobe), and do not weaken CSRF.
-- A known shortcut gets a comment: `# shortcut: <limit>, <when to upgrade>`.
+- A known shortcut gets a comment: `// shortcut: <limit>, <when to upgrade>` (`#` in Python and shell).
 
 ## Running locally (no Docker)
 ```
-cd backend && uv venv -p 3.12 .venv && uv pip install -p .venv -r requirements.txt
-CELERY_EAGER=1 .venv/bin/python manage.py migrate
-CELERY_EAGER=1 .venv/bin/python manage.py runserver      # needs ffmpeg; Ollama at localhost:11434
+cd native/server && cargo build --release                 # needs clang and cmake
+./target/release/privmeet-server                          # :8000; needs ffmpeg; Ollama at localhost:11434
+./target/release/privmeet-server seed-demo                # optional: the mockup's demo meetings
 cd frontend && npm install && npm run dev                 # http://localhost:5173
 ```
-- `CELERY_EAGER=1` runs tasks inside the web process, so you do not need Redis or a worker.
-- Without `POSTGRES_HOST`, the app uses SQLite.
+- One process, SQLite in `DATA_DIR` (default `native/server/data`), no Redis, worker or Postgres.
+- `FRONTEND_DIST=../../frontend/dist` serves a built app from the server itself (http://127.0.0.1:8000).
+- Diarization needs `segmentation.onnx` and `embedding.onnx` in `MODELS_DIR/diarize`; without them it is skipped.
 
 ## graphify
 

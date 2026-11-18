@@ -1,5 +1,9 @@
 # PrivMeet: self-hosted meeting notes, plan
 
+> The original design, built first on Django + Celery. The backend has since been rewritten in
+> Rust as one process with SQLite; the current design is in [ARCHITECTURE.md](ARCHITECTURE.md)
+> and [TECH_STACK.md](TECH_STACK.md). The goals and resource rules below still hold.
+
 ## Context
 This is a miniproject. The repo is empty apart from `LICENSE`. The goal is to upload or record a meeting and get back a transcript with speaker labels, a summary, decisions and action items. Users can also search past meetings and ask questions about one. Everything runs locally, so no audio leaves the machine.
 
