@@ -2,11 +2,14 @@ import { useCallback, useEffect, useId, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  ArchiveArrowUp,
   AudioLines,
   Check,
   Cloud,
   CloudUpload,
   Cpu,
+  DatabaseBackup,
+  Download,
   FileText,
   HardDrive,
   Info,
@@ -24,7 +27,7 @@ import {
   X,
 } from "lucide-react";
 
-import { api } from "../api";
+import { api, upload, useFeatures } from "../api";
 import CustomTheme from "./CustomTheme";
 import { KEYS, TITLE_FORMATS, readPrefs, writePref } from "../record/prefs";
 import {
@@ -46,6 +49,7 @@ import {
   Tabs,
   Textarea,
   THEMES,
+  toast,
   Toggle,
   useCustomTheme,
   useFont,
@@ -227,6 +231,61 @@ function General({ settings, onSaved }) {
             })
           }
         />
+      </div>
+    </Card>
+  );
+}
+
+/** "Your data" (R1.20): download a backup zip, or restore one. Shown with the `backup` flag. */
+function YourData() {
+  const [withAudio, setWithAudio] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const inputId = useId();
+
+  async function restore(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // the same file can be picked again
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    setBusy(true);
+    setProgress(0);
+    try {
+      const r = await upload("/api/restore", form, setProgress);
+      const parts = [`${r.restored} meeting${r.restored === 1 ? "" : "s"} restored`];
+      if (r.skipped) parts.push(`${r.skipped} already here`);
+      if (r.templates) parts.push(`${r.templates} template${r.templates === 1 ? "" : "s"}`);
+      toast(parts.join(", ") + ".", "green");
+    } catch (err) {
+      toast(err.message, "red");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader title="Your data" icon={DatabaseBackup} />
+      <div className="flex flex-col gap-4 px-5 pt-3 pb-5">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          A backup holds every meeting with its transcript, notes and questions, your own templates and your settings. API
+          keys are never included.
+        </p>
+        <Toggle checked={withAudio} onChange={setWithAudio} label="Include recordings (a much larger file)" />
+        <div className="flex flex-wrap gap-3">
+          {/* a download (Content-Disposition), so the page stays */}
+          <Button icon={Download} onClick={() => (window.location.href = `/api/backup.zip?audio=${withAudio ? 1 : 0}`)}>
+            Download backup
+          </Button>
+          <Button variant="secondary" icon={ArchiveArrowUp} disabled={busy} onClick={() => document.getElementById(inputId)?.click()}>
+            {busy ? `Restoring… ${Math.round(progress * 100)}%` : "Restore from backup"}
+          </Button>
+          <input id={inputId} type="file" accept=".zip,application/zip" className="hidden" onChange={restore} />
+        </div>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Restoring adds the meetings this server does not have yet. Meetings already here are skipped, never overwritten.
+        </p>
       </div>
     </Card>
   );
@@ -983,6 +1042,7 @@ export default function Settings() {
   const [system, setSystem] = useState(null);
   const [error, setError] = useState("");
   const tabsId = useId();
+  const features = useFeatures();
 
   const load = useCallback(() => {
     Promise.all([api("/api/settings/").catch(() => ({})), api("/api/system/").catch(() => null)])
@@ -1022,7 +1082,10 @@ export default function Settings() {
         {!settings ? (
           <Card className="h-48 animate-pulse" />
         ) : tab === "general" ? (
-          <General settings={settings} onSaved={saved} />
+          <div className="flex flex-col gap-5">
+            <General settings={settings} onSaved={saved} />
+            {features.has("backup") && <YourData />}
+          </div>
         ) : tab === "ai" ? (
           <AiModel settings={settings} system={system} onSaved={saved} />
         ) : tab === "recording" ? (
