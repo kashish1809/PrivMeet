@@ -15,6 +15,8 @@ use crate::{audio, db, diarize, hw, llm, names, providers, stt, templates};
 
 pub enum Job {
     Meeting(String),
+    /// Only the LLM stage, on the stored transcript: (meeting, template, status to go back to on failure).
+    Summarize(String, Option<String>, String),
     Question(i64),
     Pull(String),
 }
@@ -50,6 +52,7 @@ pub fn start(app: Arc<App>) {
             for job in rx {
                 match job {
                     Job::Meeting(id) => process_meeting(&app, &id),
+                    Job::Summarize(id, template, before) => summarize_meeting(&app, &id, template.as_deref(), &before),
                     Job::Question(id) => answer_question(&app, id),
                     Job::Pull(name) => crate::models::pull_model(&app, &name),
                 }
@@ -84,6 +87,11 @@ pub fn enqueue_pull(name: &str) {
 
 pub fn enqueue(_app: &AppState, meeting: &str) {
     send(Job::Meeting(meeting.to_string()));
+}
+
+/// Queue a new summary of a processed meeting; `before` is its status, kept if this fails.
+pub fn enqueue_summary(meeting: &str, template: Option<String>, before: &str) {
+    send(Job::Summarize(meeting.to_string(), template, before.to_string()));
 }
 
 pub fn enqueue_question(_app: &AppState, question: i64) {
@@ -179,24 +187,50 @@ fn run(app: &App, id: &str) -> Result<(), String> {
     }
     drop(tmp); // the WAV is no longer needed
 
+    write_notes(app, id, &p, &known, None)
+}
+
+/// The LLM stage: the summary, key points and action items from the stored transcript, then
+/// status done. `template` replaces the meeting's own template and is saved with the notes.
+fn write_notes(app: &App, id: &str, p: &hw::Profile, known: &[String], template: Option<&str>) -> Result<(), String> {
     progress(app, id, "summarizing", 80);
-    providers::ensure_model(&p)?;
+    providers::ensure_model(p)?;
     let (m, stored) = {
         let db = app.db();
         (mt::get(&db, id).map_err(|e| e.to_string())?.ok_or("The meeting was deleted.")?, mt::segments(&db, id).map_err(|e| e.to_string())?)
     };
     // who is which speaker, from the conversation, so "I'll do it" gets the right owner
-    let guessed = names::infer_speakers(&stored, &known);
-    let focus = templates::instructions(&app.db(), &m.template, &app.default_template());
+    let guessed = names::infer_speakers(&stored, known);
+    let template = template.unwrap_or(&m.template).to_string();
+    let focus = templates::instructions(&app.db(), &template, &app.default_template());
     let on_llm = |f: f64| progress(app, id, "summarizing", 80 + (15.0 * f) as i64);
-    let notes = llm::summarize(&transcript(&m, &stored, false, Some(&guessed)), &p, &on_llm, &m.language, &focus)?;
+    let notes = llm::summarize(&transcript(&m, &stored, false, Some(&guessed)), p, &on_llm, &m.language, &focus)?;
     app.db()
         .execute(
-            "UPDATE meetings SET summary = ?2, decisions = ?3, action_items = ?4, status = 'done', progress = 100, heartbeat = ?5 WHERE id = ?1",
-            params![id, notes.summary, Value::from(notes.decisions.clone()).to_string(), notes.items_json().to_string(), db::now_iso()],
+            "UPDATE meetings SET summary = ?2, decisions = ?3, action_items = ?4, template = ?5, error = '', status = 'done', progress = 100, heartbeat = ?6 WHERE id = ?1",
+            params![id, notes.summary, Value::from(notes.decisions.clone()).to_string(), notes.items_json().to_string(), template, db::now_iso()],
         )
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// A new summary without ffmpeg, Whisper or diarization. On failure the old notes stay and the
+/// meeting goes back to the status it had, with the reason in `error`.
+pub fn summarize_meeting(app: &App, id: &str, template: Option<&str>, before: &str) {
+    eprintln!("meeting {id}: summary only, from the stored transcript (Whisper is not loaded)");
+    let result = (|| {
+        let p = app.profile();
+        let known = names::known_names(&app.db(), &app.settings());
+        write_notes(app, id, &p, &known, template)
+    })();
+    if let Err(e) = result {
+        eprintln!("summary of {id} failed: {e}");
+        let msg: String = format!("Could not regenerate the summary: {e}").chars().take(2000).collect();
+        let _ = app.db().execute(
+            "UPDATE meetings SET error = ?2, status = ?3, progress = 100, heartbeat = ?4 WHERE id = ?1",
+            params![id, msg, before, db::now_iso()],
+        );
+    }
 }
 
 const HITS: usize = 8;
