@@ -18,7 +18,7 @@ import { Card, CardHeader, TagChip, Textarea, cx, focusRing } from "../ui";
 
 // One save per pause in typing, not one per key press.
 const SAVE_MS = 800;
-// The server's limits (backend/meetings/views.py: MAX_TAGS, MAX_TAG_LEN); checked here too so
+// The server's limits (native/server/src/meetings.rs: MAX_TAGS, MAX_TAG_LEN); checked here too so
 // the user is told before a request is refused.
 const MAX_TAGS = 10;
 const MAX_TAG_LEN = 30;

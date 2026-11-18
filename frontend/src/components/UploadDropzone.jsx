@@ -3,7 +3,7 @@ import { FileAudio, FileVideo, Replace, Upload, X } from "lucide-react";
 
 import { cx, focusRing } from "../ui";
 
-/** Mirrors ALLOWED_EXT in backend/meetings/views.py, so a bad pick fails here, not after a long upload. */
+/** Mirrors ALLOWED_EXT in native/server/src/meetings.rs, so a bad pick fails here, not after a long upload. */
 export const ALLOWED_EXT = [".mp3", ".wav", ".mp4", ".m4a", ".webm", ".ogg", ".opus", ".flac", ".mkv", ".mov"];
 
 const VIDEO_EXT = [".mp4", ".m4a", ".webm", ".mkv", ".mov"];

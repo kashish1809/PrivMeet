@@ -1,10 +1,9 @@
 .env
 __pycache__/
 *.pyc
+# left by the old Django backend: its venv, and data/ with your meetings and models until moved
 backend/.venv/
 backend/data/
-backend/staticfiles/
-backend/frontend_dist/
 frontend/node_modules/
 frontend/dist/
 .DS_Store
@@ -12,3 +11,4 @@ frontend/dist/
 
 # Rust build output (native/*)
 native/*/target/
+native/server/data/

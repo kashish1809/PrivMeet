@@ -8,11 +8,11 @@ The only icon library is `lucide-react`, and shared controls live in `src/ui/`
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173, proxies /api to Django on :8000
-npm run build    # writes dist/ with base /static/, which Django + whitenoise serve
+npm run dev      # http://localhost:5173, proxies /api to the server on :8000
+npm run build    # writes dist/ with base /static/, which the PrivMeet server serves
 ```
 
-Start the backend first (`CELERY_EAGER=1 python manage.py runserver`, see the root
+Start the server first (`native/server/target/release/privmeet-server`, see the root
 `AGENTS.md`). `src/api.js` needs the `csrftoken` cookie that `GET /api/system/`
 sets, so the first write after a cold start is only safe once the app has loaded
 once — it does that itself in `App.jsx`.

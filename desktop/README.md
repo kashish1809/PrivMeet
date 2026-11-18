@@ -2,7 +2,7 @@
 
 Tauri 2 shell around the PrivMeet stack. It uses the system webview (WebKitGTK on
 Linux, WebView2 on Windows), so installing it does not add a second browser engine
-next to the Django UI.
+next to the web UI.
 
 ## What exists now (A2.3)
 
