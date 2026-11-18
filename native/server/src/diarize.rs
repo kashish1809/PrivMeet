@@ -65,6 +65,7 @@ pub fn diarize(samples: Vec<f32>, models_dir: &Path, threads: i64, on_progress: 
         min_duration_on: 0.0,
         min_duration_off: 0.0,
     };
+    let t0 = std::time::Instant::now();
     // SAFETY: every pointer in `config` points into a CString that outlives this call
     let sd = unsafe { sys::SherpaOnnxCreateOfflineSpeakerDiarization(&config) };
     if sd.is_null() {
@@ -104,7 +105,9 @@ pub fn diarize(samples: Vec<f32>, models_dir: &Path, threads: i64, on_progress: 
             Ok(turns)
         }
     };
+    let loaded = t0.elapsed().as_secs_f64();
     let out = crate::stt::with_progress(&pct, on_progress, run);
+    eprintln!("diarization: models loaded in {loaded:.1} s, {:.1} s of audio in {:.1} s on {threads} threads", samples.len() as f64 / 16000.0, t0.elapsed().as_secs_f64() - loaded);
     // SAFETY: created above, used by nothing after this
     unsafe { sys::SherpaOnnxDestroyOfflineSpeakerDiarization(sd) };
     let mut turns = out.map_err(|e| format!("Diarization failed: {e}"))?;
