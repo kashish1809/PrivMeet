@@ -34,7 +34,7 @@ pub fn available(models_dir: &Path) -> bool {
 }
 
 /// Speaker turns [(start, end, speaker)] sorted by start time.
-pub fn diarize(samples: Vec<f32>, models_dir: &Path, threads: i64, on_progress: &dyn Fn(f64)) -> Result<Vec<(f64, f64, i64)>, String> {
+pub fn diarize(samples: Vec<f32>, models_dir: &Path, threads: i64, on_progress: &(dyn Fn(f64) + Sync)) -> Result<Vec<(f64, f64, i64)>, String> {
     let (seg, emb) = model_paths(models_dir);
     let n = forced_speakers();
     let config = DiarizeConfig {

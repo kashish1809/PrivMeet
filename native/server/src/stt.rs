@@ -114,33 +114,34 @@ pub fn read_wav(path: &Path) -> Result<Vec<f32>, String> {
 /// whisper.cpp on this machine. The model is loaded for this call and freed when it returns,
 /// so only one heavy model is ever in memory (the LLM runs after, in Ollama). `on_segment`
 /// sees each segment as whisper.cpp finishes it, for progress.
-/// Run `work` in a scoped thread while this one passes `pct` (0-100, set by a library's
-/// progress callback, which must be 'static) on to `on_progress` whenever it changes.
+/// Run `work` on this thread (so its memory lands in the arena malloc_trim returns after the
+/// job) while a scoped thread passes `pct` (0-100, set by a library's progress callback, which
+/// must be 'static) on to `on_progress` every half second when it changes.
 pub fn with_progress<T, E: std::fmt::Display>(
     pct: &std::sync::atomic::AtomicI32,
-    on_progress: &dyn Fn(f64),
-    work: impl FnOnce() -> Result<T, E> + Send,
-) -> Result<T, String>
-where
-    T: Send,
-    E: Send,
-{
+    on_progress: &(dyn Fn(f64) + Sync),
+    work: impl FnOnce() -> Result<T, E>,
+) -> Result<T, String> {
+    let done = std::sync::atomic::AtomicBool::new(false);
     std::thread::scope(|s| {
-        let run = s.spawn(work);
-        let mut last = -1;
-        while !run.is_finished() {
-            let now = pct.load(std::sync::atomic::Ordering::Relaxed);
-            if now != last {
-                on_progress(now as f64 / 100.0);
-                last = now;
+        s.spawn(|| {
+            let mut last = -1;
+            while !done.load(std::sync::atomic::Ordering::Relaxed) {
+                let now = pct.load(std::sync::atomic::Ordering::Relaxed);
+                if now != last {
+                    on_progress(now as f64 / 100.0);
+                    last = now;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
             }
-            std::thread::sleep(std::time::Duration::from_millis(500));
-        }
-        run.join().map_err(|_| "it crashed".to_string())?.map_err(|e| e.to_string())
+        });
+        let out = work();
+        done.store(true, std::sync::atomic::Ordering::Relaxed);
+        out.map_err(|e| e.to_string())
     })
 }
 
-pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progress: &dyn Fn(f64)) -> Result<(Vec<Seg>, Info), String> {
+pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progress: &(dyn Fn(f64) + Sync)) -> Result<(Vec<Seg>, Info), String> {
     let model = ensure_model(models_dir, &p.whisper_model)?;
     let samples = read_wav(wav)?;
     let duration = samples.len() as f64 / 16000.0;
@@ -186,7 +187,7 @@ pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progre
 
 /// The provider's /audio/transcriptions: 16 kHz mono FLAC, in pieces when long, each piece's
 /// timestamps shifted by where it started so the transcript reads as one recording.
-pub fn cloud(wav: &Path, p: &Profile, prompt: &str, on_progress: &dyn Fn(f64)) -> Result<(Vec<Seg>, Info), String> {
+pub fn cloud(wav: &Path, p: &Profile, prompt: &str, on_progress: &(dyn Fn(f64) + Sync)) -> Result<(Vec<Seg>, Info), String> {
     let model = asr_model(p);
     let pieces = audio::flac_chunks(wav, providers::CHUNK_SECONDS, providers::MAX_UPLOAD_BYTES)?;
     let (mut out, mut detected, mut end) = (Vec::new(), String::new(), 0.0f64);
@@ -221,7 +222,7 @@ pub fn cloud(wav: &Path, p: &Profile, prompt: &str, on_progress: &dyn Fn(f64)) -
 }
 
 /// Cloud when the user turned it on for a provider that can, else whisper.cpp here.
-pub fn transcribe(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progress: &dyn Fn(f64)) -> Result<(Vec<Seg>, Info), String> {
+pub fn transcribe(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progress: &(dyn Fn(f64) + Sync)) -> Result<(Vec<Seg>, Info), String> {
     if hw::uses_cloud(p) {
         cloud(wav, p, prompt, on_progress)
     } else {
