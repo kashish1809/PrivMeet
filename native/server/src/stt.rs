@@ -25,6 +25,9 @@ pub struct Lang<'a> {
 pub struct Info {
     pub duration: f64,
     pub language: String,
+    /// Where voice activity detection found speech [(start, end)] in the recording; empty when
+    /// it was not run or kept (nearly) everything, so diarization reads the whole recording.
+    pub speech: Vec<(f64, f64)>,
 }
 
 /// A segment shorter than this holds no speech: Whisper writes lines into trailing silence.
@@ -186,6 +189,26 @@ impl Speech {
         let Some(&(glued, orig, len)) = self.pieces.get(i) else { return t };
         orig + (t - glued).clamp(0.0, len)
     }
+
+    /// A span in the glued audio as one in the recording, inside one piece: a line Whisper runs
+    /// across a cut would otherwise stretch over the silence between. It keeps the piece that
+    /// holds more of it, so the line is never shrunk to nothing.
+    pub fn original_span(&self, a: f64, b: f64) -> (f64, f64) {
+        let at = |t: f64| self.pieces.iter().rposition(|p| p.0 <= t).unwrap_or(0);
+        let (start, end) = (self.original(a), self.original(b));
+        let (i, j) = (at(a), at(b));
+        match (self.pieces.get(i), self.pieces.get(j)) {
+            (Some(&(_, o1, l1)), Some(&(_, o2, _))) if j > i => {
+                if o1 + l1 - start >= end - o2 { (start, o1 + l1) } else { (o2, end) }
+            }
+            _ => (start, end),
+        }
+    }
+
+    /// The pieces as (start, end) in the recording.
+    pub fn regions(&self) -> Vec<(f64, f64)> {
+        self.pieces.iter().map(|&(_, orig, len)| (orig, orig + len)).collect()
+    }
 }
 
 /// Speech regions by Silero VAD, glued: Whisper then decodes only the speech, as faster-whisper's
@@ -263,7 +286,7 @@ pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, lang: Lan
     if speech.as_ref().is_some_and(|s| s.samples.is_empty()) {
         eprintln!("no speech found in {duration:.0} s of audio; Whisper not loaded");
         on_progress(1.0);
-        return Ok((vec![], Info { duration, language: String::new() }));
+        return Ok((vec![], Info { duration, language: String::new(), speech: vec![] }));
     }
     let samples: &[f32] = speech.as_ref().map_or(&all, |s| &s.samples);
     // flash_attn was measured slower on a laptop CPU (48 s against 36 s), so it stays off
@@ -299,7 +322,7 @@ pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, lang: Lan
         let text = seg.to_str_lossy().map(|t| t.trim().to_string()).unwrap_or_default();
         if !text.is_empty() {
             let (a, b) = (seg.start_timestamp() as f64 / 100.0, seg.end_timestamp() as f64 / 100.0);
-            let (start, end) = speech.as_ref().map_or((a, b), |s| (s.original(a), s.original(b)));
+            let (start, end) = speech.as_ref().map_or((a, b), |s| s.original_span(a, b));
             out.push(Seg { start, end: end.max(start), text });
         }
     }
@@ -307,7 +330,7 @@ pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, lang: Lan
         let mut c = l.chars();
         c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
     });
-    Ok((clean(out), Info { duration, language: language.unwrap_or_default().chars().take(16).collect() }))
+    Ok((clean(out), Info { duration, language: language.unwrap_or_default().chars().take(16).collect(), speech: speech.as_ref().map(Speech::regions).unwrap_or_default() }))
 }
 
 /// The provider's /audio/transcriptions: 16 kHz mono FLAC, in pieces when long, each piece's
@@ -349,7 +372,7 @@ pub fn cloud(wav: &Path, p: &Profile, prompt: &str, lang: Lang, on_progress: &(d
     let duration = if end > 0.0 { end } else { audio::probe(wav).unwrap_or(0.0) };
     let mut lang = detected.chars();
     let language = lang.next().map(|f| f.to_uppercase().collect::<String>() + lang.as_str()).unwrap_or_default();
-    Ok((out, Info { duration, language: language.chars().take(16).collect() }))
+    Ok((out, Info { duration, language: language.chars().take(16).collect(), speech: vec![] }))
 }
 
 /// Cloud when the user turned it on for a provider that can, else whisper.cpp here.
@@ -380,6 +403,13 @@ mod tests {
         assert!((sp.original(4.5 + 0.5) - 40.3).abs() < 0.01); // inside the second piece
         assert!((sp.original(4.45) - 14.2).abs() < 0.01); // in the gap: end of the first piece
         assert!(Speech::glue(&all, &[]).samples.is_empty());
+        // a line across the cut stays in the piece holding more of it, never over the silence
+        let in_first = sp.original_span(1.0, 4.6); // 3.4 s in the first piece, 0.1 s in the second
+        assert!((in_first.0 - 10.8).abs() < 0.01 && (in_first.1 - 14.2).abs() < 0.01);
+        let in_second = sp.original_span(4.3, 5.5); // 0.1 s in the first, 1.0 s in the second
+        assert!((in_second.0 - 39.8).abs() < 0.01 && (in_second.1 - 40.8).abs() < 0.01);
+        let regions = sp.regions();
+        assert!(regions.len() == 2 && (regions[1].0 - 39.8).abs() < 0.01 && (regions[1].1 - 41.2).abs() < 0.01);
     }
 
     #[test]
