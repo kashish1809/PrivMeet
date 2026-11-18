@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use tower_http::services::ServeDir;
 
 use crate::config::Config;
-use crate::{api, csrf, db, hw, models, pipeline, settings, templates};
+use crate::{api, backup, csrf, db, hw, models, pipeline, settings, templates};
 
 /// What every request can reach: configuration, the database and the hardware (read once).
 pub struct App {
@@ -30,7 +30,7 @@ pub type AppState = Arc<App>;
 
 /// What this server supports beyond the v1 API (docs/TASKS.md "Feature flags"). Only what is
 /// built: the React app shows a control only when its flag is here.
-pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters", "templates", "models", "exports", "share-page", "exports-office", "exports-ics", "audio-exports", "summarize", "transcript-edit", "speaker-merge", "cancel", "language", "suggestions", "storage"];
+pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters", "templates", "models", "exports", "share-page", "exports-office", "exports-ics", "audio-exports", "summarize", "transcript-edit", "speaker-merge", "cancel", "language", "suggestions", "storage", "backup"];
 
 /// Built-in note template ids (backend/meetings/note_templates.py); own ones are "u<pk>".
 pub fn builtin_template(id: &str) -> bool {
@@ -107,6 +107,11 @@ pub fn router(app: App) -> Router {
         .route("/meetings/{id}/", get(api::detail).patch(api::patch).delete(api::delete))
         .route("/meetings/{id}/audio", get(api::audio).delete(api::delete_audio))
         .route("/storage/", get(api::storage))
+        .route("/backup.zip", get(backup::backup))
+        .route(
+            "/restore",
+            axum::routing::post(backup::restore_upload).layer(axum::extract::DefaultBodyLimit::max(upload_limit.saturating_mul(4))),
+        )
         .route("/meetings/{id}/retry", axum::routing::post(api::retry))
         .route("/meetings/{id}/ask", axum::routing::post(api::ask))
         .route("/meetings/{id}/summarize", axum::routing::post(api::summarize))

@@ -5,6 +5,7 @@
 
 mod api;
 mod audio;
+mod backup;
 mod cli;
 mod config;
 mod csrf;
