@@ -1,7 +1,7 @@
-//! privmeet-server: PrivMeet's backend in Rust (rust/migration).
+//! privmeet-server: PrivMeet's backend.
 //!
-//! It answers the same /api/ as the Django backend, so the React app works unchanged, and
-//! serves the built app itself. Configuration: config.rs (same env names as Django).
+//! One process: it answers /api/, serves the built React app and runs the pipeline.
+//! Configuration: config.rs.
 
 mod api;
 mod audio;

@@ -1,8 +1,7 @@
 //! User settings that override the hardware tier: DATA_DIR/settings.json.
 //!
-//! A port of backend/meetings/settings_store.py with the same file, keys, validation and error
-//! messages, so the Django and Rust servers can read each other's file. load() is called at the
-//! start of every task; save() validates every key and writes the file atomically.
+//! load() is called at the start of every task, so a change takes effect on the next one;
+//! save() validates every key and writes the file atomically.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};

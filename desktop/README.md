@@ -28,8 +28,8 @@ next to the web UI.
 2. **Starting PrivMeet.** If `/api/system/` already answers, the running stack is
    reused. Otherwise `docker compose -p privmeet -f compose.yml [-f compose.gpu.yml]
    up -d` runs with the compose files copied out of the bundle into
-   `<app data>/compose`, where a first-run `.env` with a generated `SECRET_KEY`
-   is written for compose's `${SECRET_KEY:?…}`.
+   `<app data>/compose`, where a first-run `.env` is written for the optional
+   compose settings.
 3. **Waiting for the server.** `/api/system/` is polled every 2 s for up to 15
    minutes, because the first start pulls the image. When it answers the window
    navigates to <http://127.0.0.1:8000>.

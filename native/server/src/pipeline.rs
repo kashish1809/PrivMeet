@@ -1,6 +1,6 @@
-//! The work queue and the pipeline: one job at a time on one worker thread, as the Celery
-//! worker runs with concurrency 1, so only one heavy model is ever in memory. A port of
-//! backend/meetings/tasks.py (process_meeting, answer_question) and search.excerpts.
+//! The work queue and the pipeline: one job at a time on one worker thread, so only one heavy
+//! model is ever in memory. It holds processing a meeting, answering a question and the
+//! transcript excerpts a question is answered from.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};

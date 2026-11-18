@@ -1,4 +1,4 @@
-//! Meeting exports (backend/meetings/export.py): one builder per format, each returning the
+//! Meeting exports: one builder per format, each returning the
 //! bytes, the content type and any extra headers. Builders read only stored fields, so a meeting
 //! whose audio was deleted still exports.
 

@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Runs after `git checkout` / `git switch`. Clears out the Python backend an older checkout still
+# has on disk (see scripts/cleanup-old-backend.sh); silent and instant when there is none.
+#
+# Enable the repository's hooks once per checkout:
+#   git config core.hooksPath .githooks
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -d "$root/backend" ] || exit 0
+sh "$root/scripts/cleanup-old-backend.sh" || true

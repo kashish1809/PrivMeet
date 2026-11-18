@@ -74,13 +74,10 @@ function Assert-Docker {
 function Initialize-Env {
   if (Test-Path ".env") { return }
   if (-not (Test-Path ".env.example")) { Die "no .env.example here; run this from the PrivMeet checkout" }
-  $bytes = New-Object byte[] 48
-  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-  $key = [Convert]::ToBase64String($bytes)
   # LF endings and no BOM: compose would keep a stray \r or BOM in the values.
-  $text = (Get-Content ".env.example" -Raw) -replace "`r`n", "`n" -replace "(?m)^SECRET_KEY=.*$", "SECRET_KEY=$key"
+  $text = (Get-Content ".env.example" -Raw) -replace "`r`n", "`n"
   [System.IO.File]::WriteAllText((Join-Path $Root ".env"), $text, (New-Object System.Text.UTF8Encoding($false)))
-  Write-Host "Created .env with a new SECRET_KEY. Change POSTGRES_PASSWORD there if you like."
+  Write-Host "Created .env from .env.example. Every value in it is optional; edit it if you like."
 }
 
 function Test-Server {

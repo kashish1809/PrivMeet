@@ -1,5 +1,4 @@
-//! Who spoke when: sherpa-onnx (pyannote segmentation + speaker embeddings) through sherpa-rs,
-//! a port of backend/meetings/pipeline/diarize.py with the same models, threshold and fixes.
+//! Who spoke when: sherpa-onnx (pyannote segmentation + speaker embeddings) through sherpa-rs.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};

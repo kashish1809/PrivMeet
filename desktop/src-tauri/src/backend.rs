@@ -140,40 +140,16 @@ fn bundled_compose(app: &AppHandle, name: &str) -> Option<PathBuf> {
     dev.is_file().then_some(dev)
 }
 
-/// compose.yml requires SECRET_KEY via `${SECRET_KEY:?…}`, so write one on first start.
-/// A2.3 turns this file into the settings the user can edit.
+/// The compose file reads its settings from a `.env` beside it, and every one of them has a
+/// working default, so the first run only leaves an empty file for the user (and R2.19) to fill.
 fn ensure_env(dir: &Path) -> Result<(), String> {
     let path = dir.join(".env");
     if path.is_file() {
         return Ok(());
     }
-    let body = format!(
-        "# Written by PrivMeet on first start. Keep this file private.\n\
-         # Change SECRET_KEY to sign out of every session (there is no login, so it only\n\
-         # invalidates existing forms); the stack restarts with the new value.\n\
-         SECRET_KEY={}\n",
-        random_secret()
-    );
+    let body = "# PrivMeet's Docker settings. Written on first start; every value is optional.\n\
+                # The names are listed in .env.example in the PrivMeet repository.\n";
     std::fs::write(&path, body).map_err(|e| format!("Could not write {}: {e}", path.display()))
-}
-
-/// 50 hex characters from a time/pid seeded xorshift.
-// shortcut: a local-only secret for a single-user install; swap in a CSPRNG if PrivMeet ever
-// serves more than 127.0.0.1.
-fn random_secret() -> String {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0x9e37_79b9_7f4a_7c15);
-    let mut state = (nanos ^ ((std::process::id() as u64) << 32)) | 1;
-    (0..50)
-        .map(|_| {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            char::from_digit((state % 16) as u32, 16).unwrap_or('0')
-        })
-        .collect()
 }
 
 /// `docker compose -p privmeet -f compose.yml [-f compose.gpu.yml]`, run inside `dir`

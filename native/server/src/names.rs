@@ -1,5 +1,5 @@
 //! Names: the hint for Whisper, the corrector for near-miss spellings, and who each speaker is
-//! from the conversation. A port of backend/meetings/pipeline/names.py and tasks.known_names.
+//! from the conversation.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;

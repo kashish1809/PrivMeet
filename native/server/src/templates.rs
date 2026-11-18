@@ -1,4 +1,4 @@
-//! Note templates: what a meeting's summary should focus on (backend/meetings/note_templates.py).
+//! Note templates: what a meeting's summary should focus on.
 //! The six built-ins live here, read-only; own templates are rows of note_templates, id "u<pk>".
 
 use rusqlite::{Connection, OptionalExtension};

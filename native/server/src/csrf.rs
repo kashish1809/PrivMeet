@@ -1,4 +1,4 @@
-//! CSRF protection with Django's contract, which frontend/src/api.js relies on: a `csrftoken`
+//! CSRF protection, the contract frontend/src/api.js relies on: a `csrftoken`
 //! cookie set by GET /api/system/ (and the app page), sent back by the browser, and echoed by
 //! api.js in the X-CSRFToken header on every unsafe request. A page on another site cannot
 //! read the cookie, so it cannot forge the header.
@@ -32,7 +32,7 @@ pub fn new_token() -> String {
     uuid::Uuid::new_v4().simple().to_string()
 }
 
-/// Set the cookie on `resp` unless the request already had one (Django's ensure_csrf_cookie).
+/// Set the cookie on `resp` unless the request already had one.
 pub fn ensure_cookie(req_headers: &HeaderMap, resp: &mut Response) {
     if token_from(req_headers).is_some() {
         return;

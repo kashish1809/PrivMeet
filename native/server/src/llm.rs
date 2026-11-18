@@ -1,7 +1,6 @@
-//! Map-reduce summaries and transcript Q&A sized to small local models: a port of
-//! backend/meetings/pipeline/llm.py with the same prompts, budgets, parsing, de-duplication,
-//! grounding, summary check and citations. LangChain's role (templates, splitter, chat) is
-//! covered by plain functions here and providers::chat.
+//! Map-reduce summaries and transcript Q&A sized to small local models: the prompts, budgets,
+//! parsing, de-duplication, grounding, summary check and citations. Prompt templates, the text
+//! splitter and the chat call are plain functions here and in providers::chat.
 
 use std::collections::HashSet;
 use std::sync::OnceLock;

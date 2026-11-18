@@ -1,6 +1,6 @@
 //! Language models over HTTP: Ollama (the default, local) and the opt-in cloud providers
 //! (OpenAI, OpenRouter, Anthropic, Groq, Gemini, any OpenAI-compatible server), plus cloud
-//! transcription. A port of backend/meetings/pipeline/providers.py and llm.chat().
+//! transcription.
 
 use std::time::Duration;
 

@@ -1,6 +1,6 @@
 # PrivMeet HTTP API
 
-All endpoints are under `/api/`. The Rust server (`native/server`, routes in `src/web.rs`) answers them with JSON in the shapes the earlier Django backend used.
+All endpoints are under `/api/`. The server (`native/server`, routes in `src/web.rs`) answers them with JSON.
 
 **Writes and CSRF:**
 - Every write (`POST`, `PATCH`, `DELETE`) needs the `X-CSRFToken` header set to the `csrftoken` cookie. `GET /api/system/` sets that cookie.
@@ -41,7 +41,7 @@ Merges the keys you send into the saved settings and returns them all. Sending `
 | `default_template` | string | a template id (R1.9); `general` when unset |
 | `llm_model` | string | Ollama model name, `^[\w.\-/:]+$` |
 | `ollama_url` | string | `http://` or `https://` URL |
-| `whisper_model` | string | faster-whisper size or repo, `^[\w.\-/:]+$` |
+| `whisper_model` | string | Whisper size (`tiny`, `base`, `small`, `medium`, `large-v3-turbo`, `large-v3`), `^[\w.\-/:]+$` |
 | `num_ctx` | int | 512 to 131072 |
 | `diarize` | bool | |
 | `cpu_threads` | int | 1 to 256 |

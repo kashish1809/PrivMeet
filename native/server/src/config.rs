@@ -1,5 +1,5 @@
-//! Settings from the environment, with the same names and defaults as the Django backend
-//! (backend/privmeet/settings.py), so a deployment can switch servers without new config.
+//! Settings from the environment. Every value has a working default, so the server runs with
+//! no configuration at all; .env.example lists the names Docker Compose passes through.
 
 use std::path::PathBuf;
 
@@ -8,7 +8,7 @@ pub struct Config {
     /// Where to listen. Only loopback by default: there is no login (docs/TASKS.md, security).
     pub host: String,
     pub port: u16,
-    /// Host header values accepted (Django's ALLOWED_HOSTS), without the port.
+    /// Host header values accepted (the ALLOWED_HOSTS env var), without the port.
     pub allowed_hosts: Vec<String>,
     /// Origins allowed to send unsafe requests from another port (Vite's dev server).
     pub trusted_origins: Vec<String>,

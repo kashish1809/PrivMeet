@@ -32,12 +32,12 @@ pub type AppState = Arc<App>;
 /// built: the React app shows a control only when its flag is here.
 pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters", "templates", "models", "exports", "share-page", "exports-office", "exports-ics", "audio-exports", "summarize", "transcript-edit", "speaker-merge", "cancel", "language", "suggestions", "storage", "backup"];
 
-/// Built-in note template ids (backend/meetings/note_templates.py); own ones are "u<pk>".
+/// Built-in note template ids (templates.rs); own ones are "u<pk>".
 pub fn builtin_template(id: &str) -> bool {
     crate::templates::BUILTINS.iter().any(|b| b.id == id)
 }
 
-/// The error body every endpoint uses, as Django's bad(): {"error": "..."}; api.js shows it.
+/// The error body every endpoint uses: {"error": "..."}; api.js shows it.
 pub fn error(status: StatusCode, msg: impl Into<String>) -> Response {
     (status, Json(json!({ "error": msg.into() }))).into_response()
 }
@@ -135,7 +135,7 @@ pub fn router(app: App) -> Router {
 }
 
 /// GET /api/system/: the profile the next meeting will use, and the feature flags. Sets the
-/// CSRF cookie, as Django's ensure_csrf_cookie does: the app calls this first.
+/// CSRF cookie: the app calls this first.
 async fn system(State(app): State<AppState>, headers: HeaderMap) -> Response {
     let p = app.profile();
     let mut data = json!({
@@ -176,7 +176,7 @@ async fn settings_patch(State(app): State<AppState>, body: Bytes) -> Response {
     }
 }
 
-/// Refuse requests whose Host is not ours (Django's ALLOWED_HOSTS): a web page on another
+/// Refuse requests whose Host is not ours (ALLOWED_HOSTS): a web page on another
 /// site could otherwise reach this unauthenticated server through DNS rebinding.
 async fn allowed_host(State(app): State<AppState>, req: Request, next: Next) -> Response {
     let host = req
@@ -192,7 +192,7 @@ async fn allowed_host(State(app): State<AppState>, req: Request, next: Next) -> 
 }
 
 /// Every non-API path gets the React app's index.html (hash routing does the rest), with the
-/// CSRF cookie set, as Django's spa view does.
+/// CSRF cookie set, as every app page needs.
 async fn spa(State(app): State<AppState>, req: Request) -> Response {
     let index: PathBuf = app.cfg.frontend_dist.join("index.html");
     match tokio::fs::read(index).await {
