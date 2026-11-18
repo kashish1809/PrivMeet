@@ -469,6 +469,87 @@ pub async fn summarize(State(app): State<AppState>, UrlPath(id): UrlPath<String>
     Json(mt::to_json(&db, &m, false)).into_response()
 }
 
+/// PATCH /api/segments/<id>/: {"text"?, "speaker"?}. `speaker` is one of the meeting's
+/// speaker numbers (or the next new one) or null. 409 while the meeting is processing.
+pub async fn patch_segment(State(app): State<AppState>, UrlPath(id): UrlPath<i64>, body: Bytes) -> Response {
+    let data = match json_body(&body) {
+        Ok(Value::Object(o)) => o,
+        Ok(_) => return error(StatusCode::BAD_REQUEST, "Expected a JSON object."),
+        Err(r) => return r,
+    };
+    let db = app.db();
+    let row = db.query_row("SELECT meeting_id, speaker, text FROM segments WHERE id = ?1", [id], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, String>(2)?))
+    });
+    let Ok((mid, mut speaker, mut text)) = row else { return not_found() };
+    let Some(mut m) = mt::get(&db, &mid).ok().flatten() else { return not_found() };
+    mt::reap(&db, &mut m);
+    if mt::PROCESSING.contains(&m.status.as_str()) {
+        return error(StatusCode::CONFLICT, "Meeting is still processing.");
+    }
+    if let Some(v) = data.get("text") {
+        match mt::clean_segment_text(v) {
+            Ok(t) => text = t,
+            Err(e) => return error(StatusCode::BAD_REQUEST, e),
+        }
+    }
+    if let Some(v) = data.get("speaker") {
+        speaker = match v.as_i64().filter(|_| !v.is_boolean()) {
+            _ if v.is_null() => None,
+            Some(n) if mt::speaker_choices(&db, &m).contains(&n) => Some(n),
+            _ => return error(StatusCode::BAD_REQUEST, "speaker must be a speaker number of this meeting or null."),
+        };
+    }
+    if let Err(e) = db.execute("UPDATE segments SET text = ?2, speaker = ?3 WHERE id = ?1", params![id, text, speaker]) {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    let seg = db.query_row("SELECT id, start, end, speaker, text FROM segments WHERE id = ?1", [id], |r| {
+        Ok(mt::Segment { id: r.get(0)?, start: r.get(1)?, end: r.get(2)?, speaker: r.get(3)?, text: r.get(4)? })
+    });
+    match seg {
+        Ok(s) => Json(mt::segment_json(&s)).into_response(),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// POST /api/meetings/<id>/speakers/merge: {"from", "to"}. Every line of `from` goes to `to`
+/// and the name saved for `from` is dropped. Returns the full meeting.
+pub async fn merge_speakers(State(app): State<AppState>, UrlPath(id): UrlPath<String>, body: Bytes) -> Response {
+    let data = match json_body(&body) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    let num = |k: &str| data.get(k).filter(|v| !v.is_boolean()).and_then(Value::as_i64);
+    let (Some(from), Some(to)) = (num("from"), num("to")) else {
+        return error(StatusCode::BAD_REQUEST, "from and to must be speaker numbers.");
+    };
+    let Some(mut m) = load(&app, &id) else { return not_found() };
+    if mt::PROCESSING.contains(&m.status.as_str()) {
+        return error(StatusCode::CONFLICT, "Meeting is still processing.");
+    }
+    let db = app.db();
+    let choices = mt::speaker_choices(&db, &m);
+    let known = &choices[..choices.len() - 1]; // not the "new speaker" slot
+    if from == to || !known.contains(&from) || !known.contains(&to) {
+        return error(StatusCode::BAD_REQUEST, "from and to must be two different speakers of this meeting.");
+    }
+    if let Some(names) = m.speaker_names.as_object_mut() {
+        names.remove(&from.to_string());
+    }
+    let tx = match db.unchecked_transaction() {
+        Ok(t) => t,
+        Err(e) => return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    };
+    let done = tx
+        .execute("UPDATE segments SET speaker = ?3 WHERE meeting_id = ?1 AND speaker = ?2", params![m.id, from, to])
+        .and_then(|_| tx.execute("UPDATE meetings SET speaker_names = ?2 WHERE id = ?1", params![m.id, m.speaker_names.to_string()]))
+        .and_then(|_| tx.commit());
+    if let Err(e) = done {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    Json(mt::to_json(&db, &m, true)).into_response()
+}
+
 /// GET /api/tags/: every tag in use with its meeting count, most used first.
 pub async fn tags(State(app): State<AppState>) -> Response {
     let db = app.db();
