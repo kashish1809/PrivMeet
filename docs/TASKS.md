@@ -65,6 +65,7 @@ further down is kept only as the specification each was built to, and its headin
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 | **Backend in Rust** (beyond the task list) | Vinayak | `rust/migration` | `native/server` (`privmeet-server`) replaces Django, Celery, Redis and Postgres: the same `/api/` and twelve feature flags, the pipeline (whisper.cpp, sherpa-onnx, Ollama or cloud), `seed-demo`, `import-django`, `process-file`. Docker runs it as `web` beside `ollama`. The Django backend (`backend/`, `scripts/bench.py`) is deleted. Open backend tasks (R1.14–R1.20, T1.6, T2.6) are written for Rust. Results: `native/README.md`, `docs/BENCHMARKS.md`. |
 | **R1.14** regenerate summary | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `POST /api/meetings/<id>/summarize` with optional `{template}`: a `Summarize` job runs only the LLM stage on the stored transcript; 409 while processing or with no transcript; on failure the old notes stay and the status goes back; flag `summarize`. |
+| **R1.15** transcript edit + speaker merge | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | segments carry `id`; `PATCH /api/segments/<id>/` (`text` up to 2000 chars, `speaker` an existing number, the next new one or null); `POST /api/meetings/<id>/speakers/merge` `{from, to}`; both 409 while processing; flags `transcript-edit`, `speaker-merge`. |
 
 Everything in R1.x and R2.x that is not in the table above is open.
 
@@ -773,7 +774,7 @@ Built; the text below is the specification it was built to.
   - On failure the old summary stays.
 - **Done when:** a 10-min meeting gets a new summary in a fraction of the full pipeline time, and Whisper is never loaded (check the server log).
 
-#### R1.15 · Transcript edit + speaker merge
+#### R1.15 · Transcript edit + speaker merge — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.15-transcript-edit`
 - **Needs:** R1.7
 - **Files:** `native/server/src/api.rs`, `native/server/src/meetings.rs` (segment `id` in the JSON), `native/server/src/web.rs`, `docs/API.md`

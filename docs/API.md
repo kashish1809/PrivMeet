@@ -113,7 +113,7 @@ Returns 201 with the list row and queues processing. Errors:
 - 413: the file is too big.
 
 ### `GET /api/meetings/<id>/`
-The list row plus `notes`, `language`, `summary`, `decisions` (strings), `action_items` (`[{"owner", "task", "due", "done"}]`), `speaker_names` (`{"0": "Rohan"}`), `tier_used` and `segments` (`[{"start", "end", "speaker", "text"}]`). Poll it every 2 s while the status is in progress.
+The list row plus `notes`, `language`, `summary`, `decisions` (strings), `action_items` (`[{"owner", "task", "due", "done"}]`), `speaker_names` (`{"0": "Rohan"}`), `tier_used` and `segments` (`[{"id", "start", "end", "speaker", "text"}]`; `id` with flag `transcript-edit`). Poll it every 2 s while the status is in progress.
 
 ### `PATCH /api/meetings/<id>/`
 JSON with any of:
@@ -144,6 +144,21 @@ Returns the list row with status `summarizing`; poll the meeting until it is `do
 - 409: the meeting is still processing, or it has no transcript.
 
 On failure the old notes stay, the meeting goes back to the status it had, and `error` says why.
+
+### `PATCH /api/segments/<id>/` (flag `transcript-edit`)
+Edits one transcript line. JSON with any of:
+- `text`: trimmed, not empty, at most 2000 chars.
+- `speaker`: a speaker number of the meeting (in its transcript or `speaker_names`), the next
+  unused number (to give the line to a new person), or `null`.
+
+Returns the line `{"id", "start", "end", "speaker", "text"}`. Search and every export use the
+new text at once. 400 for an invalid value, 404 for an unknown id, 409 while the meeting is
+processing.
+
+### `POST /api/meetings/<id>/speakers/merge` (flag `speaker-merge`)
+`{"from": 2, "to": 0}`: every line of speaker `from` moves to `to`, and the name saved for
+`from` is dropped. Returns the full meeting. 400 unless both are different speakers of the
+meeting; 409 while it is processing.
 
 ### `GET /api/meetings/<id>/export.<fmt>`
 The meeting as a download named after its title. 404 for an unknown format.
