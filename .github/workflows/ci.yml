@@ -1,8 +1,6 @@
 # PrivMeet CI: runs on every push and pull request.
 #
 # server   the Rust server (native/server): build and unit tests.
-# backend  the legacy Django backend, kept for one release: system check plus a
-#          migration drift check on SQLite. Delete with backend/.
 # frontend production build of the Vite/React app, to prove it still compiles.
 #
 # API tests join with T1.6 and T2.6 (WT3.6). Image builds stay out of CI: they
@@ -36,27 +34,6 @@ jobs:
         with:
           workspaces: native/server
       - run: cargo test --release
-
-  backend:
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: backend
-    env:
-      # settings.py refuses the built-in key unless DEBUG=1, and CI never
-      # serves requests, so any non-default value is enough here.
-      SECRET_KEY: ci-only-not-a-real-secret
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: backend/requirements.txt
-      - run: pip install -r requirements.txt
-      - run: python manage.py check
-      # T1.1 is merged, so a model change without its migration now fails CI.
-      - run: python manage.py makemigrations --check --dry-run
 
   frontend:
     runs-on: ubuntu-24.04

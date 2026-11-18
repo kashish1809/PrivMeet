@@ -66,7 +66,7 @@ Respond like a caveman. No articles, no filler, no pleasantries. Short. Direct. 
 
 ## Project rules
 - **Low-end first.** The app must run on about 6 GB of RAM with no GPU, and use an NVIDIA GPU when one exists.
-  - Do not add PyTorch, transformers, websockets, a frontend router library, TypeScript or any UI kit. The backend is the Rust server in `native/server`; `backend/` (Django) is legacy for one release, do not build features there.
+  - Do not add PyTorch, transformers, websockets, a frontend router library, TypeScript or any UI kit. The backend is the Rust server in `native/server`.
   - The only allowed UI dependency is `lucide-react` for icons. Shared components live in `frontend/src/ui/`.
   - The desktop app is Tauri 2 in `desktop/`, never Electron. Its launcher page is plain HTML/JS.
   - Ask before adding any dependency. The Tauri plugins named in a task in `docs/TASKS.md` are already approved.
