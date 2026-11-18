@@ -29,7 +29,8 @@ jobs:
       - uses: actions/checkout@v4
       # bindgen needs clang; whisper.cpp builds with cmake
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang cmake
-      - uses: dtolnay/rust-toolchain@stable
+      # pinned: see native/server/rust-toolchain.toml
+      - uses: dtolnay/rust-toolchain@1.98.1
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: native/server

@@ -14,15 +14,16 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: the server. bindgen needs clang; whisper.cpp needs cmake.
-FROM rust:1-bookworm AS build-0
+# Stage 2: the server. bindgen needs clang; whisper.cpp needs cmake. Rust is pinned to
+# native/server/rust-toolchain.toml (sherpa-rs-sys breaks on newer Cargo build layouts).
+FROM rust:1.98.1-bookworm AS build-0
 RUN apt-get update && apt-get install -y --no-install-recommends clang cmake && rm -rf /var/lib/apt/lists/*
 ENV FEATURES=""
 
 FROM nvidia/cuda:12.6.3-devel-ubuntu24.04 AS build-1
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates build-essential clang cmake pkg-config \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal
+    && curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.1
 ENV PATH=/root/.cargo/bin:$PATH FEATURES="cuda"
 
 FROM build-${GPU} AS build
