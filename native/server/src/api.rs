@@ -170,6 +170,36 @@ mod tests {
         assert_eq!(d["speaker_suggestions"], json!({}));
     }
 
+    #[tokio::test]
+    async fn audio_can_go_and_the_meeting_stays() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "a1");
+        let up = dir.path().join("media/uploads");
+        std::fs::create_dir_all(&up).unwrap();
+        std::fs::write(up.join("a.wav"), vec![0u8; 4000]).unwrap();
+        std::fs::write(up.join("a.share.mp3"), vec![0u8; 1000]).unwrap();
+        std::fs::create_dir_all(dir.path().join("models/whisper-cpp")).unwrap();
+        std::fs::write(dir.path().join("models/whisper-cpp/ggml-base.bin"), vec![0u8; 3000]).unwrap();
+        let st = body_json(storage(State(app.clone())).await).await;
+        assert_eq!((st["audio"].as_u64(), st["models"].as_u64(), st["keep_audio"].as_bool()), (Some(5000), Some(3000), Some(true)));
+        assert!(st["database"].as_u64().unwrap() > 0 && st["free"].as_u64().unwrap() > 0);
+
+        let d = body_json(delete_audio(State(app.clone()), UrlPath("a1".to_string())).await).await;
+        assert_eq!((d["has_audio"].as_bool(), d["segments"].as_array().unwrap().len()), (Some(false), 2));
+        assert!(!up.join("a.wav").exists() && !up.join("a.share.mp3").exists());
+        let r = audio(State(app.clone()), UrlPath("a1".to_string()), HeaderMap::new()).await;
+        assert_eq!(r.status(), StatusCode::NOT_FOUND);
+        assert_eq!(retry(State(app.clone()), UrlPath("a1".to_string())).await.status(), StatusCode::CONFLICT);
+        // still searchable and exportable
+        let found = body_json(list(State(app.clone()), Query([("q".to_string(), "room".to_string())].into())).await).await;
+        assert_eq!(found["meetings"].as_array().unwrap().len(), 1);
+        let ex = download(State(app.clone()), UrlPath(("a1".to_string(), "export.srt".to_string()))).await;
+        assert_eq!(ex.status(), StatusCode::OK);
+        let mp3 = download(State(app.clone()), UrlPath(("a1".to_string(), "audio.mp3".to_string()))).await;
+        assert_eq!(mp3.status(), StatusCode::NOT_FOUND);
+    }
+
     #[test]
     fn dates_like_fromisoformat() {
         assert!(super::day("2026-10-28", "from").is_ok());
