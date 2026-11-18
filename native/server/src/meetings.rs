@@ -115,6 +115,39 @@ pub fn segments(db: &Connection, meeting: &str) -> rusqlite::Result<Vec<Segment>
     rows.collect()
 }
 
+/// A transcript line as the API returns it; `id` is what PATCH /api/segments/<id>/ takes.
+pub fn segment_json(s: &Segment) -> Value {
+    json!({"id": s.id, "start": s.start, "end": s.end, "speaker": s.speaker, "text": s.text})
+}
+
+/// Speaker numbers a line of this meeting may be given: the ones in its transcript or its
+/// saved names, plus one new number after them (to split a line off to a new person).
+pub fn speaker_choices(db: &Connection, m: &Meeting) -> Vec<i64> {
+    let mut nums: Vec<i64> = db
+        .prepare_cached("SELECT DISTINCT speaker FROM segments WHERE meeting_id = ?1 AND speaker IS NOT NULL")
+        .and_then(|mut st| st.query_map([&m.id], |r| r.get(0))?.collect())
+        .unwrap_or_default();
+    if let Some(names) = m.speaker_names.as_object() {
+        nums.extend(names.keys().filter_map(|k| k.parse::<i64>().ok()));
+    }
+    nums.sort_unstable();
+    nums.dedup();
+    nums.push(nums.last().map_or(0, |n| n + 1));
+    nums
+}
+
+/// Transcript text as an edit stores it: trimmed, not empty, at most 2000 characters.
+pub fn clean_segment_text(v: &Value) -> Result<String, String> {
+    let t = v.as_str().ok_or("text must be a string.")?.trim();
+    if t.is_empty() {
+        return Err("text cannot be empty.".into());
+    }
+    if t.chars().count() > 2000 {
+        return Err("text can be at most 2000 characters.".into());
+    }
+    Ok(t.to_string())
+}
+
 pub fn speaker_count(db: &Connection, meeting: &str) -> i64 {
     db.query_row(
         "SELECT count(DISTINCT speaker) FROM segments WHERE meeting_id = ?1 AND speaker IS NOT NULL",
@@ -136,7 +169,7 @@ pub fn to_json(db: &Connection, m: &Meeting, full: bool) -> Value {
         let segs: Vec<Value> = segments(db, &m.id)
             .unwrap_or_default()
             .into_iter()
-            .map(|s| json!({"start": s.start, "end": s.end, "speaker": s.speaker, "text": s.text}))
+            .map(|s| segment_json(&s))
             .collect();
         let extra = json!({
             "notes": m.notes, "language": m.language, "summary": m.summary, "decisions": m.decisions,
