@@ -16,7 +16,7 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 use crate::meetings::{self as mt, Meeting};
 use crate::web::{error, AppState};
-use crate::{audio, db, pipeline};
+use crate::{audio, db, export, pipeline};
 
 type Params = std::collections::HashMap<String, String>;
 
@@ -492,4 +492,65 @@ pub async fn ask(State(app): State<AppState>, UrlPath(id): UrlPath<String>, body
     };
     pipeline::enqueue_question(&app, qid);
     (StatusCode::CREATED, Json(out)).into_response()
+}
+
+fn attachment(name: &str) -> String {
+    format!("attachment; filename=\"{name}\"")
+}
+
+/// GET /api/meetings/<id>/export.<fmt> and /audio.<fmt>: the meeting or its recording as a
+/// download named after the title (views.meeting_export, views.meeting_audio_export).
+pub async fn download(State(app): State<AppState>, UrlPath((id, file)): UrlPath<(String, String)>) -> Response {
+    let Some((kind, fmt)) = file.split_once('.') else { return not_found() };
+    let Some(m) = load(&app, &id) else { return not_found() };
+    if kind == "audio" {
+        let Some((_, ctype)) = export::audio_format(fmt) else { return not_found() };
+        let src = app.cfg.media_root.join(&m.file);
+        let fmt2 = fmt.to_string();
+        let made = tokio::task::spawn_blocking(move || export::audio_copy(&src, &fmt2)).await.unwrap_or_else(|e| Err(e.to_string()));
+        return match made {
+            Ok(Some(path)) => match tokio::fs::File::open(&path).await {
+                Ok(f) => (
+                    [(header::CONTENT_TYPE, ctype.to_string()), (header::CONTENT_DISPOSITION, attachment(&export::filename(&m, fmt)))],
+                    Body::from_stream(tokio_util::io::ReaderStream::new(f)),
+                )
+                    .into_response(),
+                Err(_) => error(StatusCode::INTERNAL_SERVER_ERROR, "Could not convert the audio."),
+            },
+            Ok(None) => error(StatusCode::NOT_FOUND, "This meeting's audio was deleted."),
+            Err(e) => {
+                eprintln!("audio export of {id} failed: {e}");
+                error(StatusCode::INTERNAL_SERVER_ERROR, "Could not convert the audio.")
+            }
+        };
+    }
+    if kind != "export" {
+        return not_found();
+    }
+    let (segs, full) = {
+        let db = app.db();
+        (mt::segments(&db, &m.id).unwrap_or_default(), if fmt == "json" { mt::to_json(&db, &m, true) } else { Value::Null })
+    };
+    let out = match fmt {
+        "md" => export::markdown(&m, &segs),
+        "txt" => export::plain_text(&m, &segs),
+        "json" => export::as_json(&full),
+        "srt" => export::srt(&m, &segs),
+        "vtt" => export::vtt(&m, &segs),
+        "html" => export::share_html(&m, &segs),
+        "docx" => export::docx(&m, &segs),
+        "odt" => export::odt(&m, &segs),
+        "ics" => match export::ics(&m) {
+            Ok(e) => e,
+            Err(export::NoDates) => return error(StatusCode::NOT_FOUND, "No action item has a date."),
+        },
+        _ => return not_found(),
+    };
+    let mut resp = ([(header::CONTENT_TYPE, out.ctype.to_string()), (header::CONTENT_DISPOSITION, attachment(&export::filename(&m, fmt)))], out.body).into_response();
+    for (k, v) in out.headers {
+        if let Ok(v) = v.parse() {
+            resp.headers_mut().insert(k, v);
+        }
+    }
+    resp
 }

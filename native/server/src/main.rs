@@ -9,6 +9,7 @@ mod config;
 mod csrf;
 mod db;
 mod diarize;
+mod export;
 mod hw;
 mod llm;
 mod meetings;
