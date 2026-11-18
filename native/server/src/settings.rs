@@ -51,6 +51,7 @@ const SCHEMA: &[(&str, Kind)] = &[
     ("gemini_model", Kind::Model),
     ("cloud_transcribe", Kind::Bool),
     ("cloud_transcribe_model", Kind::Model),
+    ("keep_audio", Kind::Bool),
 ];
 
 /// Never sent back to the browser: GET /api/settings/ says only whether one is saved.

@@ -64,6 +64,13 @@ further down is kept only as the specification each was built to, and its headin
 | **R2.6** Share menu | Kashish | `v2/kashish/R2.6-share-menu` | `ShareMenu.jsx`: "Copy summary" pastes the title, date, summary, key points and action items as plain text, "Copy link" says it opens only on this computer, "Share…" where `navigator.share` exists, and the `.html` share page behind `share-page`; the trigger confirms with "Copied summary" / "Copied link" for 2.5 s. **Not built:** the copied link is a localhost address, so "Copy link" is only useful on this machine. |
 | Themes and scenes (beyond the task list) | Vinayak | `feat/hero-clouds-themes` | the hero's cloud sea rebuilt; Sakura, Pine, Dawn, Glacier; Neon Drive and Meadow with renderers of their own; the custom theme and its editor; Home's greeting |
 | **Backend in Rust** (beyond the task list) | Vinayak | `rust/migration` | `native/server` (`privmeet-server`) replaces Django, Celery, Redis and Postgres: the same `/api/` and twelve feature flags, the pipeline (whisper.cpp, sherpa-onnx, Ollama or cloud), `seed-demo`, `import-django`, `process-file`. Docker runs it as `web` beside `ollama`. The Django backend (`backend/`, `scripts/bench.py`) is deleted. Open backend tasks (R1.14–R1.20, T1.6, T2.6) are written for Rust. Results: `native/README.md`, `docs/BENCHMARKS.md`. |
+| **R1.14** regenerate summary | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `POST /api/meetings/<id>/summarize` with optional `{template}`: a `Summarize` job runs only the LLM stage on the stored transcript; 409 while processing or with no transcript; on failure the old notes stay and the status goes back; flag `summarize`. |
+| **R1.15** transcript edit + speaker merge | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | segments carry `id`; `PATCH /api/segments/<id>/` (`text` up to 2000 chars, `speaker` an existing number, the next new one or null); `POST /api/meetings/<id>/speakers/merge` `{from, to}`; both 409 while processing; flags `transcript-edit`, `speaker-merge`. |
+| **R1.16** cancel + queue position | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `cancel_requested` (migration 3); `POST /api/meetings/<id>/cancel` (409 unless processing): a queued meeting fails "Cancelled." at once, the running one at its next stage check or through whisper.cpp's abort callback / sherpa's progress callback; retry clears it; list rows add `queue_position`; flag `cancel`. |
+| **R1.17** language + translate | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | upload `language` (ISO code, empty = detect, 400 for an unknown one) and `translate` (`1` = English), stored as `language_hint` / `translate` (migration 4); whisper.cpp `set_language` / `set_translate`, cloud `/audio/translations`; flag `language`. Checked with the Hindi test clip both ways. |
+| **R1.18** auto title + speaker suggestions | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | the same summary call returns `title` and `speakers`; `auto_title` (set by an untitled upload, cleared by a title PATCH) lets the title replace the file name; `speaker_suggestions` (migration 5) from the inferred names and the model's, kept only when the name was said, never written to `speaker_names`; flag `suggestions`. Checked on the test meeting with Groq and qwen2.5:1.5b. |
+| **R1.19** storage + audio retention | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `GET /api/storage/` (recordings, models, database, free disk; matched `du -b` exactly), `DELETE /api/meetings/<id>/audio` (notes, transcript, search and exports stay; audio 404, retry 409), `has_audio` on every row, settings key `keep_audio`, a Storage card on the Models page; flag `storage`. |
+| **R1.20** backup + restore | Vinayak | `v2/vinayak/R1.14-R1.22-backend-features` | `native/server/src/backup.rs`: `GET /api/backup.zip?audio=0\|1` (meetings, transcripts, questions, own templates, settings without API keys; zip via `export::zip`), `POST /api/restore` with a small stored-zip reader (refuses `../`, absolute, backslash and compressed members; CRC checked; fresh file names; every field validated; existing meetings skipped); "Your data" in Settings → General; flag `backup`. **Shortcut:** the backup zip is built in memory. |
 
 Everything in R1.x and R2.x that is not in the table above is open.
 
@@ -761,7 +768,7 @@ Built; the text below is the specification it was built to.
   - the `.ics` imports into Google Calendar with the right due dates;
   - the MP3 and Opus play in the browser and in VLC.
 
-#### R1.14 · Regenerate summary
+#### R1.14 · Regenerate summary — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.14-resummarize`
 - **Needs:** R1.7
 - **Files:** `native/server/src/pipeline.rs` (a summarize job), `native/server/src/api.rs`, `native/server/src/web.rs` (route, `FEATURES`), `docs/API.md`
@@ -772,7 +779,7 @@ Built; the text below is the specification it was built to.
   - On failure the old summary stays.
 - **Done when:** a 10-min meeting gets a new summary in a fraction of the full pipeline time, and Whisper is never loaded (check the server log).
 
-#### R1.15 · Transcript edit + speaker merge
+#### R1.15 · Transcript edit + speaker merge — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.15-transcript-edit`
 - **Needs:** R1.7
 - **Files:** `native/server/src/api.rs`, `native/server/src/meetings.rs` (segment `id` in the JSON), `native/server/src/web.rs`, `docs/API.md`
@@ -783,7 +790,7 @@ Built; the text below is the specification it was built to.
   - 409 while the meeting is processing.
 - **Done when:** an edited line shows in search and in the exports, and merging two speakers leaves one name in the transcript.
 
-#### R1.16 · Cancel + queue position
+#### R1.16 · Cancel + queue position — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.16-cancel-queue`
 - **Needs:** R1.7
 - **Files:** `native/server/src/db.rs` (next migration), `native/server/src/meetings.rs`, `native/server/src/pipeline.rs`, `native/server/src/stt.rs`, `native/server/src/api.rs`, `native/server/src/web.rs`, `docs/API.md`
@@ -794,7 +801,7 @@ Built; the text below is the specification it was built to.
   - List rows add `queue_position`: how many queued meetings are ahead (null when not queued).
 - **Done when:** cancelling during transcription stops the pipeline within a few seconds, and the next queued meeting starts.
 
-#### R1.17 · Language + translate
+#### R1.17 · Language + translate — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.17-language`
 - **Needs:** R1.7
 - **Files:** `native/server/src/db.rs` (next migration), `native/server/src/meetings.rs`, `native/server/src/stt.rs`, `native/server/src/pipeline.rs`, `native/server/src/api.rs`, `native/server/src/web.rs`, `docs/API.md`
@@ -804,7 +811,7 @@ Built; the text below is the specification it was built to.
   - Reject an unknown code with 400.
 - **Done when:** a Hindi clip uploaded with `language=hi` is transcribed in Hindi, and with `translate=1` in English.
 
-#### R1.18 · Auto title + speaker name suggestions
+#### R1.18 · Auto title + speaker name suggestions — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.18-llm-suggestions`
 - **Needs:** T1.3, R1.7
 - **Files:** `native/server/src/db.rs` (next migration), `native/server/src/meetings.rs`, `native/server/src/llm.rs`, `native/server/src/pipeline.rs`, `native/server/src/api.rs`, `native/server/src/web.rs`, `docs/API.md`
@@ -815,7 +822,7 @@ Built; the text below is the specification it was built to.
   - Bad or missing keys are ignored; the summary must not fail because of them.
 - **Done when:** a recording where people use each other's names gets correct suggestions on the mid tier, and an untitled upload gets a sensible title.
 
-#### R1.19 · Storage + audio retention
+#### R1.19 · Storage + audio retention — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.19-storage`
 - **Needs:** R1.7, R1.12
 - **Files:** `native/server/src/api.rs`, `native/server/src/web.rs`, `native/server/src/pipeline.rs`, `native/server/src/settings.rs`, `native/server/src/models.rs`, `docs/API.md`, `frontend/src/pages/Models.jsx`
@@ -826,7 +833,7 @@ Built; the text below is the specification it was built to.
   - A Storage card on the Models page with the numbers and the `keep_audio` switch.
 - **Done when:** the numbers match `du` within a few percent, and a meeting without audio still opens, searches and exports.
 
-#### R1.20 · Backup + restore
+#### R1.20 · Backup + restore — **DONE** (see "Finished tasks")
 - **Branch:** `v2/vinayak/R1.20-backup`
 - **Needs:** R1.7, U1.5
 - **Files:** `native/server/src/backup.rs` (new), `native/server/src/api.rs`, `native/server/src/web.rs`, `docs/API.md`, `frontend/src/pages/Settings.jsx`
@@ -839,7 +846,11 @@ Built; the text below is the specification it was built to.
 - **Done when:** a backup restored into an empty database gives the same meetings, transcripts and notes, and a zip with a `../` path is rejected.
 
 
-#### R1.22 · Rust pipeline speed: match or beat Python
+#### R1.22 · Rust pipeline speed: match or beat Python (in progress)
+- **Progress (2026-11-18, `v2/vinayak/R1.14-R1.22-backend-features`):** diarization on
+  `cpu_threads` (46 -> 30 s), 8-bit Whisper files and Silero VAD (transcription 36 -> 25–30 s,
+  WER +0.3, silence skipped); a whole meeting ~65 s against Python's ~51 s. Diarization is the
+  remaining gap. Table in `docs/BENCHMARKS.md`.
 - **Branch:** `v2/vinayak/R1.22-rust-speed`
 - **Needs:** the Rust backend (`rust/migration`)
 - **Files:** `native/server/src/stt.rs`, `native/server/src/diarize.rs`, `native/server/src/hw.rs`, `native/server/Cargo.toml` (ask before a new crate), `docs/BENCHMARKS.md`

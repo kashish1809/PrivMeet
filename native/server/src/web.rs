@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use tower_http::services::ServeDir;
 
 use crate::config::Config;
-use crate::{api, csrf, db, hw, models, pipeline, settings, templates};
+use crate::{api, backup, csrf, db, hw, models, pipeline, settings, templates};
 
 /// What every request can reach: configuration, the database and the hardware (read once).
 pub struct App {
@@ -30,7 +30,7 @@ pub type AppState = Arc<App>;
 
 /// What this server supports beyond the v1 API (docs/TASKS.md "Feature flags"). Only what is
 /// built: the React app shows a control only when its flag is here.
-pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters", "templates", "models", "exports", "share-page", "exports-office", "exports-ics", "audio-exports"];
+pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters", "templates", "models", "exports", "share-page", "exports-office", "exports-ics", "audio-exports", "summarize", "transcript-edit", "speaker-merge", "cancel", "language", "suggestions", "storage", "backup"];
 
 /// Built-in note template ids (backend/meetings/note_templates.py); own ones are "u<pk>".
 pub fn builtin_template(id: &str) -> bool {
@@ -105,9 +105,19 @@ pub fn router(app: App) -> Router {
             get(api::list).post(api::create).layer(axum::extract::DefaultBodyLimit::max(upload_limit)),
         )
         .route("/meetings/{id}/", get(api::detail).patch(api::patch).delete(api::delete))
-        .route("/meetings/{id}/audio", get(api::audio))
+        .route("/meetings/{id}/audio", get(api::audio).delete(api::delete_audio))
+        .route("/storage/", get(api::storage))
+        .route("/backup.zip", get(backup::backup))
+        .route(
+            "/restore",
+            axum::routing::post(backup::restore_upload).layer(axum::extract::DefaultBodyLimit::max(upload_limit.saturating_mul(4))),
+        )
         .route("/meetings/{id}/retry", axum::routing::post(api::retry))
         .route("/meetings/{id}/ask", axum::routing::post(api::ask))
+        .route("/meetings/{id}/summarize", axum::routing::post(api::summarize))
+        .route("/meetings/{id}/cancel", axum::routing::post(api::cancel))
+        .route("/meetings/{id}/speakers/merge", axum::routing::post(api::merge_speakers))
+        .route("/segments/{id}/", axum::routing::patch(api::patch_segment))
         .route("/meetings/{id}/{file}", get(api::download))
         .route("/questions/{id}/", get(api::question))
         .route("/templates/", get(templates::list).post(templates::create))
@@ -197,5 +207,38 @@ async fn spa(State(app): State<AppState>, req: Request) -> Response {
             "Frontend not built. Run `npm run build` in frontend/ or use the Vite dev server.",
         )
             .into_response(),
+    }
+}
+
+/// An app on a temporary DATA_DIR with no pipeline thread: queued jobs go nowhere, so a test
+/// sees exactly the state a handler left.
+#[cfg(test)]
+pub fn test_app(dir: &std::path::Path) -> AppState {
+    let cfg = Config {
+        host: "127.0.0.1".into(),
+        port: 0,
+        allowed_hosts: vec!["127.0.0.1".into()],
+        trusted_origins: vec![],
+        data_dir: dir.to_path_buf(),
+        media_root: dir.join("media"),
+        models_dir: dir.join("models"),
+        frontend_dist: dir.join("dist"),
+        max_upload_mb: 5,
+        ollama_url: "http://127.0.0.1:9".into(), // nothing listens: LLM calls fail at once
+    };
+    Arc::new(App::new(cfg).expect("test app"))
+}
+
+/// A done meeting with two transcript lines and a summary, for tests.
+#[cfg(test)]
+pub fn test_meeting(app: &App, id: &str) {
+    let db = app.db();
+    db.execute(
+        "INSERT INTO meetings (id, title, file, status, progress, summary, created, heartbeat) VALUES (?1, 'Sync', 'uploads/a.wav', 'done', 100, 'Old summary', ?2, ?2)",
+        rusqlite::params![id, db::now_iso()],
+    )
+    .unwrap();
+    for (start, speaker, text) in [(0.0, 0, "Hello Rohan, can you book the room?"), (4.0, 1, "Yes Asha, I will book it.")] {
+        db.execute("INSERT INTO segments (meeting_id, start, end, speaker, text) VALUES (?1, ?2, ?3, ?4, ?5)", rusqlite::params![id, start, start + 3.0, speaker, text]).unwrap();
     }
 }

@@ -18,9 +18,10 @@ use crate::hw::{self, Profile};
 use crate::web::{error, App, AppState};
 use crate::{diarize, providers, settings, stt};
 
-/// (name, RAM it needs in GB, download size in MB): hw.WHISPER_SIZES.
+/// (name, RAM it needs in GB, download size in MB): hw.WHISPER_SIZES. Downloads are the 8-bit
+/// files local transcription uses (stt::preferred_name); large-v3 has only the full one.
 pub const WHISPER_SIZES: &[(&str, f64, i64)] =
-    &[("tiny", 0.5, 75), ("base", 0.7, 145), ("small", 1.2, 485), ("medium", 2.5, 1530), ("large-v3-turbo", 2.2, 1620), ("large-v3", 3.8, 3090)];
+    &[("tiny", 0.5, 42), ("base", 0.7, 78), ("small", 1.2, 252), ("medium", 2.5, 785), ("large-v3-turbo", 2.2, 834), ("large-v3", 3.8, 3090)];
 
 /// Seconds without an update after which a pull counts as dead (tasks.PULL_STALE_AFTER).
 const PULL_STALE_AFTER: f64 = 120.0;
@@ -125,7 +126,7 @@ pub async fn models(State(app): State<AppState>) -> Response {
         let installed = ollama_models(&providers::ollama_url(&p));
         let sizes: Vec<Value> = WHISPER_SIZES
             .iter()
-            .map(|(n, ram, mb)| json!({"name": n, "ram_gb": ram, "download_mb": mb, "downloaded": stt::model_path(&app.cfg.models_dir, n).is_file()}))
+            .map(|(n, ram, mb)| json!({"name": n, "ram_gb": ram, "download_mb": mb, "downloaded": stt::downloaded(&app.cfg.models_dir, n)}))
             .collect();
         json!({
             "hardware": {"tier": hw_tier, "ram_gb": p.ram_gb, "device": p.device, "gpu": p.cuda, "cuda_error": hw::cuda_error(&app.cfg.data_dir)},

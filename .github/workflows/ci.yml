@@ -34,6 +34,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: native/server
+          # sherpa-rs-sys downloads onnxruntime and sherpa-onnx here; a target/ restored
+          # without it skips the download and the link fails (-lonnxruntime not found)
+          cache-directories: ~/.cache/sherpa-rs
+          key: sherpa
       - run: cargo test --release
 
   frontend:

@@ -57,6 +57,149 @@ fn day(v: &str, name: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::web::{test_app, test_meeting};
+
+    fn status_of(r: Response) -> StatusCode {
+        r.status()
+    }
+
+    #[tokio::test]
+    async fn summarize_checks_state_and_queues() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "m1");
+        let call = |id: &str, body: &str| summarize(State(app.clone()), UrlPath(id.to_string()), Bytes::from(body.to_string()));
+        assert_eq!(status_of(call("nope", "").await), StatusCode::NOT_FOUND);
+        assert_eq!(status_of(call("m1", r#"{"template": "zzz"}"#).await), StatusCode::BAD_REQUEST);
+        assert_eq!(status_of(call("m1", r#"{"template": "standup"}"#).await), StatusCode::OK);
+        assert_eq!(mt::get(&app.db(), "m1").unwrap().unwrap().status, "summarizing");
+        assert_eq!(status_of(call("m1", "").await), StatusCode::CONFLICT); // already running
+        app.db().execute("UPDATE meetings SET status = 'done'", []).unwrap();
+        app.db().execute("DELETE FROM segments", []).unwrap();
+        assert_eq!(status_of(call("m1", "").await), StatusCode::CONFLICT); // no transcript
+    }
+
+    #[test]
+    fn failed_summary_keeps_the_old_notes() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "m1");
+        app.db().execute("UPDATE meetings SET status = 'summarizing'", []).unwrap();
+        pipeline::summarize_meeting(&app, "m1", None, "done"); // Ollama at :9 refuses
+        let m = mt::get(&app.db(), "m1").unwrap().unwrap();
+        assert_eq!((m.status.as_str(), m.summary.as_str()), ("done", "Old summary"));
+        assert!(m.error.starts_with("Could not regenerate the summary"), "{}", m.error);
+    }
+
+    async fn body_json(r: Response) -> Value {
+        let bytes = axum::body::to_bytes(r.into_body(), 1 << 20).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test]
+    async fn edited_line_reaches_search_and_exports() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "m1");
+        let first = mt::segments(&app.db(), "m1").unwrap()[0].id;
+        let edit = |id: i64, body: &str| patch_segment(State(app.clone()), UrlPath(id), Bytes::from(body.to_string()));
+        assert_eq!(edit(9999, "{}").await.status(), StatusCode::NOT_FOUND);
+        assert_eq!(edit(first, r#"{"text": "  "}"#).await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(edit(first, &format!(r#"{{"text": "{}"}}"#, "x".repeat(2001))).await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(edit(first, r#"{"speaker": 7}"#).await.status(), StatusCode::BAD_REQUEST);
+        let r = edit(first, r#"{"text": "Hello Rohan, can you book the marquee?", "speaker": 2}"#).await;
+        assert_eq!(r.status(), StatusCode::OK);
+        let j = body_json(r).await;
+        assert_eq!((j["id"].as_i64(), j["speaker"].as_i64()), (Some(first), Some(2))); // 2 = a new speaker
+        let found = body_json(list(State(app.clone()), Query([("q".to_string(), "marquee".to_string())].into())).await).await;
+        assert_eq!(found["meetings"][0]["hits"][0]["text"], "Hello Rohan, can you book the marquee?");
+        let m = mt::get(&app.db(), "m1").unwrap().unwrap();
+        let md = String::from_utf8(export::markdown(&m, &mt::segments(&app.db(), "m1").unwrap()).body.to_vec()).unwrap();
+        assert!(md.contains("marquee"));
+        app.db().execute("UPDATE meetings SET status = 'transcribing'", []).unwrap();
+        assert_eq!(edit(first, r#"{"text": "x"}"#).await.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn merge_leaves_one_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "m1");
+        app.db().execute(r#"UPDATE meetings SET speaker_names = '{"0": "Asha", "1": "Rohan"}'"#, []).unwrap();
+        let merge = |body: &str| merge_speakers(State(app.clone()), UrlPath("m1".to_string()), Bytes::from(body.to_string()));
+        assert_eq!(merge(r#"{"from": 1, "to": 1}"#).await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(merge(r#"{"from": 1, "to": 5}"#).await.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(merge(r#"{"from": "1"}"#).await.status(), StatusCode::BAD_REQUEST);
+        let j = body_json(merge(r#"{"from": 1, "to": 0}"#).await).await;
+        assert_eq!(j["speaker_names"], json!({"0": "Asha"}));
+        assert!(j["segments"].as_array().unwrap().iter().all(|s| s["speaker"] == 0));
+        assert_eq!(j["speakers"], 1);
+    }
+
+    #[tokio::test]
+    async fn cancel_waiting_meeting_and_retry() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "c1");
+        let stop = || cancel(State(app.clone()), UrlPath("c1".to_string()));
+        assert_eq!(stop().await.status(), StatusCode::CONFLICT); // done: nothing to stop
+        app.db().execute("UPDATE meetings SET status = 'queued'", []).unwrap();
+        let j = body_json(stop().await).await;
+        assert_eq!((j["status"].as_str(), j["error"].as_str(), &j["queue_position"]), (Some("failed"), Some("Cancelled."), &Value::Null));
+        assert!(mt::cancel_requested(&app.db(), "c1"));
+        assert_eq!(retry(State(app.clone()), UrlPath("c1".to_string())).await.status(), StatusCode::OK);
+        assert!(!mt::cancel_requested(&app.db(), "c1"));
+    }
+
+    #[tokio::test]
+    async fn suggestions_hide_named_speakers_and_title_sticks() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "s1");
+        app.db().execute(r#"UPDATE meetings SET auto_title = 1, speaker_suggestions = '{"0": "Asha", "1": "Rohan"}'"#, []).unwrap();
+        let d = body_json(detail(State(app.clone()), UrlPath("s1".to_string())).await).await;
+        assert_eq!(d["speaker_suggestions"], json!({"0": "Asha", "1": "Rohan"}));
+        let p = |body: &str| patch(State(app.clone()), UrlPath("s1".to_string()), Bytes::from(body.to_string()));
+        let d = body_json(p(r#"{"speaker_names": {"1": "Rohan"}}"#).await).await;
+        assert_eq!(d["speaker_suggestions"], json!({"0": "Asha"})); // accepted: no longer offered
+        assert!(mt::get(&app.db(), "s1").unwrap().unwrap().auto_title);
+        p(r#"{"title": "My name"}"#).await;
+        assert!(!mt::get(&app.db(), "s1").unwrap().unwrap().auto_title);
+        let d = body_json(merge_speakers(State(app.clone()), UrlPath("s1".to_string()), Bytes::from(r#"{"from": 0, "to": 1}"#)).await).await;
+        assert_eq!(d["speaker_suggestions"], json!({}));
+    }
+
+    #[tokio::test]
+    async fn audio_can_go_and_the_meeting_stays() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        test_meeting(&app, "a1");
+        let up = dir.path().join("media/uploads");
+        std::fs::create_dir_all(&up).unwrap();
+        std::fs::write(up.join("a.wav"), vec![0u8; 4000]).unwrap();
+        std::fs::write(up.join("a.share.mp3"), vec![0u8; 1000]).unwrap();
+        std::fs::create_dir_all(dir.path().join("models/whisper-cpp")).unwrap();
+        std::fs::write(dir.path().join("models/whisper-cpp/ggml-base.bin"), vec![0u8; 3000]).unwrap();
+        let st = body_json(storage(State(app.clone())).await).await;
+        assert_eq!((st["audio"].as_u64(), st["models"].as_u64(), st["keep_audio"].as_bool()), (Some(5000), Some(3000), Some(true)));
+        assert!(st["database"].as_u64().unwrap() > 0 && st["free"].as_u64().unwrap() > 0);
+
+        let d = body_json(delete_audio(State(app.clone()), UrlPath("a1".to_string())).await).await;
+        assert_eq!((d["has_audio"].as_bool(), d["segments"].as_array().unwrap().len()), (Some(false), 2));
+        assert!(!up.join("a.wav").exists() && !up.join("a.share.mp3").exists());
+        let r = audio(State(app.clone()), UrlPath("a1".to_string()), HeaderMap::new()).await;
+        assert_eq!(r.status(), StatusCode::NOT_FOUND);
+        assert_eq!(retry(State(app.clone()), UrlPath("a1".to_string())).await.status(), StatusCode::CONFLICT);
+        // still searchable and exportable
+        let found = body_json(list(State(app.clone()), Query([("q".to_string(), "room".to_string())].into())).await).await;
+        assert_eq!(found["meetings"].as_array().unwrap().len(), 1);
+        let ex = download(State(app.clone()), UrlPath(("a1".to_string(), "export.srt".to_string()))).await;
+        assert_eq!(ex.status(), StatusCode::OK);
+        let mp3 = download(State(app.clone()), UrlPath(("a1".to_string(), "audio.mp3".to_string()))).await;
+        assert_eq!(mp3.status(), StatusCode::NOT_FOUND);
+    }
+
     #[test]
     fn dates_like_fromisoformat() {
         assert!(super::day("2026-10-28", "from").is_ok());
@@ -233,7 +376,8 @@ pub async fn create(State(app): State<AppState>, headers: HeaderMap, mut form: M
     }
     let Some(path) = stored else { return error(StatusCode::BAD_REQUEST, "No file uploaded.") };
     let stem = Path::new(&name).file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-    let title: String = fields.get("title").filter(|t| !t.is_empty()).cloned().unwrap_or(stem).chars().take(200).collect();
+    let auto_title = fields.get("title").is_none_or(|t| t.trim().is_empty());
+    let title: String = fields.get("title").filter(|t| !t.trim().is_empty()).cloned().unwrap_or(stem).chars().take(200).collect();
     let notes = match mt::clean_notes(&json!(fields.get("notes").cloned().unwrap_or_default())) {
         Ok(n) => n,
         Err(e) => return error(StatusCode::BAD_REQUEST, e),
@@ -241,6 +385,11 @@ pub async fn create(State(app): State<AppState>, headers: HeaderMap, mut form: M
     let tags = match mt::clean_tags(&json!(fields.get("tags").cloned().unwrap_or_default())) {
         Ok(t) => t,
         Err(e) => return error(StatusCode::BAD_REQUEST, e),
+    };
+    let field = |k: &str| fields.get(k).map(String::as_str).unwrap_or("");
+    let (language, translate) = match (mt::clean_language(field("language")), mt::clean_flag(field("translate"), "translate")) {
+        (Ok(l), Ok(t)) => (l, t),
+        (Err(e), _) | (_, Err(e)) => return error(StatusCode::BAD_REQUEST, e),
     };
     let template = fields.get("template").map(|t| t.trim().to_string()).unwrap_or_default();
     if !template.is_empty() && !app.template_exists(&template) {
@@ -258,8 +407,9 @@ pub async fn create(State(app): State<AppState>, headers: HeaderMap, mut form: M
     let m = {
         let db = app.db();
         let ok = db.execute(
-            "INSERT INTO meetings (id, title, file, duration, notes, tags, template, created, heartbeat) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
-            params![id, title, rel, duration, notes, Value::from(tags).to_string(), template, now],
+            "INSERT INTO meetings (id, title, file, duration, notes, tags, template, created, heartbeat, language_hint, translate, auto_title) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9, ?10, ?11)",
+            params![id, title, rel, duration, notes, Value::from(tags).to_string(), template, now, language, translate, auto_title],
         );
         if let Err(e) = ok {
             return error(StatusCode::INTERNAL_SERVER_ERROR, format!("Cannot save the meeting: {e}"));
@@ -288,6 +438,7 @@ pub async fn patch(State(app): State<AppState>, UrlPath(id): UrlPath<String>, bo
     };
     if let Some(t) = data.get("title").and_then(Value::as_str).map(str::trim).filter(|t| !t.is_empty()) {
         m.title = t.chars().take(200).collect();
+        m.auto_title = false; // the user named it: a new summary never renames it again
     }
     if let Some(v) = data.get("notes") {
         match mt::clean_notes(v) {
@@ -318,8 +469,8 @@ pub async fn patch(State(app): State<AppState>, UrlPath(id): UrlPath<String>, bo
     }
     let db = app.db();
     let r = db.execute(
-        "UPDATE meetings SET title = ?2, notes = ?3, tags = ?4, speaker_names = ?5, action_items = ?6, heartbeat = ?7 WHERE id = ?1",
-        params![m.id, m.title, m.notes, m.tags.to_string(), m.speaker_names.to_string(), m.action_items.to_string(), db::now_iso()],
+        "UPDATE meetings SET title = ?2, notes = ?3, tags = ?4, speaker_names = ?5, action_items = ?6, heartbeat = ?7, auto_title = ?8 WHERE id = ?1",
+        params![m.id, m.title, m.notes, m.tags.to_string(), m.speaker_names.to_string(), m.action_items.to_string(), db::now_iso(), m.auto_title],
     );
     if let Err(e) = r {
         return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
@@ -330,19 +481,7 @@ pub async fn patch(State(app): State<AppState>, UrlPath(id): UrlPath<String>, bo
 /// DELETE /api/meetings/<id>/: the row, its transcript and the file with its shared copies.
 pub async fn delete(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
     let Some(m) = load(&app, &id) else { return not_found() };
-    if !m.file.is_empty() {
-        let src = app.cfg.media_root.join(&m.file);
-        if let (Some(dir), Some(stem)) = (src.parent(), src.file_stem().and_then(|s| s.to_str())) {
-            if let Ok(entries) = std::fs::read_dir(dir) {
-                for e in entries.flatten() {
-                    if e.file_name().to_string_lossy().starts_with(&format!("{stem}.share.")) {
-                        let _ = std::fs::remove_file(e.path());
-                    }
-                }
-            }
-        }
-        let _ = std::fs::remove_file(src);
-    }
+    mt::remove_audio(&app.cfg.media_root, &m.file);
     let _ = app.db().execute("DELETE FROM meetings WHERE id = ?1", [&m.id]);
     StatusCode::NO_CONTENT.into_response()
 }
@@ -350,6 +489,9 @@ pub async fn delete(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -
 /// GET /api/meetings/<id>/audio: the original file, with Range support so the player seeks.
 pub async fn audio(State(app): State<AppState>, UrlPath(id): UrlPath<String>, headers: HeaderMap) -> Response {
     let Some(m) = load(&app, &id) else { return not_found() };
+    if m.file.is_empty() {
+        return error(StatusCode::NOT_FOUND, "This meeting's audio was deleted.");
+    }
     let path = app.cfg.media_root.join(&m.file);
     let Ok(mut file) = tokio::fs::File::open(&path).await else { return not_found() };
     let size = file.metadata().await.map(|md| md.len()).unwrap_or(0);
@@ -396,13 +538,212 @@ pub async fn retry(State(app): State<AppState>, UrlPath(id): UrlPath<String>) ->
     if !matches!(m.status.as_str(), "failed" | "done") && !m.is_stale() {
         return error(StatusCode::CONFLICT, "Meeting is still processing.");
     }
+    if m.file.is_empty() {
+        return error(StatusCode::CONFLICT, "This meeting's audio was deleted, so it cannot be processed again.");
+    }
     let db = app.db();
+    let _ = db.execute("UPDATE meetings SET cancel_requested = 0 WHERE id = ?1", [&m.id]);
     mt::set_status(&db, &m.id, "queued", Some(0));
     drop(db);
     pipeline::enqueue(&app, &m.id);
     let db = app.db();
     let m = mt::get(&db, &id).ok().flatten().unwrap();
     Json(mt::to_json(&db, &m, false)).into_response()
+}
+
+/// POST /api/meetings/<id>/summarize: {"template"?}. A new summary from the stored
+/// transcript only; 409 while processing or when there is no transcript.
+pub async fn summarize(State(app): State<AppState>, UrlPath(id): UrlPath<String>, body: Bytes) -> Response {
+    let Some(m) = load(&app, &id) else { return not_found() };
+    if mt::PROCESSING.contains(&m.status.as_str()) {
+        return error(StatusCode::CONFLICT, "Meeting is still processing.");
+    }
+    let template = match json_body(&body) {
+        Ok(v) => match v.get("template") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(t)) if t.trim().is_empty() => None,
+            Some(Value::String(t)) => Some(t.trim().to_string()),
+            Some(_) => return error(StatusCode::BAD_REQUEST, "template must be a string."),
+        },
+        Err(r) => return r,
+    };
+    if let Some(t) = template.as_deref().filter(|t| !app.template_exists(t)) {
+        return error(StatusCode::BAD_REQUEST, format!("No template with id '{t}'."));
+    }
+    let db = app.db();
+    if db.query_row("SELECT 1 FROM segments WHERE meeting_id = ?1 LIMIT 1", [&m.id], |_| Ok(())).is_err() {
+        return error(StatusCode::CONFLICT, "This meeting has no transcript to summarize.");
+    }
+    let _ = db.execute("UPDATE meetings SET cancel_requested = 0 WHERE id = ?1", [&m.id]);
+    mt::set_status(&db, &m.id, "summarizing", Some(80));
+    pipeline::enqueue_summary(&m.id, template, &m.status);
+    let m = mt::get(&db, &id).ok().flatten().unwrap();
+    Json(mt::to_json(&db, &m, false)).into_response()
+}
+
+/// PATCH /api/segments/<id>/: {"text"?, "speaker"?}. `speaker` is one of the meeting's
+/// speaker numbers (or the next new one) or null. 409 while the meeting is processing.
+pub async fn patch_segment(State(app): State<AppState>, UrlPath(id): UrlPath<i64>, body: Bytes) -> Response {
+    let data = match json_body(&body) {
+        Ok(Value::Object(o)) => o,
+        Ok(_) => return error(StatusCode::BAD_REQUEST, "Expected a JSON object."),
+        Err(r) => return r,
+    };
+    let db = app.db();
+    let row = db.query_row("SELECT meeting_id, speaker, text FROM segments WHERE id = ?1", [id], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, String>(2)?))
+    });
+    let Ok((mid, mut speaker, mut text)) = row else { return not_found() };
+    let Some(mut m) = mt::get(&db, &mid).ok().flatten() else { return not_found() };
+    mt::reap(&db, &mut m);
+    if mt::PROCESSING.contains(&m.status.as_str()) {
+        return error(StatusCode::CONFLICT, "Meeting is still processing.");
+    }
+    if let Some(v) = data.get("text") {
+        match mt::clean_segment_text(v) {
+            Ok(t) => text = t,
+            Err(e) => return error(StatusCode::BAD_REQUEST, e),
+        }
+    }
+    if let Some(v) = data.get("speaker") {
+        speaker = match v.as_i64().filter(|_| !v.is_boolean()) {
+            _ if v.is_null() => None,
+            Some(n) if mt::speaker_choices(&db, &m).contains(&n) => Some(n),
+            _ => return error(StatusCode::BAD_REQUEST, "speaker must be a speaker number of this meeting or null."),
+        };
+    }
+    if let Err(e) = db.execute("UPDATE segments SET text = ?2, speaker = ?3 WHERE id = ?1", params![id, text, speaker]) {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    let seg = db.query_row("SELECT id, start, end, speaker, text FROM segments WHERE id = ?1", [id], |r| {
+        Ok(mt::Segment { id: r.get(0)?, start: r.get(1)?, end: r.get(2)?, speaker: r.get(3)?, text: r.get(4)? })
+    });
+    match seg {
+        Ok(s) => Json(mt::segment_json(&s)).into_response(),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// POST /api/meetings/<id>/speakers/merge: {"from", "to"}. Every line of `from` goes to `to`
+/// and the name saved for `from` is dropped. Returns the full meeting.
+pub async fn merge_speakers(State(app): State<AppState>, UrlPath(id): UrlPath<String>, body: Bytes) -> Response {
+    let data = match json_body(&body) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    let num = |k: &str| data.get(k).filter(|v| !v.is_boolean()).and_then(Value::as_i64);
+    let (Some(from), Some(to)) = (num("from"), num("to")) else {
+        return error(StatusCode::BAD_REQUEST, "from and to must be speaker numbers.");
+    };
+    let Some(mut m) = load(&app, &id) else { return not_found() };
+    if mt::PROCESSING.contains(&m.status.as_str()) {
+        return error(StatusCode::CONFLICT, "Meeting is still processing.");
+    }
+    let db = app.db();
+    let choices = mt::speaker_choices(&db, &m);
+    let known = &choices[..choices.len() - 1]; // not the "new speaker" slot
+    if from == to || !known.contains(&from) || !known.contains(&to) {
+        return error(StatusCode::BAD_REQUEST, "from and to must be two different speakers of this meeting.");
+    }
+    if let Some(names) = m.speaker_names.as_object_mut() {
+        names.remove(&from.to_string());
+    }
+    if let Some(s) = m.speaker_suggestions.as_object_mut() {
+        s.remove(&from.to_string());
+    }
+    let tx = match db.unchecked_transaction() {
+        Ok(t) => t,
+        Err(e) => return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    };
+    let done = tx
+        .execute("UPDATE segments SET speaker = ?3 WHERE meeting_id = ?1 AND speaker = ?2", params![m.id, from, to])
+        .and_then(|_| {
+            tx.execute(
+                "UPDATE meetings SET speaker_names = ?2, speaker_suggestions = ?3 WHERE id = ?1",
+                params![m.id, m.speaker_names.to_string(), m.speaker_suggestions.to_string()],
+            )
+        })
+        .and_then(|_| tx.commit());
+    if let Err(e) = done {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    Json(mt::to_json(&db, &m, true)).into_response()
+}
+
+/// POST /api/meetings/<id>/cancel: stop processing. A waiting meeting fails with "Cancelled."
+/// at once; the running one stops at its next check (within seconds during transcription).
+pub async fn cancel(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
+    let Some(m) = load(&app, &id) else { return not_found() };
+    if !mt::PROCESSING.contains(&m.status.as_str()) {
+        return error(StatusCode::CONFLICT, "Meeting is not processing.");
+    }
+    let db = app.db();
+    let _ = db.execute("UPDATE meetings SET cancel_requested = 1 WHERE id = ?1", [&m.id]);
+    // a summary-only job is not in the queue's order; it reads the flag itself
+    if m.status != "summarizing" && !pipeline::cancel(&m.id) {
+        let _ = db.execute(
+            "UPDATE meetings SET status = 'failed', progress = 0, error = ?2, heartbeat = ?3 WHERE id = ?1",
+            params![m.id, mt::CANCELLED, db::now_iso()],
+        );
+    }
+    let m = mt::get(&db, &id).ok().flatten().unwrap();
+    Json(mt::to_json(&db, &m, false)).into_response()
+}
+
+/// DELETE /api/meetings/<id>/audio: remove the recording, keep the notes and transcript.
+pub async fn delete_audio(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
+    let Some(m) = load(&app, &id) else { return not_found() };
+    if mt::PROCESSING.contains(&m.status.as_str()) {
+        return error(StatusCode::CONFLICT, "Meeting is still processing.");
+    }
+    mt::remove_audio(&app.cfg.media_root, &m.file);
+    let db = app.db();
+    if let Err(e) = db.execute("UPDATE meetings SET file = '' WHERE id = ?1", [&m.id]) {
+        return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    let m = mt::get(&db, &id).ok().flatten().unwrap();
+    Json(mt::to_json(&db, &m, true)).into_response()
+}
+
+/// Bytes in files under `path` (recursively); 0 when it does not exist.
+fn bytes_in(path: &Path) -> u64 {
+    match std::fs::symlink_metadata(path) {
+        Ok(md) if md.is_dir() => std::fs::read_dir(path).map(|rd| rd.flatten().map(|e| bytes_in(&e.path())).sum()).unwrap_or(0),
+        Ok(md) => md.len(),
+        Err(_) => 0,
+    }
+}
+
+/// Free bytes on the disk holding `path`, from POSIX `df -Pk` (std has no statvfs).
+fn free_bytes(path: &Path) -> Option<u64> {
+    let mut cmd = std::process::Command::new("df");
+    cmd.args(["-Pk"]).arg(path);
+    let out = audio::run(&mut cmd, std::time::Duration::from_secs(10)).ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let kb: u64 = text.lines().nth(1)?.split_whitespace().nth(3)?.parse().ok()?;
+    Some(kb * 1024)
+}
+
+/// GET /api/storage/: bytes used by recordings, models and the database, and free disk space.
+pub async fn storage(State(app): State<AppState>) -> Response {
+    let cfg = app.cfg.clone();
+    let keep_audio = app.settings().get("keep_audio").and_then(Value::as_bool).unwrap_or(true);
+    let out = tokio::task::spawn_blocking(move || {
+        let models = bytes_in(&cfg.models_dir.join("whisper-cpp")) + bytes_in(&crate::diarize::models_dir(&cfg.models_dir));
+        let database: u64 = ["", "-wal", "-shm"].iter().map(|x| bytes_in(&cfg.data_dir.join(format!("privmeet.sqlite3{x}")))).sum();
+        json!({
+            "audio": bytes_in(&cfg.media_root.join("uploads")),
+            "models": models,
+            "database": database,
+            "free": free_bytes(&cfg.data_dir),
+            "keep_audio": keep_audio,
+        })
+    })
+    .await;
+    match out {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
 }
 
 /// GET /api/tags/: every tag in use with its meeting count, most used first.

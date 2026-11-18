@@ -14,6 +14,7 @@ pub const MAX_TAG_LEN: usize = 30;
 pub const MAX_NOTES: usize = 20_000;
 /// A processing row untouched for this long has lost its worker (models.STALE_AFTER).
 pub const STALE_AFTER: f64 = 1200.0;
+pub const CANCELLED: &str = "Cancelled.";
 pub const STALE_ERROR: &str =
     "Processing stopped before it finished: the worker was killed or crashed. Press Retry to run it again.";
 
@@ -38,10 +39,18 @@ pub struct Meeting {
     pub device_used: String,
     pub created: String,
     pub heartbeat: String,
+    /// The language asked for at upload ("" = detect); `language` holds what Whisper found.
+    pub language_hint: String,
+    /// Transcribe into English (Whisper's translate task).
+    pub translate: bool,
+    /// The upload had no title: the summary call may name the meeting.
+    pub auto_title: bool,
+    /// {"0": "Rohan"}: names the model read from the conversation; the user accepts them.
+    pub speaker_suggestions: Value,
 }
 
 pub const COLUMNS: &str = "id, title, file, duration, language, status, progress, error, summary, decisions, \
-    action_items, speaker_names, notes, tags, template, tier_used, device_used, created, heartbeat";
+    action_items, speaker_names, notes, tags, template, tier_used, device_used, created, heartbeat, language_hint, translate, auto_title, speaker_suggestions";
 
 fn json_col(row: &Row, i: usize, empty: Value) -> rusqlite::Result<Value> {
     let s: String = row.get(i)?;
@@ -70,6 +79,10 @@ impl Meeting {
             device_used: r.get(16)?,
             created: r.get(17)?,
             heartbeat: r.get(18)?,
+            language_hint: r.get(19)?,
+            translate: r.get(20)?,
+            auto_title: r.get(21)?,
+            speaker_suggestions: json_col(r, 22, json!({}))?,
         })
     }
 
@@ -115,6 +128,39 @@ pub fn segments(db: &Connection, meeting: &str) -> rusqlite::Result<Vec<Segment>
     rows.collect()
 }
 
+/// A transcript line as the API returns it; `id` is what PATCH /api/segments/<id>/ takes.
+pub fn segment_json(s: &Segment) -> Value {
+    json!({"id": s.id, "start": s.start, "end": s.end, "speaker": s.speaker, "text": s.text})
+}
+
+/// Speaker numbers a line of this meeting may be given: the ones in its transcript or its
+/// saved names, plus one new number after them (to split a line off to a new person).
+pub fn speaker_choices(db: &Connection, m: &Meeting) -> Vec<i64> {
+    let mut nums: Vec<i64> = db
+        .prepare_cached("SELECT DISTINCT speaker FROM segments WHERE meeting_id = ?1 AND speaker IS NOT NULL")
+        .and_then(|mut st| st.query_map([&m.id], |r| r.get(0))?.collect())
+        .unwrap_or_default();
+    if let Some(names) = m.speaker_names.as_object() {
+        nums.extend(names.keys().filter_map(|k| k.parse::<i64>().ok()));
+    }
+    nums.sort_unstable();
+    nums.dedup();
+    nums.push(nums.last().map_or(0, |n| n + 1));
+    nums
+}
+
+/// Transcript text as an edit stores it: trimmed, not empty, at most 2000 characters.
+pub fn clean_segment_text(v: &Value) -> Result<String, String> {
+    let t = v.as_str().ok_or("text must be a string.")?.trim();
+    if t.is_empty() {
+        return Err("text cannot be empty.".into());
+    }
+    if t.chars().count() > 2000 {
+        return Err("text can be at most 2000 characters.".into());
+    }
+    Ok(t.to_string())
+}
+
 pub fn speaker_count(db: &Connection, meeting: &str) -> i64 {
     db.query_row(
         "SELECT count(DISTINCT speaker) FROM segments WHERE meeting_id = ?1 AND speaker IS NOT NULL",
@@ -131,21 +177,34 @@ pub fn to_json(db: &Connection, m: &Meeting, full: bool) -> Value {
         "id": m.id, "title": m.title, "status": m.status, "progress": m.progress,
         "duration": m.duration, "created": m.created, "error": m.error,
         "speakers": speaker_count(db, &m.id), "has_summary": !m.summary.trim().is_empty(), "tags": m.tags,
+        "has_audio": !m.file.is_empty(),
+        "queue_position": if m.status == "queued" { crate::pipeline::queue_position(&m.id) } else { None },
     });
     if full {
         let segs: Vec<Value> = segments(db, &m.id)
             .unwrap_or_default()
             .into_iter()
-            .map(|s| json!({"start": s.start, "end": s.end, "speaker": s.speaker, "text": s.text}))
+            .map(|s| segment_json(&s))
             .collect();
         let extra = json!({
             "notes": m.notes, "language": m.language, "summary": m.summary, "decisions": m.decisions,
             "action_items": m.action_items, "speaker_names": m.speaker_names, "tier_used": m.tier_used,
             "template": m.template, "device_used": m.device_used, "segments": segs,
+            "language_hint": m.language_hint, "translate": m.translate,
+            "speaker_suggestions": open_suggestions(m),
         });
         d.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
     }
     d
+}
+
+/// Suggestions for speakers that have no saved name yet ({"0": "Rohan"}).
+pub fn open_suggestions(m: &Meeting) -> Value {
+    let named = |k: &str| m.speaker_names.get(k).and_then(Value::as_str).is_some_and(|s| !s.is_empty());
+    match m.speaker_suggestions.as_object() {
+        Some(o) => Value::Object(o.iter().filter(|(k, _)| !named(k)).map(|(k, v)| (k.clone(), v.clone())).collect()),
+        None => json!({}),
+    }
 }
 
 /// Mark a stale processing meeting failed, so the page offers Retry (views.reap).
@@ -161,6 +220,30 @@ pub fn reap(db: &Connection, m: &mut Meeting) {
             params![m.id, m.error, m.heartbeat],
         );
     }
+}
+
+/// Delete a meeting's recording and the shared copies made from it (export.audio_copy).
+/// The row keeps its notes and transcript; the caller clears `file`.
+pub fn remove_audio(media_root: &std::path::Path, file: &str) {
+    if file.is_empty() {
+        return;
+    }
+    let src = media_root.join(file);
+    if let (Some(dir), Some(stem)) = (src.parent(), src.file_stem().and_then(|s| s.to_str())) {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for e in entries.flatten() {
+                if e.file_name().to_string_lossy().starts_with(&format!("{stem}.share.")) {
+                    let _ = std::fs::remove_file(e.path());
+                }
+            }
+        }
+    }
+    let _ = std::fs::remove_file(src);
+}
+
+/// Whether the user asked to stop this meeting's run (POST .../cancel).
+pub fn cancel_requested(db: &Connection, id: &str) -> bool {
+    db.query_row("SELECT cancel_requested FROM meetings WHERE id = ?1", [id], |r| r.get::<_, bool>(0)).unwrap_or(false)
 }
 
 /// Status and progress, with the heartbeat touched (models.set_status).
@@ -210,6 +293,29 @@ pub fn clean_tags(value: &Value) -> Result<Vec<String>, String> {
         return Err(format!("A meeting can have at most {MAX_TAGS} tags."));
     }
     Ok(tags)
+}
+
+/// The upload's `language`: "" or "auto" is detection, else an ISO code whisper.cpp knows.
+pub fn clean_language(v: &str) -> Result<String, String> {
+    let code = v.trim().to_lowercase();
+    if code.is_empty() || code == "auto" {
+        return Ok(String::new());
+    }
+    // get_lang_id also takes full names ("english"); the API takes codes only
+    if code.len() <= 3 && whisper_rs::get_lang_id(&code).is_some() {
+        Ok(code)
+    } else {
+        Err(format!("Unknown language '{code}'. Use an ISO code such as en or hi, or leave it empty."))
+    }
+}
+
+/// The upload's `translate`: "1" or "true" on, "", "0" or "false" off.
+pub fn clean_flag(v: &str, name: &str) -> Result<bool, String> {
+    match v.trim().to_lowercase().as_str() {
+        "1" | "true" | "on" => Ok(true),
+        "" | "0" | "false" | "off" => Ok(false),
+        _ => Err(format!("{name} must be 1 or 0.")),
+    }
 }
 
 pub fn clean_notes(value: &Value) -> Result<String, String> {
@@ -285,6 +391,16 @@ mod tests {
         assert_eq!(clean_tags(&json!(["x".repeat(31)])).unwrap_err(), "A tag can be at most 30 characters.");
         assert_eq!(clean_tags(&json!([1])).unwrap_err(), "tags must be a list of strings.");
         assert_eq!(clean_tags(&json!("[oops")).unwrap_err(), "tags must be a list of strings.");
+    }
+
+    #[test]
+    fn languages_and_flags() {
+        assert_eq!(clean_language(" HI ").unwrap(), "hi");
+        assert_eq!(clean_language("auto").unwrap(), "");
+        assert_eq!(clean_language("").unwrap(), "");
+        assert!(clean_language("english").is_err() && clean_language("xx").is_err());
+        assert_eq!((clean_flag("1", "translate"), clean_flag("", "translate")), (Ok(true), Ok(false)));
+        assert_eq!(clean_flag("yes", "translate").unwrap_err(), "translate must be 1 or 0.");
     }
 
     #[test]

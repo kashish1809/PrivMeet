@@ -45,6 +45,7 @@ Merges the keys you send into the saved settings and returns them all. Sending `
 | `num_ctx` | int | 512 to 131072 |
 | `diarize` | bool | |
 | `cpu_threads` | int | 1 to 256 |
+| `keep_audio` | bool | default true; false deletes each recording once its notes are ready (flag `storage`) |
 | `llm_provider` | string | `ollama` (default), `openai`, `anthropic`, `gemini`, `groq`, `openrouter`, `custom` (flag `providers`) |
 | `api_base_url` | string | `http(s)://` URL of an OpenAI-compatible API, for `custom` |
 | `api_key` | string | at most 300 chars; **never returned**: GET and PATCH show `api_key_set: true/false` instead |
@@ -92,6 +93,9 @@ Newest first, at most 200.
 ```
 - `speakers` is the number of distinct speakers (0 before diarization or on the low tier).
 - `has_summary` is false for a `done` meeting whose summary is empty; show "Processed".
+- `has_audio` (flag `storage`): false once the recording was deleted.
+- `queue_position` (flag `cancel`): for a `queued` meeting, how many queued meetings are ahead
+  of it (0 = next); `null` otherwise.
 
 **Query parameters:**
 - `q`: searches title, notes, summary and transcript. Matching rows add `"hits": [{"start": 12.5, "text": "..."}]` (transcript lines).
@@ -104,16 +108,23 @@ Statuses: `queued`, `converting`, `transcribing`, `diarizing`, `summarizing`, `d
 ### `POST /api/meetings/`
 `multipart/form-data`:
 - `file` (required): `.mp3 .wav .mp4 .m4a .webm .ogg .opus .flac .mkv .mov`, at most `MAX_UPLOAD_MB`.
-- `title`: defaults to the file name.
+- `title`: defaults to the file name. With flag `suggestions`, an upload without a title is
+  renamed from the notes once they are written (at most 80 chars), unless the user renamed it.
 - `notes` (flag `notes`): text, at most 20000 chars.
 - `tags` (flag `tags`): a JSON list (`["API","Sprint"]`) or `"API, Sprint"`.
+- `language` (flag `language`): an ISO code Whisper knows (`en`, `hi`, `ta`...); empty or `auto`
+  detects it. An unknown code gives 400.
+- `translate` (flag `language`): `1` transcribes into English (whisper.cpp's translate task, or
+  the provider's `/audio/translations` in cloud mode).
 
 Returns 201 with the list row and queues processing. Errors:
 - 400: a bad extension, no audio stream, or invalid notes or tags.
 - 413: the file is too big.
 
 ### `GET /api/meetings/<id>/`
-The list row plus `notes`, `language`, `summary`, `decisions` (strings), `action_items` (`[{"owner", "task", "due", "done"}]`), `speaker_names` (`{"0": "Rohan"}`), `tier_used` and `segments` (`[{"start", "end", "speaker", "text"}]`). Poll it every 2 s while the status is in progress.
+The list row plus `notes`, `language`, `summary`, `decisions` (strings), `action_items` (`[{"owner", "task", "due", "done"}]`), `speaker_names` (`{"0": "Rohan"}`), `speaker_suggestions` (flag `suggestions`: `{"0": "Rohan"}`, names the summary read from the
+conversation for speakers that have no saved name yet; accept one by PATCHing `speaker_names`),
+`language_hint` and `translate` (what the upload asked for; `language` is what Whisper detected), `tier_used` and `segments` (`[{"id", "start", "end", "speaker", "text"}]`; `id` with flag `transcript-edit`). Poll it every 2 s while the status is in progress.
 
 ### `PATCH /api/meetings/<id>/`
 JSON with any of:
@@ -130,9 +141,48 @@ Deletes the meeting and its audio file. Returns 204.
 
 ### `GET /api/meetings/<id>/audio`
 The original file. It supports `Range` (206 for a range, 416 when the range is out of bounds).
+404 once the audio was deleted.
+
+### `DELETE /api/meetings/<id>/audio` (flag `storage`)
+Deletes the recording and its MP3/Opus copies. The notes, transcript, search and exports stay;
+playback, the audio exports and retry do not. Returns the full meeting with `has_audio: false`;
+409 while it is processing.
 
 ### `POST /api/meetings/<id>/retry`
 Runs the whole pipeline again. Returns 409 while the meeting is still processing.
+
+### `POST /api/meetings/<id>/cancel` (flag `cancel`)
+Stops processing. A queued meeting leaves the queue and fails with the error `Cancelled.` at
+once. The running one stops at its next check: before each stage, and during transcription
+within a few seconds (whisper.cpp's abort callback); it then fails with `Cancelled.` and its
+temporary WAV is removed. No new status value is used. Returns the list row; 409 when the
+meeting is not processing. Retry clears the request.
+
+### `POST /api/meetings/<id>/summarize` (flag `summarize`)
+Writes the summary, key points and action items again from the stored transcript: only the LLM
+stage runs, no ffmpeg, Whisper or diarization. Optional JSON `{"template": "<id>"}` uses that
+note template (and saves it on the meeting); without it the meeting's own template is used.
+
+Returns the list row with status `summarizing`; poll the meeting until it is `done`. Errors:
+- 400: an unknown template.
+- 409: the meeting is still processing, or it has no transcript.
+
+On failure the old notes stay, the meeting goes back to the status it had, and `error` says why.
+
+### `PATCH /api/segments/<id>/` (flag `transcript-edit`)
+Edits one transcript line. JSON with any of:
+- `text`: trimmed, not empty, at most 2000 chars.
+- `speaker`: a speaker number of the meeting (in its transcript or `speaker_names`), the next
+  unused number (to give the line to a new person), or `null`.
+
+Returns the line `{"id", "start", "end", "speaker", "text"}`. Search and every export use the
+new text at once. 400 for an invalid value, 404 for an unknown id, 409 while the meeting is
+processing.
+
+### `POST /api/meetings/<id>/speakers/merge` (flag `speaker-merge`)
+`{"from": 2, "to": 0}`: every line of speaker `from` moves to `to`, and the name saved for
+`from` is dropped. Returns the full meeting. 400 unless both are different speakers of the
+meeting; 409 while it is processing.
 
 ### `GET /api/meetings/<id>/export.<fmt>`
 The meeting as a download named after its title. 404 for an unknown format.
@@ -162,6 +212,39 @@ deleted.
 
 ### `GET /api/questions/<id>/`
 `{"id", "question", "answer", "status"}` with status `pending`, `done` or `failed`. The answer cites `[mm:ss]`.
+
+## Storage (flag `storage`)
+
+### `GET /api/storage/`
+Bytes used and free, measured on each call:
+```json
+{"audio": 22027530, "models": 183541356, "database": 233600, "free": 527167488, "keep_audio": true}
+```
+- `audio`: the recordings and their shared copies (`MEDIA_ROOT/uploads`).
+- `models`: `MODELS_DIR/whisper-cpp` and the diarization models. Ollama's models live in Ollama
+  and are not counted.
+- `database`: the SQLite file with its WAL and SHM.
+- `free`: free space on the disk holding `DATA_DIR` (`df -Pk`), or `null` when unknown.
+
+Settings key `keep_audio` (bool, default true): when false, a recording is deleted as soon as
+its meeting is `done`.
+
+## Backup (flag `backup`)
+
+### `GET /api/backup.zip?audio=0|1`
+A zip download (`privmeet-backup-<date>.zip`) with `meetings.json`: every meeting with its
+transcript and questions, the user's own templates and the settings. API keys are never
+included. With `audio=1` it adds each recording as `audio/<file name>`.
+
+### `POST /api/restore`
+`multipart/form-data` with `file`: a zip made by `GET /api/backup.zip`, at most 4 x
+`MAX_UPLOAD_MB`. Returns `{"restored", "skipped", "templates", "settings"}`.
+- Meetings are matched by id: one that already exists is skipped, never overwritten.
+- Every field is checked as the API checks it; a meeting saved while processing comes back
+  `failed` with Retry. Recordings get new file names: no path from the zip is used on disk.
+- Templates are matched by name and instructions. Settings fill only keys not set here.
+- 400 for a file that is not a PrivMeet backup, has a compressed or damaged member, or has a
+  member name with `..`, a leading `/`, `\` or a drive letter (nothing is restored then).
 
 ## Tags (flag `tags`)
 

@@ -45,7 +45,8 @@ Never copy the example. Do not add anything that is not in the transcript.";
 
 pub const REDUCE_SYSTEM: &str = "You write the final notes of one meeting from its transcript or from notes on its parts. \
 Reply with one JSON object and nothing else:\n\
-{\"summary\": \"...\", \"decisions\": [\"...\"], \"action_items\": [{\"owner\": \"...\", \"task\": \"...\", \"due\": \"...\"}]}\n\
+{\"summary\": \"...\", \"decisions\": [\"...\"], \"action_items\": [{\"owner\": \"...\", \"task\": \"...\", \"due\": \"...\"}], \
+\"title\": \"...\", \"speakers\": {\"Speaker 1\": \"...\"}}\n\
 Rules:\n\
 - summary: 3 to 6 sentences in English: the purpose, the main points and the outcome. \
 When the text lists many TOPIC lines, name every topic briefly.\n\
@@ -64,12 +65,17 @@ answer. Many recordings are a talk, a lecture or a news report and hold no tasks
 all. Write an item only when a speaker says work will be done after this meeting; \
 never build one out of something that was merely described, and never think of \
 work yourself.\n\
+- title: a short title for the meeting, at most 8 words, no date.\n\
+- speakers: for each \"Speaker N\" label in the text, the person's first name when the \
+conversation makes it clear (they say their name, or others address them by it). Leave a \
+label out when unsure; {} is a correct answer.\n\
 - Use only facts from the text. Never invent names, dates or tasks.\n\
 Example, for a different meeting about a school trip:\n\
 {\"summary\": \"The teachers planned the museum trip. Transport was the open issue. They chose \
 the 9 am bus.\", \"decisions\": [\"Take the 9 am bus\"], \
 \"action_items\": [{\"owner\": \"Asha\", \"task\": \"Book the bus\", \"due\": \"June 3\"}, \
-{\"owner\": \"\", \"task\": \"Collect consent forms\", \"due\": \"\"}]}\n\
+{\"owner\": \"\", \"task\": \"Collect consent forms\", \"due\": \"\"}], \
+\"title\": \"Museum trip planning\", \"speakers\": {\"Speaker 2\": \"Asha\"}}\n\
 Never copy names, tasks or dates from this example.";
 
 pub const QA_SYSTEM: &str = "You answer questions about one meeting using only the transcript excerpts given. \
@@ -233,6 +239,10 @@ pub struct Notes {
     pub summary: String,
     pub decisions: Vec<String>,
     pub action_items: Vec<Item>,
+    /// A title the model proposes (R1.18), used only for an upload that had none.
+    pub title: String,
+    /// Speaker number (0-based) to a name the model read from the conversation (R1.18).
+    pub speakers: Vec<(i64, String)>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -303,7 +313,23 @@ pub fn parse_notes(raw: &str) -> Notes {
             due: clean(pick(&obj, &["due", "duedate", "deadline", "when", "by"]), 60),
         });
     }
-    Notes { summary: summary.trim().to_string(), decisions, action_items: items }
+    // the extra keys never fail the notes: anything odd is dropped
+    let title = clean(pick(&norm, &["title", "meetingtitle"]), 200).trim_matches(|c| c == '"' || c == '\'').trim().to_string();
+    let title = if title.chars().count() > 80 { String::new() } else { title };
+    let mut speakers: Vec<(i64, String)> = Vec::new();
+    if let Some(Value::Object(map)) = pick(&norm, &["speakers", "speakernames"]) {
+        for (label, name) in map {
+            let digits: String = label.chars().filter(char::is_ascii_digit).collect();
+            let name = clean(Some(name), 60);
+            if let (Ok(n @ 1..=99), false) = (digits.parse::<i64>(), name.is_empty()) {
+                if !speakers.iter().any(|(k, _)| *k == n - 1) && !name.to_lowercase().starts_with("speaker") {
+                    speakers.push((n - 1, name));
+                }
+            }
+        }
+    }
+    speakers.sort();
+    Notes { summary: summary.trim().to_string(), decisions, action_items: items, title, speakers }
 }
 
 // ---------------------------------------------------------------- harvest, dedupe, merge
@@ -434,7 +460,7 @@ pub fn merge_notes(found: &Notes, notes: Notes, union: bool) -> Notes {
     d.truncate(MAX_DECISIONS);
     let mut i = dedupe(&items, |x| x.task.clone());
     i.truncate(MAX_ITEMS);
-    Notes { summary: notes.summary, decisions: d, action_items: i }
+    Notes { summary: notes.summary, decisions: d, action_items: i, title: notes.title, speakers: notes.speakers }
 }
 
 // ---------------------------------------------------------------- grounding
@@ -476,6 +502,12 @@ fn has_commitment(transcript: &str, language: &str) -> bool {
 /// work, lines about another meeting, owners and dues nobody said. English only: other
 /// languages get English notes, so word checks would drop everything.
 pub fn ground(mut notes: Notes, transcript: &str, language: &str) -> Notes {
+    // a suggested name must occur in what was said, in any language
+    let said_words = words(transcript);
+    notes.speakers.retain(|(_, name)| {
+        let w = words(name);
+        !w.is_empty() && w.is_subset(&said_words)
+    });
     if !notes.action_items.is_empty() && !has_commitment(transcript, language) {
         eprintln!("dropping {} action items: nobody in this recording took on work", notes.action_items.len());
         notes.action_items.clear();
@@ -664,6 +696,18 @@ mod tests {
     }
 
     #[test]
+    fn title_and_speaker_keys() {
+        let n = parse_notes(r#"{"summary": "S", "title": "Launch plan review", "speakers": {"Speaker 1": "Rohan", "Speaker 2": "unknown", "3": "Asha", "Speaker 9": "Speaker 9", "Host": "X"}}"#);
+        assert_eq!((n.title.as_str(), n.speakers.clone()), ("Launch plan review", vec![(0, "Rohan".to_string()), (2, "Asha".to_string())]));
+        // bad or missing keys are ignored, never an error
+        let bad = parse_notes(r#"{"summary": "S", "title": ["x"], "speakers": "Rohan"}"#);
+        assert_eq!((bad.summary.as_str(), bad.speakers.len()), ("S", 0));
+        assert_eq!(parse_notes(&format!(r#"{{"summary": "S", "title": "{}"}}"#, "w ".repeat(50))).title, "");
+        let g = ground(n, "Rohan: hi. Thanks Rohan.", "Hindi");
+        assert_eq!(g.speakers, vec![(0, "Rohan".to_string())]); // Asha is never said
+    }
+
+    #[test]
     fn harvests_and_dedupes() {
         let n = harvest(&["TOPIC: x\nDECISION: so the decision is to launch on Friday.\nDECISION: none\nTASK: Asha | **book the bus** | due: June 3\nTASK: collect forms".into()]);
         assert_eq!(n.decisions, vec!["Launch on Friday"]);
@@ -676,7 +720,7 @@ mod tests {
     #[test]
     fn grounds_and_cites() {
         let t = "Asha: I will book the bus by Friday.";
-        let n = Notes { summary: "s".into(), decisions: vec!["Take the 9 am bus to the museum".into()], action_items: vec![Item { owner: "Team X".into(), task: "Book the bus".into(), due: "Friday".into() }] };
+        let n = Notes { summary: "s".into(), decisions: vec!["Take the 9 am bus to the museum".into()], action_items: vec![Item { owner: "Team X".into(), task: "Book the bus".into(), due: "Friday".into() }], ..Default::default() };
         let g = ground(n.clone(), t, "English");
         assert!(g.decisions.is_empty());
         assert_eq!((g.action_items[0].owner.as_str(), g.action_items[0].due.as_str()), ("", "Friday"));
