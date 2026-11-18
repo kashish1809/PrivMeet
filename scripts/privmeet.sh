@@ -44,17 +44,9 @@ ensure_env() {
   [[ -f .env ]] && return 0
   [[ -f .env.example ]] || die "no .env.example here; run this from the PrivMeet checkout"
   cp .env.example .env
-  local key=""
-  if have openssl; then
-    key=$(openssl rand -base64 48 | tr -d '\n')
-  elif [[ -r /dev/urandom ]] && have base64; then
-    key=$(head -c 48 /dev/urandom | base64 | tr -d '\n')
-  else
-    die "cannot generate a SECRET_KEY. Copy .env.example to .env and set it by hand."
-  fi
   # A Windows checkout hands .env CRLF endings; compose would keep the \r in values.
-  sed -i -e 's/\r$//' -e "s|^SECRET_KEY=.*|SECRET_KEY=${key}|" .env
-  echo "Created .env with a new SECRET_KEY. Change POSTGRES_PASSWORD there if you like."
+  sed -i -e 's/\r$//' .env
+  echo "Created .env from .env.example. Every value in it is optional; edit it if you like."
 }
 
 need_docker() {
