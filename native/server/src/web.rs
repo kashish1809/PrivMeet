@@ -30,7 +30,7 @@ pub type AppState = Arc<App>;
 
 /// What this server supports beyond the v1 API (docs/TASKS.md "Feature flags"). Only what is
 /// built: the React app shows a control only when its flag is here.
-pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters", "templates", "models", "exports", "share-page", "exports-office", "exports-ics", "audio-exports"];
+pub const FEATURES: &[&str] = &["settings", "providers", "notes", "tags", "filters", "templates", "models", "exports", "share-page", "exports-office", "exports-ics", "audio-exports", "summarize"];
 
 /// Built-in note template ids (backend/meetings/note_templates.py); own ones are "u<pk>".
 pub fn builtin_template(id: &str) -> bool {
@@ -108,6 +108,7 @@ pub fn router(app: App) -> Router {
         .route("/meetings/{id}/audio", get(api::audio))
         .route("/meetings/{id}/retry", axum::routing::post(api::retry))
         .route("/meetings/{id}/ask", axum::routing::post(api::ask))
+        .route("/meetings/{id}/summarize", axum::routing::post(api::summarize))
         .route("/meetings/{id}/{file}", get(api::download))
         .route("/questions/{id}/", get(api::question))
         .route("/templates/", get(templates::list).post(templates::create))

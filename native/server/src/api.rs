@@ -405,6 +405,35 @@ pub async fn retry(State(app): State<AppState>, UrlPath(id): UrlPath<String>) ->
     Json(mt::to_json(&db, &m, false)).into_response()
 }
 
+/// POST /api/meetings/<id>/summarize: {"template"?}. A new summary from the stored
+/// transcript only; 409 while processing or when there is no transcript.
+pub async fn summarize(State(app): State<AppState>, UrlPath(id): UrlPath<String>, body: Bytes) -> Response {
+    let Some(m) = load(&app, &id) else { return not_found() };
+    if mt::PROCESSING.contains(&m.status.as_str()) {
+        return error(StatusCode::CONFLICT, "Meeting is still processing.");
+    }
+    let template = match json_body(&body) {
+        Ok(v) => match v.get("template") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(t)) if t.trim().is_empty() => None,
+            Some(Value::String(t)) => Some(t.trim().to_string()),
+            Some(_) => return error(StatusCode::BAD_REQUEST, "template must be a string."),
+        },
+        Err(r) => return r,
+    };
+    if let Some(t) = template.as_deref().filter(|t| !app.template_exists(t)) {
+        return error(StatusCode::BAD_REQUEST, format!("No template with id '{t}'."));
+    }
+    let db = app.db();
+    if db.query_row("SELECT 1 FROM segments WHERE meeting_id = ?1 LIMIT 1", [&m.id], |_| Ok(())).is_err() {
+        return error(StatusCode::CONFLICT, "This meeting has no transcript to summarize.");
+    }
+    mt::set_status(&db, &m.id, "summarizing", Some(80));
+    pipeline::enqueue_summary(&m.id, template, &m.status);
+    let m = mt::get(&db, &id).ok().flatten().unwrap();
+    Json(mt::to_json(&db, &m, false)).into_response()
+}
+
 /// GET /api/tags/: every tag in use with its meeting count, most used first.
 pub async fn tags(State(app): State<AppState>) -> Response {
     let db = app.db();
