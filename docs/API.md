@@ -109,13 +109,17 @@ Statuses: `queued`, `converting`, `transcribing`, `diarizing`, `summarizing`, `d
 - `title`: defaults to the file name.
 - `notes` (flag `notes`): text, at most 20000 chars.
 - `tags` (flag `tags`): a JSON list (`["API","Sprint"]`) or `"API, Sprint"`.
+- `language` (flag `language`): an ISO code Whisper knows (`en`, `hi`, `ta`...); empty or `auto`
+  detects it. An unknown code gives 400.
+- `translate` (flag `language`): `1` transcribes into English (whisper.cpp's translate task, or
+  the provider's `/audio/translations` in cloud mode).
 
 Returns 201 with the list row and queues processing. Errors:
 - 400: a bad extension, no audio stream, or invalid notes or tags.
 - 413: the file is too big.
 
 ### `GET /api/meetings/<id>/`
-The list row plus `notes`, `language`, `summary`, `decisions` (strings), `action_items` (`[{"owner", "task", "due", "done"}]`), `speaker_names` (`{"0": "Rohan"}`), `tier_used` and `segments` (`[{"id", "start", "end", "speaker", "text"}]`; `id` with flag `transcript-edit`). Poll it every 2 s while the status is in progress.
+The list row plus `notes`, `language`, `summary`, `decisions` (strings), `action_items` (`[{"owner", "task", "due", "done"}]`), `speaker_names` (`{"0": "Rohan"}`), `language_hint` and `translate` (what the upload asked for; `language` is what Whisper detected), `tier_used` and `segments` (`[{"id", "start", "end", "speaker", "text"}]`; `id` with flag `transcript-edit`). Poll it every 2 s while the status is in progress.
 
 ### `PATCH /api/meetings/<id>/`
 JSON with any of:
