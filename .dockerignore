@@ -9,7 +9,6 @@
 # Rust build output and local data; the image builds its own
 native/*/target
 native/server/data
-backend
 
 # The image builds its own dist from source; a stale local build would mask that.
 frontend/node_modules
