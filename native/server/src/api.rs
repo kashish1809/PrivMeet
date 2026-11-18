@@ -328,7 +328,8 @@ pub async fn create(State(app): State<AppState>, headers: HeaderMap, mut form: M
     }
     let Some(path) = stored else { return error(StatusCode::BAD_REQUEST, "No file uploaded.") };
     let stem = Path::new(&name).file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-    let title: String = fields.get("title").filter(|t| !t.is_empty()).cloned().unwrap_or(stem).chars().take(200).collect();
+    let auto_title = fields.get("title").is_none_or(|t| t.trim().is_empty());
+    let title: String = fields.get("title").filter(|t| !t.trim().is_empty()).cloned().unwrap_or(stem).chars().take(200).collect();
     let notes = match mt::clean_notes(&json!(fields.get("notes").cloned().unwrap_or_default())) {
         Ok(n) => n,
         Err(e) => return error(StatusCode::BAD_REQUEST, e),
@@ -358,9 +359,9 @@ pub async fn create(State(app): State<AppState>, headers: HeaderMap, mut form: M
     let m = {
         let db = app.db();
         let ok = db.execute(
-            "INSERT INTO meetings (id, title, file, duration, notes, tags, template, created, heartbeat, language_hint, translate) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9, ?10)",
-            params![id, title, rel, duration, notes, Value::from(tags).to_string(), template, now, language, translate],
+            "INSERT INTO meetings (id, title, file, duration, notes, tags, template, created, heartbeat, language_hint, translate, auto_title) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9, ?10, ?11)",
+            params![id, title, rel, duration, notes, Value::from(tags).to_string(), template, now, language, translate, auto_title],
         );
         if let Err(e) = ok {
             return error(StatusCode::INTERNAL_SERVER_ERROR, format!("Cannot save the meeting: {e}"));
@@ -389,6 +390,7 @@ pub async fn patch(State(app): State<AppState>, UrlPath(id): UrlPath<String>, bo
     };
     if let Some(t) = data.get("title").and_then(Value::as_str).map(str::trim).filter(|t| !t.is_empty()) {
         m.title = t.chars().take(200).collect();
+        m.auto_title = false; // the user named it: a new summary never renames it again
     }
     if let Some(v) = data.get("notes") {
         match mt::clean_notes(v) {
@@ -419,8 +421,8 @@ pub async fn patch(State(app): State<AppState>, UrlPath(id): UrlPath<String>, bo
     }
     let db = app.db();
     let r = db.execute(
-        "UPDATE meetings SET title = ?2, notes = ?3, tags = ?4, speaker_names = ?5, action_items = ?6, heartbeat = ?7 WHERE id = ?1",
-        params![m.id, m.title, m.notes, m.tags.to_string(), m.speaker_names.to_string(), m.action_items.to_string(), db::now_iso()],
+        "UPDATE meetings SET title = ?2, notes = ?3, tags = ?4, speaker_names = ?5, action_items = ?6, heartbeat = ?7, auto_title = ?8 WHERE id = ?1",
+        params![m.id, m.title, m.notes, m.tags.to_string(), m.speaker_names.to_string(), m.action_items.to_string(), db::now_iso(), m.auto_title],
     );
     if let Err(e) = r {
         return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
@@ -604,13 +606,21 @@ pub async fn merge_speakers(State(app): State<AppState>, UrlPath(id): UrlPath<St
     if let Some(names) = m.speaker_names.as_object_mut() {
         names.remove(&from.to_string());
     }
+    if let Some(s) = m.speaker_suggestions.as_object_mut() {
+        s.remove(&from.to_string());
+    }
     let tx = match db.unchecked_transaction() {
         Ok(t) => t,
         Err(e) => return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     };
     let done = tx
         .execute("UPDATE segments SET speaker = ?3 WHERE meeting_id = ?1 AND speaker = ?2", params![m.id, from, to])
-        .and_then(|_| tx.execute("UPDATE meetings SET speaker_names = ?2 WHERE id = ?1", params![m.id, m.speaker_names.to_string()]))
+        .and_then(|_| {
+            tx.execute(
+                "UPDATE meetings SET speaker_names = ?2, speaker_suggestions = ?3 WHERE id = ?1",
+                params![m.id, m.speaker_names.to_string(), m.speaker_suggestions.to_string()],
+            )
+        })
         .and_then(|_| tx.commit());
     if let Err(e) = done {
         return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());

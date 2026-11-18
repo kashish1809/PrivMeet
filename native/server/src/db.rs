@@ -83,6 +83,9 @@ const MIGRATIONS: &[&str] = &[
     // 4: language (R1.17): the language asked for at upload ('' = detect) and translate to English
     "ALTER TABLE meetings ADD COLUMN language_hint TEXT NOT NULL DEFAULT '';
      ALTER TABLE meetings ADD COLUMN translate INTEGER NOT NULL DEFAULT 0;",
+    // 5: suggestions (R1.18): the upload had no title, and names the summary call proposed
+    "ALTER TABLE meetings ADD COLUMN auto_title INTEGER NOT NULL DEFAULT 0;
+     ALTER TABLE meetings ADD COLUMN speaker_suggestions TEXT NOT NULL DEFAULT '{}';",
 ];
 
 /// Open (creating if needed) and bring the schema up to date.

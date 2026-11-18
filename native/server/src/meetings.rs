@@ -43,10 +43,14 @@ pub struct Meeting {
     pub language_hint: String,
     /// Transcribe into English (Whisper's translate task).
     pub translate: bool,
+    /// The upload had no title: the summary call may name the meeting.
+    pub auto_title: bool,
+    /// {"0": "Rohan"}: names the model read from the conversation; the user accepts them.
+    pub speaker_suggestions: Value,
 }
 
 pub const COLUMNS: &str = "id, title, file, duration, language, status, progress, error, summary, decisions, \
-    action_items, speaker_names, notes, tags, template, tier_used, device_used, created, heartbeat, language_hint, translate";
+    action_items, speaker_names, notes, tags, template, tier_used, device_used, created, heartbeat, language_hint, translate, auto_title, speaker_suggestions";
 
 fn json_col(row: &Row, i: usize, empty: Value) -> rusqlite::Result<Value> {
     let s: String = row.get(i)?;
@@ -77,6 +81,8 @@ impl Meeting {
             heartbeat: r.get(18)?,
             language_hint: r.get(19)?,
             translate: r.get(20)?,
+            auto_title: r.get(21)?,
+            speaker_suggestions: json_col(r, 22, json!({}))?,
         })
     }
 
@@ -184,10 +190,20 @@ pub fn to_json(db: &Connection, m: &Meeting, full: bool) -> Value {
             "action_items": m.action_items, "speaker_names": m.speaker_names, "tier_used": m.tier_used,
             "template": m.template, "device_used": m.device_used, "segments": segs,
             "language_hint": m.language_hint, "translate": m.translate,
+            "speaker_suggestions": open_suggestions(m),
         });
         d.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
     }
     d
+}
+
+/// Suggestions for speakers that have no saved name yet ({"0": "Rohan"}).
+pub fn open_suggestions(m: &Meeting) -> Value {
+    let named = |k: &str| m.speaker_names.get(k).and_then(Value::as_str).is_some_and(|s| !s.is_empty());
+    match m.speaker_suggestions.as_object() {
+        Some(o) => Value::Object(o.iter().filter(|(k, _)| !named(k)).map(|(k, v)| (k.clone(), v.clone())).collect()),
+        None => json!({}),
+    }
 }
 
 /// Mark a stale processing meeting failed, so the page offers Retry (views.reap).
