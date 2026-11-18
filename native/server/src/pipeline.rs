@@ -2,7 +2,8 @@
 //! worker runs with concurrency 1, so only one heavy model is ever in memory. A port of
 //! backend/meetings/tasks.py (process_meeting, answer_question) and search.excerpts.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -22,6 +23,50 @@ pub enum Job {
 }
 
 static QUEUE: OnceLock<Mutex<Sender<Job>>> = OnceLock::new();
+/// Meetings waiting for the worker, in order: queue_position, and what a cancel takes out.
+static PENDING: Mutex<VecDeque<String>> = Mutex::new(VecDeque::new());
+/// The meeting the worker is running now, and whether the user asked to stop it. The flag is
+/// a static so whisper.cpp's and sherpa-onnx's 'static callbacks can read it.
+static CURRENT: Mutex<Option<String>> = Mutex::new(None);
+static CANCEL: AtomicBool = AtomicBool::new(false);
+
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// How many queued meetings are ahead of this one; None when it is not waiting.
+pub fn queue_position(id: &str) -> Option<usize> {
+    lock(&PENDING).iter().position(|x| x == id)
+}
+
+/// Whether the running meeting should stop (read by the transcription and diarization loops).
+pub fn cancelled() -> bool {
+    CANCEL.load(Ordering::Relaxed)
+}
+
+/// Stop a meeting: the running one stops at its next check (true), a waiting one leaves the
+/// queue at once (false: the caller marks it failed).
+pub fn cancel(id: &str) -> bool {
+    if lock(&CURRENT).as_deref() == Some(id) {
+        CANCEL.store(true, Ordering::Relaxed);
+        return true;
+    }
+    lock(&PENDING).retain(|x| x != id);
+    false
+}
+
+/// Take the first waiting entry for `id`; false when a cancel already removed it, so a job
+/// whose meeting was cancelled (or retried, which queues it again) is not run twice.
+fn take_pending(id: &str) -> bool {
+    let mut q = lock(&PENDING);
+    match q.iter().position(|x| x == id) {
+        Some(i) => {
+            q.remove(i);
+            true
+        }
+        None => false,
+    }
+}
 
 /// Start the worker thread. Rows left processing by a previous run are failed first: no run
 /// survives a restart (apps.reap_interrupted).
@@ -51,7 +96,15 @@ pub fn start(app: Arc<App>) {
         .spawn(move || {
             for job in rx {
                 match job {
-                    Job::Meeting(id) => process_meeting(&app, &id),
+                    Job::Meeting(id) => {
+                        if take_pending(&id) {
+                            *lock(&CURRENT) = Some(id.clone());
+                            CANCEL.store(mt::cancel_requested(&app.db(), &id), Ordering::Relaxed);
+                            process_meeting(&app, &id);
+                            *lock(&CURRENT) = None;
+                            CANCEL.store(false, Ordering::Relaxed);
+                        }
+                    }
                     Job::Summarize(id, template, before) => summarize_meeting(&app, &id, template.as_deref(), &before),
                     Job::Question(id) => answer_question(&app, id),
                     Job::Pull(name) => crate::models::pull_model(&app, &name),
@@ -86,6 +139,9 @@ pub fn enqueue_pull(name: &str) {
 }
 
 pub fn enqueue(_app: &AppState, meeting: &str) {
+    if QUEUE.get().is_some() {
+        lock(&PENDING).push_back(meeting.to_string());
+    }
     send(Job::Meeting(meeting.to_string()));
 }
 
@@ -115,6 +171,11 @@ pub fn mmss(seconds: f64) -> String {
     if s >= 3600 { format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60) } else { format!("{:02}:{:02}", s / 60, s % 60) }
 }
 
+/// The check before each stage: Err("Cancelled.") once the user asked to stop.
+fn check(app: &App, id: &str) -> Result<(), String> {
+    if cancelled() || mt::cancel_requested(&app.db(), id) { Err(mt::CANCELLED.into()) } else { Ok(()) }
+}
+
 fn progress(app: &App, id: &str, status: &str, value: i64) {
     mt::set_status(&app.db(), id, status, Some(value));
 }
@@ -124,6 +185,8 @@ fn progress(app: &App, id: &str, status: &str, value: i64) {
 pub fn process_meeting(app: &App, id: &str) {
     if let Err(e) = run(app, id) {
         eprintln!("meeting {id} failed: {e}");
+        // a stage stopped by the cancel flag reports its own error; the user asked for this
+        let e = if cancelled() || mt::cancel_requested(&app.db(), id) { mt::CANCELLED.to_string() } else { e };
         let msg: String = e.chars().take(2000).collect();
         let _ = app.db().execute(
             "UPDATE meetings SET error = ?2, status = 'failed', heartbeat = ?3 WHERE id = ?1",
@@ -147,9 +210,11 @@ fn run(app: &App, id: &str) -> Result<(), String> {
     let tmp = tempfile::Builder::new().suffix(".wav").tempfile().map_err(|e| e.to_string())?;
     let wav = tmp.path().to_path_buf();
 
+    check(app, id)?;
     progress(app, id, "converting", 0);
     audio::to_wav(&app.cfg.media_root.join(&m.file), &wav)?;
 
+    check(app, id)?;
     progress(app, id, "transcribing", 2);
     let on_asr = |f: f64| progress(app, id, "transcribing", 2 + (68.0 * f) as i64);
     let (segs, info) = stt::transcribe(&wav, &p, &app.cfg.models_dir, &prompt, &on_asr)?;
@@ -171,6 +236,7 @@ fn run(app: &App, id: &str) -> Result<(), String> {
     }
 
     if p.diarize && diarize::available(&app.cfg.models_dir) {
+        check(app, id)?;
         progress(app, id, "diarizing", 70);
         let on_dia = |f: f64| progress(app, id, "diarizing", 70 + (10.0 * f) as i64);
         let turns = diarize::diarize(stt::read_wav(&wav)?, &app.cfg.models_dir, p.cpu_threads, &on_dia)?;
@@ -193,6 +259,7 @@ fn run(app: &App, id: &str) -> Result<(), String> {
 /// The LLM stage: the summary, key points and action items from the stored transcript, then
 /// status done. `template` replaces the meeting's own template and is saved with the notes.
 fn write_notes(app: &App, id: &str, p: &hw::Profile, known: &[String], template: Option<&str>) -> Result<(), String> {
+    check(app, id)?;
     progress(app, id, "summarizing", 80);
     providers::ensure_model(p)?;
     let (m, stored) = {
@@ -205,6 +272,7 @@ fn write_notes(app: &App, id: &str, p: &hw::Profile, known: &[String], template:
     let focus = templates::instructions(&app.db(), &template, &app.default_template());
     let on_llm = |f: f64| progress(app, id, "summarizing", 80 + (15.0 * f) as i64);
     let notes = llm::summarize(&transcript(&m, &stored, false, Some(&guessed)), p, &on_llm, &m.language, &focus)?;
+    check(app, id)?; // an LLM call cannot be stopped midway: drop its result instead
     app.db()
         .execute(
             "UPDATE meetings SET summary = ?2, decisions = ?3, action_items = ?4, template = ?5, error = '', status = 'done', progress = 100, heartbeat = ?6 WHERE id = ?1",

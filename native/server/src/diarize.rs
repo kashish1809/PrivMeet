@@ -53,7 +53,7 @@ pub fn diarize(samples: Vec<f32>, models_dir: &Path, threads: i64, on_progress: 
     let seen = pct.clone();
     let cb = Box::new(move |done: i32, total: i32| {
         seen.store(if total > 0 { 100 * done / total } else { 0 }, std::sync::atomic::Ordering::Relaxed);
-        0 // 0 = keep going
+        i32::from(crate::pipeline::cancelled()) // 0 = keep going, 1 = stop (POST .../cancel)
     });
     let mut turns: Vec<(f64, f64, i64)> = crate::stt::with_progress(&pct, on_progress, || sd.compute(samples, Some(cb)))
         .map_err(|e| format!("Diarization failed: {e}"))?

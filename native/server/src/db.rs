@@ -78,6 +78,8 @@ const MIGRATIONS: &[&str] = &[
         INSERT INTO segments_fts (rowid, text) VALUES (new.id, new.text);
     END;
     "#,
+    // 3: cancel (R1.16): set by POST .../cancel, read by the pipeline before each stage
+    "ALTER TABLE meetings ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0;",
 ];
 
 /// Open (creating if needed) and bring the schema up to date.

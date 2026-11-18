@@ -168,6 +168,7 @@ pub fn local(wav: &Path, p: &Profile, models_dir: &Path, prompt: &str, on_progre
     let pct = std::sync::Arc::new(std::sync::atomic::AtomicI32::new(0));
     let seen = pct.clone();
     params.set_progress_callback_safe(move |p: i32| seen.store(p, std::sync::atomic::Ordering::Relaxed));
+    params.set_abort_callback_safe(crate::pipeline::cancelled); // POST .../cancel stops full() within a step
     with_progress(&pct, on_progress, || state.full(params, &samples)).map_err(|e| format!("Transcription failed: {e}"))?;
     on_progress(1.0);
     let mut out = Vec::new();
@@ -193,6 +194,9 @@ pub fn cloud(wav: &Path, p: &Profile, prompt: &str, on_progress: &(dyn Fn(f64) +
     let (mut out, mut detected, mut end) = (Vec::new(), String::new(), 0.0f64);
     let n = pieces.len().max(1);
     for (k, (offset, blob)) in pieces.into_iter().enumerate() {
+        if crate::pipeline::cancelled() {
+            return Err(crate::meetings::CANCELLED.into());
+        }
         let data = providers::transcribe_chunk(p, blob, &model, None, prompt)?;
         if detected.is_empty() {
             detected = data["language"].as_str().unwrap_or("").to_string();

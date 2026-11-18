@@ -14,6 +14,7 @@ pub const MAX_TAG_LEN: usize = 30;
 pub const MAX_NOTES: usize = 20_000;
 /// A processing row untouched for this long has lost its worker (models.STALE_AFTER).
 pub const STALE_AFTER: f64 = 1200.0;
+pub const CANCELLED: &str = "Cancelled.";
 pub const STALE_ERROR: &str =
     "Processing stopped before it finished: the worker was killed or crashed. Press Retry to run it again.";
 
@@ -164,6 +165,7 @@ pub fn to_json(db: &Connection, m: &Meeting, full: bool) -> Value {
         "id": m.id, "title": m.title, "status": m.status, "progress": m.progress,
         "duration": m.duration, "created": m.created, "error": m.error,
         "speakers": speaker_count(db, &m.id), "has_summary": !m.summary.trim().is_empty(), "tags": m.tags,
+        "queue_position": if m.status == "queued" { crate::pipeline::queue_position(&m.id) } else { None },
     });
     if full {
         let segs: Vec<Value> = segments(db, &m.id)
@@ -194,6 +196,11 @@ pub fn reap(db: &Connection, m: &mut Meeting) {
             params![m.id, m.error, m.heartbeat],
         );
     }
+}
+
+/// Whether the user asked to stop this meeting's run (POST .../cancel).
+pub fn cancel_requested(db: &Connection, id: &str) -> bool {
+    db.query_row("SELECT cancel_requested FROM meetings WHERE id = ?1", [id], |r| r.get::<_, bool>(0)).unwrap_or(false)
 }
 
 /// Status and progress, with the heartbeat touched (models.set_status).
