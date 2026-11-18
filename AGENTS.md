@@ -77,7 +77,7 @@ Respond like a caveman. No articles, no filler, no pleasantries. Short. Direct. 
   - In pages, use only `zinc-*`, `primary-*` and `Badge` tones for color. The themes remap those scales.
 - **One heavy model in RAM at a time.** The server runs one job at a time on its pipeline thread (`native/server/src/pipeline.rs`) and returns freed memory after each. Keep stages sequential: ffmpeg, Whisper, diarization, then the LLM.
 - Model sizes come from the tiers in `native/server/src/hw.rs`. Never hard-code a model name elsewhere.
-- **Backend:** axum handlers returning JSON in Django's shapes (errors as `{"error": "..."}`), config from env vars in `config.rs`, new routes and their flag in `web.rs`. Run subprocesses with `Command` and list args, never through a shell. `cargo test` must pass.
+- **Backend:** axum handlers returning JSON in the shapes `docs/API.md` documents (errors as `{"error": "..."}`), config from env vars in `config.rs`, new routes and their flag in `web.rs`. Run subprocesses with `Command` and list args, never through a shell. `cargo test` must pass.
 - **Frontend:** plain JSX + Tailwind. Use the `api.js` helpers for every request (they send the CSRF token). Poll every 2 s while processing.
 - **Security:** no login exists, so the app binds to `127.0.0.1` only. Validate uploads (extension, size, ffprobe), and do not weaken CSRF.
 - A known shortcut gets a comment: `// shortcut: <limit>, <when to upgrade>` (`#` in Python and shell).

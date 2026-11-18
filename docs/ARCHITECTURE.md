@@ -6,7 +6,7 @@ PrivMeet turns a meeting recording into a transcript with speakers, a summary, d
 - how the system stays inside the memory of a low-end laptop
 - the data it stores
 
-The backend is one Rust program, `privmeet-server` (`native/server`). It replaced the earlier Django + Celery + Redis + Postgres stack with the same API; [TECH_STACK.md](TECH_STACK.md) compares the two and [BENCHMARKS.md](BENCHMARKS.md) has the numbers.
+The backend is one Rust program, `privmeet-server` (`native/server`): the API, the web app and the pipeline in a single process, with SQLite for storage and no other service but Ollama. [TECH_STACK.md](TECH_STACK.md) says why each piece was chosen and [BENCHMARKS.md](BENCHMARKS.md) has the numbers.
 
 ## Components
 
@@ -180,7 +180,7 @@ erDiagram
   - Uploaded files: an allow-list, a size cap and `ffprobe`. Subprocesses take list arguments only.
   - Meeting text in the UI: React escapes it, and nothing goes through `innerHTML`. The HTML share page escapes every value.
   - Settings values: each key is type- and range-checked.
-  - `import-django` opens the old database read-only and refuses file paths with `..`.
+  - `import-django` opens the database it is given read-only and refuses file paths with `..`.
 - **What leaves the machine:** nothing with the default Ollama provider, apart from downloading images and models. With a cloud provider chosen in Settings (after a warning), the transcript text of each summary and question goes to it, and with cloud transcription on, the audio too.
 - **Desktop app:** the Tauri shell grants microphone and camera only to the page on `127.0.0.1:8000`, and the app page gets no Tauri API.
 
