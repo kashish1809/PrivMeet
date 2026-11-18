@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { AudioLines, Cpu, Download, Gauge, MemoryStick, MonitorCog, Sparkles, Trash2, Users } from "lucide-react";
+import { AudioLines, Cpu, Database, Download, FileAudio, Gauge, HardDrive, MemoryStick, MonitorCog, Sparkles, Trash2, Users } from "lucide-react";
 
-import { api } from "../api";
+import { api, useFeatures } from "../api";
 import {
   Badge,
   Button,
@@ -252,10 +252,85 @@ function SpeakersCard({ diarization, onSave }) {
   );
 }
 
+/** 1536 -> "1.5 KB", in powers of 1024 as `du -h` counts. */
+function bytes(n) {
+  if (n == null) return "unknown";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i += 1;
+  }
+  return `${i === 0 ? n : n.toFixed(n < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+/** Storage (R1.19): what the recordings, models and database take, and whether to keep audio. */
+function StorageCard({ onSave }) {
+  const [st, setSt] = useState(null);
+  const [error, setError] = useState("");
+  const load = useCallback(
+    () =>
+      api("/api/storage/")
+        .then((d) => {
+          setSt(d);
+          setError("");
+        })
+        .catch((e) => setError(e.message)),
+    [],
+  );
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <Card className="pb-5">
+      <CardHeader title="Storage" icon={HardDrive} />
+      {error ? (
+        <p className="px-5 pt-3 text-sm text-zinc-600 dark:text-zinc-400">{error}</p>
+      ) : !st ? (
+        <div className="px-5 pt-3" aria-busy="true" aria-label="Loading storage">
+          <Skeleton className="h-10 w-full" />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4 px-5 pt-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Fact icon={FileAudio} label="Recordings">
+              {bytes(st.audio)}
+            </Fact>
+            <Fact icon={Cpu} label="Speech and speaker models">
+              {bytes(st.models)}
+            </Fact>
+            <Fact icon={Database} label="Database">
+              {bytes(st.database)}
+            </Fact>
+            <Fact icon={HardDrive} label="Free on this disk">
+              {bytes(st.free)}
+            </Fact>
+          </div>
+          <Toggle
+            checked={st.keep_audio}
+            onChange={async (on) => {
+              await onSave({ keep_audio: on });
+              load();
+            }}
+            label="Keep recordings after processing"
+          />
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {st.keep_audio
+              ? "Recordings stay, so you can play them back next to the transcript."
+              : "Each recording is deleted once its notes are ready. Notes, transcripts, search and exports stay; playback does not."}
+          </p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /** Models (R1.12): what runs where, and the models to pick, download or remove. Backend: R1.11. */
 export default function Models() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+  const features = useFeatures();
 
   const load = useCallback(
     () =>
@@ -349,6 +424,7 @@ export default function Models() {
           <WhisperCard whisper={data.whisper} ram={data.hardware.ram_gb} onSave={save} />
           <SummariesCard ollama={data.ollama} pull={data.pull} onSave={save} onDelete={setDeleting} onPull={pull} />
           <SpeakersCard diarization={data.diarization} onSave={save} />
+          {features.has("storage") && <StorageCard onSave={save} />}
           <ConfirmDialog open={deleting !== null} title="Delete model?" onConfirm={remove} onCancel={() => setDeleting(null)}>
             {deleting} is removed from Ollama. You can download it again later.
           </ConfirmDialog>
