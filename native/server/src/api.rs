@@ -477,6 +477,7 @@ pub async fn retry(State(app): State<AppState>, UrlPath(id): UrlPath<String>) ->
         return error(StatusCode::CONFLICT, "Meeting is still processing.");
     }
     let db = app.db();
+    let _ = db.execute("UPDATE meetings SET cancel_requested = 0 WHERE id = ?1", [&m.id]);
     mt::set_status(&db, &m.id, "queued", Some(0));
     drop(db);
     pipeline::enqueue(&app, &m.id);
@@ -508,6 +509,7 @@ pub async fn summarize(State(app): State<AppState>, UrlPath(id): UrlPath<String>
     if db.query_row("SELECT 1 FROM segments WHERE meeting_id = ?1 LIMIT 1", [&m.id], |_| Ok(())).is_err() {
         return error(StatusCode::CONFLICT, "This meeting has no transcript to summarize.");
     }
+    let _ = db.execute("UPDATE meetings SET cancel_requested = 0 WHERE id = ?1", [&m.id]);
     mt::set_status(&db, &m.id, "summarizing", Some(80));
     pipeline::enqueue_summary(&m.id, template, &m.status);
     let m = mt::get(&db, &id).ok().flatten().unwrap();
@@ -593,6 +595,26 @@ pub async fn merge_speakers(State(app): State<AppState>, UrlPath(id): UrlPath<St
         return error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
     }
     Json(mt::to_json(&db, &m, true)).into_response()
+}
+
+/// POST /api/meetings/<id>/cancel: stop processing. A waiting meeting fails with "Cancelled."
+/// at once; the running one stops at its next check (within seconds during transcription).
+pub async fn cancel(State(app): State<AppState>, UrlPath(id): UrlPath<String>) -> Response {
+    let Some(m) = load(&app, &id) else { return not_found() };
+    if !mt::PROCESSING.contains(&m.status.as_str()) {
+        return error(StatusCode::CONFLICT, "Meeting is not processing.");
+    }
+    let db = app.db();
+    let _ = db.execute("UPDATE meetings SET cancel_requested = 1 WHERE id = ?1", [&m.id]);
+    // a summary-only job is not in the queue's order; it reads the flag itself
+    if m.status != "summarizing" && !pipeline::cancel(&m.id) {
+        let _ = db.execute(
+            "UPDATE meetings SET status = 'failed', progress = 0, error = ?2, heartbeat = ?3 WHERE id = ?1",
+            params![m.id, mt::CANCELLED, db::now_iso()],
+        );
+    }
+    let m = mt::get(&db, &id).ok().flatten().unwrap();
+    Json(mt::to_json(&db, &m, false)).into_response()
 }
 
 /// GET /api/tags/: every tag in use with its meeting count, most used first.
