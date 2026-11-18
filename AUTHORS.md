@@ -7,6 +7,6 @@ PrivMeet is a miniproject built by:
 | Kashish R Shetty | React frontend pages, Tauri desktop app and launcher |
 | K Vinayak Kamath | Backend pipeline and AI, UI design system and screens |
 | HM Karthik | Docker, Postgres, security, notes UI, CI workflows and packaging |
-| Harsha GP | User guide, FAQ, screenshots and contributing guide |
+| Harsha GP | Documentation: user guide, FAQ, screenshots and code comments |
 
 Licensed under the MIT License; see [LICENSE](LICENSE).

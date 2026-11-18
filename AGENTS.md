@@ -19,7 +19,7 @@ Each day every person has task A and task B. They are separate branches and sepa
 
 Vinayak and Kashish also have a v2 track with no days: `R1.1`–`R1.20` (Vinayak: look, shell, backend features) and `R2.1`–`R2.20` (Kashish: meeting pages, desktop app). One R task is one branch.
 
-Harsha has a docs track with no days: `D4.1`–`D4.6` (user guide, FAQ, screenshots, contributing guide, docs index, docs check). One D task is one branch.
+Harsha has a docs track with no days: `D4.1`–`D4.6` (docs index, user guide, screenshots, FAQ, removing stale comments, file header comments). Comment lines only in source files; no code changes. One D task is one branch.
 
 ## Communication Style
 Respond like a caveman. No articles, no filler, no pleasantries. Short. Direct. Code speaks for itself.

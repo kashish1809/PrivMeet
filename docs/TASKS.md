@@ -13,7 +13,7 @@ Harsha joined after Day 5 with a **docs track** of 6 tasks (`D4.1`–`D4.6`). It
 | Person 1 | **Vinayak** | Backend pipeline + AI (`T1.x`) | Heavy UI per mockup (`U1.x`) | Look, shell, backend features (`R1.x`) |
 | Person 2 | **Kashish** | React frontend pages (`T2.x`) | Tauri desktop app + launcher (`A2.x`) | Meeting pages + desktop app (`R2.x`) |
 | Person 3 | **Karthik** | Docker, Postgres, security, notes UI, docs (`T3.x`) | GitHub workflows, packaging, CLI launchers (`W3.x`) | none |
-| Person 4 | **Harsha GP** | none | none | Docs track: user guide, FAQ, screenshots, contributing (`D4.x`) |
+| Person 4 | **Harsha GP** | none | none | Docs track: docs, user guide, FAQ, screenshots, code comments (`D4.x`) |
 
 - Design: `docs/PLAN.md`. App reference: GitPilot (`github.com/vinayakkam/gitpilot`).
 - **UI mockup (v2): `docs/ui/mockup.webp`.** It is the look for every screen.
@@ -151,7 +151,7 @@ Either person can do all of their tasks in one go. Nothing waits for the other p
 | **Vinayak** | `native/**` (not `native/server/src/api_tests.rs`), `frontend/src/ui/**`, `frontend/src/layout/**`, `frontend/src/App.jsx`, `frontend/src/main.jsx`, `frontend/index.html`, `frontend/public/**`, `frontend/src/pages/{Home,RecordLive,Settings,Templates,Models}.jsx`, `frontend/src/record/**`, `docs/ui/**`, `docs/API.md`, `scripts/bench.sh`, `scripts/mem.py`, `compose.gpu.yml` |
 | **Kashish** | `frontend/src/pages/{MeetingList,NewMeeting,MeetingDetail}.jsx`, `frontend/src/components/**` (not Karthik's three panels), `frontend/src/api.js`, `frontend/src/format.js`, `frontend/src/index.css`, `native/server/src/api_tests.rs`, `desktop/**` |
 | **Karthik** | `frontend/src/components/{SummaryPanel,ActionItemsPanel,QABox}.jsx`, `Dockerfile`, `compose.yml`, `.env.example`, `.github/**`, `packaging/**`, `scripts/privmeet.*`, `README.md`, `docs/ARCHITECTURE.md`, `docs/RELEASING.md` |
-| **Harsha** | `docs/README.md`, `docs/USER_GUIDE.md`, `docs/FAQ.md`, `docs/screenshots/**`, `docs/testing/docs.md`, `CONTRIBUTING.md` |
+| **Harsha** | `docs/README.md`, `docs/USER_GUIDE.md`, `docs/FAQ.md`, `docs/screenshots/**`; comment lines only in other people's source files (D4.5, D4.6) |
 
 - Only Vinayak changes the database schema: a new entry at the end of the migration list in `native/server/src/db.rs`. Two branches that both add one are ordered on rebase.
 - Nobody adds a frontend dependency. The Tauri plugins named in the A2 and R2 tasks are approved by this file.
@@ -1136,7 +1136,7 @@ Built; the text below is the specification it was built to.
 ---
 
 ## Docs track: Harsha (D4.1 – D4.6)
-Writing and checking the documentation a new user and a new contributor read. None of these needs another person's open task; each is its own branch, with the same protocol and commit rules as every task (AGENTS.md). Run the app from `native/README.md` with `privmeet-server seed-demo` for realistic data. The track does not hold up Day 6.
+Documentation, and comments in the code. No code changes: in a source file only comment lines change, so the app builds and behaves exactly as before. Each task is its own branch, with the same protocol and commit rules as every task (AGENTS.md). To see the app, use the desktop app or ask Vinayak for a running copy with the demo meetings. The track does not hold up Day 6.
 
 #### D4.1 · Docs index + glossary
 - **Branch:** `docs/harsha/D4.1-docs-index`
@@ -1155,7 +1155,7 @@ Writing and checking the documentation a new user and a new contributor read. No
   - One section per screen, in the order a new user meets them: Home, New Meeting (upload), Record / Live, the meeting page (Summary, Transcript, Action Items, Notes tabs; Share and Download), Meetings (search, filters), Templates, Models, Settings (General, AI Model, Recording, Appearance).
   - For each: what it is for, the steps for its main job, and what the user sees while a meeting is processing.
   - Say plainly what stays on the machine and what a cloud provider receives.
-  - Plain English, short sentences; no code paths.
+  - Plain English, short sentences.
 - **Done when:** someone who has never seen the app can upload a recording, rename a speaker, export the notes and change the theme by following the guide alone.
 
 #### D4.3 · Screenshots
@@ -1163,7 +1163,7 @@ Writing and checking the documentation a new user and a new contributor read. No
 - **Needs:** D4.2
 - **Files:** `docs/screenshots/**` (new), `docs/USER_GUIDE.md`
 - **Do:**
-  - With the demo data, take one screenshot per screen in D4.2 at 1280 px wide in the Indigo theme, plus Home and the meeting page in Teal, Amber and Slate.
+  - With the demo meetings, take one screenshot per screen in D4.2 at 1280 px wide in the Indigo theme, plus Home and the meeting page in Teal, Amber and Slate.
   - PNG, named `<screen>-<theme>.png`, each under 400 KB.
   - Put each into the user guide next to its section, with alt text.
 - **Done when:** every section of the guide has its picture and the images load on GitHub.
@@ -1175,28 +1175,30 @@ Writing and checking the documentation a new user and a new contributor read. No
 - **Do:** questions people ask before and after installing, each answered in a few lines with a link to the full doc:
   - Privacy: does audio leave my computer, what does a cloud provider see, is there telemetry.
   - Hardware: will it run on my laptop, do I need a GPU, why is my meeting slow.
-  - Data: where are my meetings stored, how do I back them up or move them, how do I bring meetings over from an install that ran the old Django backend (`import-django`).
+  - Data: where are my meetings stored, how do I back them up or move them, how do I bring meetings over from an install that ran the old Django backend.
   - Use: which file types work, which languages, how long a meeting can be, how to uninstall cleanly.
-- **Done when:** each answer is checked against the running app or the code, and links work.
+- **Done when:** each answer agrees with README.md and docs/ARCHITECTURE.md, and the links work.
 
-#### D4.5 · Contributing guide
-- **Branch:** `docs/harsha/D4.5-contributing`
+#### D4.5 · Remove stale comments
+- **Branch:** `docs/harsha/D4.5-stale-comments`
 - **Needs:** none
-- **Files:** `CONTRIBUTING.md`
+- **Files:** comment lines only, in `native/server/src/*.rs`, `frontend/src/**`, `desktop/src-tauri/src/*.rs`, `desktop/launcher/*`
 - **Do:**
-  - Bring it up to date for the Rust backend: what to install (Rust from `rust-toolchain.toml`, clang, cmake, Node, ffmpeg, Ollama), how to build and run the server and the frontend, and how to run `cargo test` and `npm run build` before a PR.
-  - Where things live (one table: `native/server`, `frontend`, `desktop`, `docs`), the branch and commit rules from AGENTS.md in short, and how to open a PR with the template.
-- **Done when:** a new contributor builds, tests and runs the app on a clean Linux machine from this file alone.
+  - Find comments that describe something that no longer exists: the Django backend (`backend/meetings/...`, Django, Celery, `CELERY_EAGER`, `manage.py`), finished task numbers given as "coming in", and comments contradicting the line under them.
+  - Remove each, or rewrite it to say the same thing about today's code (e.g. "a port of backend/meetings/export.py" becomes "the meeting exports").
+  - Remove commented-out code.
+  - Change nothing but comments, and keep every `shortcut:` comment.
+- **Done when:** a search for `backend/`, `Django`, `Celery` and `CELERY_EAGER` in those folders finds nothing, the diff touches comment lines only, and each file's owner (ownership table) has seen the change for their files.
 
-#### D4.6 · Docs check
-- **Branch:** `docs/harsha/D4.6-docs-check`
-- **Needs:** D4.1, D4.2, D4.4, D4.5
-- **Files:** `docs/testing/docs.md` (new), plus fixes in your own files
+#### D4.6 · File header comments
+- **Branch:** `docs/harsha/D4.6-file-headers`
+- **Needs:** D4.5
+- **Files:** comment lines only, at the top of files in `frontend/src/**`, `desktop/launcher/*`
 - **Do:**
-  - Follow every relative link and run every command in `README.md`, `docs/*.md`, `native/README.md` and `CONTRIBUTING.md` on a fresh clone.
-  - Record each broken link, wrong command or out-of-date statement in `docs/testing/docs.md` with its file and line, and tell the file's owner (ownership table above). Fix only your own files.
-  - Spelling and consistent names: PrivMeet, Ollama, whisper.cpp, the theme names.
-- **Done when:** `docs/testing/docs.md` lists every check with pass or the owner it was reported to.
+  - Every source file starts with a one- or two-line comment saying what it is for: the page, component or helper, and where it is used (e.g. `// The Participants card on the meeting page: avatars, talk time, rename.`).
+  - About 47 frontend files have none today; files that already have one keep theirs.
+  - Plain English, no restating of the code line by line.
+- **Done when:** every file in those folders opens with its header comment, the diff touches comment lines only, and each file's owner has seen the change for their files.
 
 ---
 
