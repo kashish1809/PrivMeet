@@ -20,4 +20,4 @@ whisper-rs = "0.16"
 
 [features]
 # whisper.cpp with CUDA; without it the server reports and uses the CPU only
-cuda = []
+cuda = ["whisper-rs/cuda"]
